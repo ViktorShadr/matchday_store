@@ -1,0 +1,17 @@
+<!-- base.html -->
+<!doctype html>
+<html lang="ru">
+{% include 'main_page/_head.html' %}
+<body>
+
+    {% block header %}{% include 'main_page/_header.html' %}{% endblock %}
+    {% block menu %}{% include 'main_page/_menu.html' %}{% endblock %}
+
+    <main class="container-fluid px-0">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block footer %}{% include 'main_page/_footer.html' %}{% endblock %}
+    {% include 'main_page/_scripts.html' %}
+</body>
+</html>

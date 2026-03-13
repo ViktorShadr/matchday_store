@@ -1,0 +1,118 @@
+<!-- _menu.html -->
+{% load static %}
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+    <div class="container">
+        <a class="navbar-brand fw-bold text-primary" href="#">SkySport</a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto align-items-center">
+
+                <!-- Каталог -->
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'index' %}active{% endif %}"
+                       href="#">Каталог</a>
+                </li>
+                
+                <!-- Категории -->
+                <li class="nav-item">
+                    <a class="nav-link" href="#">Категории</a>
+                </li>
+
+                <!-- Контакты -->
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'contacts' %}active{% endif %}"
+                       href="#">Контакты</a>
+                </li>
+
+                <!-- Блог -->
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'blog_list' %}active{% endif %}"
+                       href="#">Блог</a>
+                </li>
+
+                {% if user.is_authenticated %}
+                <!-- Добавить товар -->
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'product_create' %}active{% endif %}"
+                       href="#">
+                        <i class="bi bi-plus-circle me-1"></i>Добавить товар
+                    </a>
+                </li>
+
+                <!-- Выпадающее меню профиля -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle d-flex align-items-center"
+                       href="#"
+                       id="userDropdown"
+                       role="button"
+                       data-bs-toggle="dropdown"
+                       aria-expanded="false">
+
+                        {% if user.avatar %}
+                        <img src="{{ user.avatar.url }}"
+                             class="rounded-circle me-2"
+                             alt="avatar"
+                             style="width: 32px; height: 32px; object-fit: cover;">
+                        {% else %}
+                        <img src="{% static 'img/default_avatar.png' %}"
+                             class="rounded-circle me-2"
+                             alt="avatar"
+                             style="width: 32px; height: 32px; object-fit: cover;">
+                        {% endif %}
+
+                        {{ user.email }}
+                    </a>
+
+                    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="userDropdown">
+
+                        <li class="px-3 py-2 text-center">
+                            {% if user.avatar %}
+                            <img src="{{ user.avatar.url }}"
+                                 class="rounded-circle mb-2"
+                                 style="width: 70px; height: 70px; object-fit: cover;">
+                            {% else %}
+                            <img src="{% static 'img/default_avatar.png' %}"
+                                 class="rounded-circle mb-2"
+                                 style="width: 70px; height: 70px; object-fit: cover;">
+                            {% endif %}
+                            <div class="fw-semibold">{{ user.email }}</div>
+                        </li>
+
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+
+                        <li>
+                            <a class="dropdown-item" href="{% url 'users:profile_detail' pk=user.pk %}">
+                                Управление профилем
+                            </a>
+                        </li>
+
+                        <li>
+                            <form method="post" action="{% url 'users:logout' %}">
+                                {% csrf_token %}
+                                <button type="submit" class="dropdown-item text-danger">
+                                    Выйти
+                                </button>
+                            </form>
+                        </li>
+
+                    </ul>
+                </li>
+
+                {% else %}
+                <!-- Если не авторизован -->
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'login' %}active{% endif %}"
+                       href="{% url 'users:login' %}">Войти</a>
+                </li>
+
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</nav>

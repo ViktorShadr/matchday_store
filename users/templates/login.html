@@ -1,0 +1,20 @@
+<!-- login.html -->
+{% extends 'main_page/base.html' %}
+{% block title %}Вход в магазин SkySport{% endblock %}
+{% block content %}
+<div class="container mt-5 mb-5">
+    <h2 class="mb-4">Вход</h2>
+
+    <form method="post" class="border rounded p-4 shadow-sm bg-white">
+        {% csrf_token %}
+        {{ form.as_p }}
+
+        <button type="submit" class="btn btn-primary w-100 mb-3">Войти</button>
+
+        <a href="{% url 'users:registration' %}"
+           class="btn btn-outline-secondary w-100">
+            Зарегистрироваться
+        </a>
+    </form>
+</div>
+{% endblock %}
