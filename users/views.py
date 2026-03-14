@@ -1,15 +1,14 @@
-from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, UpdateView
+from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView
 
+from matchday_store.celery import send_welcome_email
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
-from matchday_store.celery import send_welcome_email
 
 
 class CustomLoginView(LoginView):
