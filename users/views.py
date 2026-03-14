@@ -37,7 +37,7 @@ class CustomRegistrationView(CreateView):
 
     def send_welcome_email(self, user_email):
         subject = "Добро пожаловать в наш магазин"
-        message = "Спасибо, что зарегистрировались в SkySport!"
+        message = "Спасибо, что зарегистрировались в Shinnik Fan Shop!"
         recipient_list = [user_email]
         try:
             send_mail(subject, message, from_email=os.getenv("DEFAULT_FROM_EMAIL"), recipient_list=recipient_list)
