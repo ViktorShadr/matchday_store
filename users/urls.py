@@ -6,7 +6,8 @@ from users.views import (
     CustomRegistrationView,
     ProfileDetailView,
     ProfileUpdateView,
-    ProfileDeleteView, ProfileList,
+    ProfileDeleteView,
+    ProfileList,
 )
 
 app_name = "users"

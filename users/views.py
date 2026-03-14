@@ -1,16 +1,15 @@
-import os
-
+from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
-from django.core.mail import send_mail
 from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, UpdateView
 
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
+from matchday_store.celery import send_welcome_email
 
 
 class CustomLoginView(LoginView):
@@ -29,20 +28,11 @@ class CustomRegistrationView(CreateView):
 
     def form_valid(self, form):
         user = form.save()
+        self.object = user
         login(self.request, user)
-        self.send_welcome_email(user.email)
+        # Отправка приветственного письма через Celery
+        send_welcome_email.delay(user.email)
         return HttpResponseRedirect(self.get_success_url())
-
-    # TODO: Не отправляются письма
-
-    def send_welcome_email(self, user_email):
-        subject = "Добро пожаловать в наш магазин"
-        message = "Спасибо, что зарегистрировались в Shinnik Fan Shop!"
-        recipient_list = [user_email]
-        try:
-            send_mail(subject, message, from_email=os.getenv("DEFAULT_FROM_EMAIL"), recipient_list=recipient_list)
-        except Exception as e:
-            print(f"Ошибка отправки email: {e}")
 
 
 class ProfileDetailView(LoginRequiredMixin, DetailView):
@@ -82,7 +72,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 class ProfileDeleteView(LoginRequiredMixin, FormView):
     form_class = ProfileDeleteConfirmForm
     template_name = "profile_confirm_delete.html"
-    success_url = reverse_lazy("catalog:index")
+    success_url = reverse_lazy("main_page:base")
 
     def form_valid(self, form):
         password = form.cleaned_data.get("password")
