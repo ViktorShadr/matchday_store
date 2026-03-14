@@ -6,7 +6,7 @@ from users.views import (
     CustomRegistrationView,
     ProfileDetailView,
     ProfileUpdateView,
-    ProfileDeleteView,
+    ProfileDeleteView, ProfileList,
 )
 
 app_name = "users"
@@ -18,4 +18,5 @@ urlpatterns = [
     path("profile/<int:pk>/", ProfileDetailView.as_view(), name="profile_detail"),
     path("profile/edit/", ProfileUpdateView.as_view(), name="profile_edit"),
     path("profile/delete/", ProfileDeleteView.as_view(), name="profile_delete"),
+    path("profile_list/", ProfileList.as_view(), name="profile_list"),
 ]

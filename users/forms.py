@@ -73,11 +73,24 @@ class UserLoginForm(AuthenticationForm):
 class UserProfileForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ("email", "phone", "first_name", "last_name")
+        fields = ("first_name", "last_name", "city", "avatar", "phone")
 
         widgets = {
-            "email": forms.EmailInput(attrs={"class": "form-control"}),
-            "phone": forms.TextInput(attrs={"class": "form-control"}),
             "first_name": forms.TextInput(attrs={"class": "form-control"}),
             "last_name": forms.TextInput(attrs={"class": "form-control"}),
+            "city": forms.TextInput(attrs={"class": "form-control"}),
+            "avatar": forms.FileInput(attrs={"class": "form-control"}),
+            "phone": forms.TextInput(attrs={"class": "form-control"}),
         }
+
+
+class ProfileDeleteConfirmForm(forms.Form):
+    password = forms.CharField(
+        label="Введите пароль для подтверждения",
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Введите ваш текущий пароль",
+            }
+        ),
+    )

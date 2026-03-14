@@ -1,13 +1,15 @@
 import os
 
 from django.contrib.auth import login
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
+from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
+from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, TemplateView, UpdateView, DeleteView
+from django.views.generic import CreateView, DeleteView, DetailView, FormView, ListView, UpdateView
 
-from users.forms import UserLoginForm, UserRegistrationForm, UserProfileForm
+from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
 
 
@@ -29,9 +31,9 @@ class CustomRegistrationView(CreateView):
         user = form.save()
         login(self.request, user)
         self.send_welcome_email(user.email)
-        return super().form_valid(form)
+        return HttpResponseRedirect(self.get_success_url())
 
-# TODO: Не отправляются письма
+    # TODO: Не отправляются письма
 
     def send_welcome_email(self, user_email):
         subject = "Добро пожаловать в наш магазин"
@@ -43,13 +45,26 @@ class CustomRegistrationView(CreateView):
             print(f"Ошибка отправки email: {e}")
 
 
-class ProfileDetailView(LoginRequiredMixin, TemplateView):
+class ProfileDetailView(LoginRequiredMixin, DetailView):
+    model = User
     template_name = "profile_detail.html"
+    context_object_name = "user"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["user"] = self.request.user
-        return context
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if obj.pk != self.request.user.pk and not self.request.user.is_staff:
+            raise PermissionDenied("Можно просматривать только свой профиль")
+        return obj
+
+
+class ProfileList(LoginRequiredMixin, UserPassesTestMixin, ListView):
+    model = User
+    template_name = "profile_list.html"
+    context_object_name = "users"
+    raise_exception = True
+
+    def test_func(self):
+        return self.request.user.is_staff
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):
@@ -64,10 +79,18 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         return reverse_lazy("users:profile_detail", kwargs={"pk": self.request.user.pk})
 
 
-class ProfileDeleteView(LoginRequiredMixin, DeleteView):
-    model = User
+class ProfileDeleteView(LoginRequiredMixin, FormView):
+    form_class = ProfileDeleteConfirmForm
     template_name = "profile_confirm_delete.html"
     success_url = reverse_lazy("catalog:index")
 
-    def get_object(self, queryset=None):
-        return self.request.user
+    def form_valid(self, form):
+        password = form.cleaned_data.get("password")
+        user = self.request.user
+
+        if not user.check_password(password):
+            form.add_error("password", "Неверный пароль")
+            return self.form_invalid(form)
+
+        user.delete()
+        return super().form_valid(form)
