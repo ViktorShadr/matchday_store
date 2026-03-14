@@ -7,7 +7,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "matchday_store.settings")
 
 app = Celery("matchday_store")
 app.config_from_object("django.conf:settings", namespace="CELERY")
-app.autodiscover_tasks(['users', 'store'])
+app.autodiscover_tasks(["users", "store"])
 
 
 @app.task

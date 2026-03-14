@@ -1,9 +1,5 @@
-import os
-
 from django import forms
-from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
-from django.core.mail import send_mail
 
 from users.models import User
 
