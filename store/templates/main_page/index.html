@@ -1,0 +1,220 @@
+{% extends 'main_page/base.html' %}
+{% block title %}ФК «Шинник» — клубный магазин{% endblock %}
+
+{% block content %}
+    <section class="sf-hero" id="catalog">
+        <div class="container">
+            <div class="sf-hero-wrap sf-animate">
+                <div class="sf-hero-inner">
+                    <div>
+                        <div class="sf-pill sf-animate delay-1">Официальный клубный мерч</div>
+                        <h2 class="sf-hero-title sf-animate delay-2">ФК «Шинник» — атрибутика болельщиков</h2>
+                        <p class="sf-hero-lead sf-animate delay-2">
+                            Современный дизайн, качественные материалы и безупречный клубный стиль.
+                            Собери свою коллекцию к сезону.
+                        </p>
+
+                        <div class="sf-hero-cta sf-animate delay-1">
+                            <a class="btn btn-primary" href="#popular">Витрина товаров</a>
+                            <a class="btn btn-outline-primary" href="#categories">Категории</a>
+                        </div>
+
+                        <div class="sf-hero-stats sf-animate delay-2">
+                            <div class="sf-stat">
+                                <div class="sf-stat-value">+180</div>
+                                <div class="sf-stat-label">позиций в наличии</div>
+                            </div>
+                            <div class="sf-stat">
+                                <div class="sf-stat-value">24/7</div>
+                                <div class="sf-stat-label">выбор из дома</div>
+                            </div>
+                            <div class="sf-stat">
+                                <div class="sf-stat-value">РФ</div>
+                                <div class="sf-stat-label">доставка по стране</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sf-hero-side">
+                        <div class="sf-hero-badge sf-animate delay-2">
+                            <div class="sf-hero-badge-top">
+                                <div>
+                                    <div class="sf-hero-badge-title">Сезон 2026</div>
+                                    <div class="small text-muted">Новая коллекция атрибутики</div>
+                                </div>
+                                <div class="sf-pill">Drop</div>
+                            </div>
+                            <ul class="sf-hero-badge-list">
+                                <li>
+                                    <span class="sf-dot" aria-hidden="true"></span>
+                                    Быстрая отправка и упаковка
+                                </li>
+                                <li>
+                                    <span class="sf-dot" aria-hidden="true"></span>
+                                    Удобные оплаты и поддержка
+                                </li>
+                                <li>
+                                    <span class="sf-dot" aria-hidden="true"></span>
+                                    Стильно — и по делу
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="sf-section" id="categories">
+        <div class="container">
+            <div class="sf-section-head">
+                <h3 class="sf-section-title">Категории</h3>
+                <a class="sf-link" href="#popular">Популярное</a>
+            </div>
+
+            <div class="row g-3">
+                {% for c in categories %}
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <a href="{% if c.get_absolute_url %}{{ c.get_absolute_url }}{% else %}#{% endif %}"
+                           class="sf-category-card sf-animate">
+                            <div class="sf-category-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M20.5 5.5 12 2 3.5 5.5"></path>
+                                    <path d="M4 6v6c0 4.5 8 10 8 10s8-5.5 8-10V6"></path>
+                                </svg>
+                            </div>
+                            <div class="sf-category-title text-truncate">
+                                {{ c.title|default:c.name|default:'Категория' }}
+                            </div>
+                        </a>
+                    </div>
+                {% empty %}
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="sf-category-card sf-animate">
+                            <div class="sf-category-icon" aria-hidden="true"></div>
+                            <div class="sf-skeleton sf-skeleton-line" style="width: 70%; height: 16px;"></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="sf-category-card sf-animate delay-1">
+                            <div class="sf-category-icon" aria-hidden="true"></div>
+                            <div class="sf-skeleton sf-skeleton-line" style="width: 80%; height: 16px;"></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="sf-category-card sf-animate delay-2">
+                            <div class="sf-category-icon" aria-hidden="true"></div>
+                            <div class="sf-skeleton sf-skeleton-line" style="width: 60%; height: 16px;"></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="sf-category-card sf-animate delay-1">
+                            <div class="sf-category-icon" aria-hidden="true"></div>
+                            <div class="sf-skeleton sf-skeleton-line" style="width: 75%; height: 16px;"></div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="sf-section pt-0" id="popular">
+        <div class="container">
+            <div class="sf-section-head">
+                <h3 class="sf-section-title">Популярные товары</h3>
+                <a class="sf-link" href="#catalog">К началу</a>
+            </div>
+
+            <div class="row g-4">
+                {% for product in popular_products %}
+                    <div class="col-12 col-md-6 col-lg-4">
+                        {% include 'main_page/_product_card.html' with product=product %}
+                    </div>
+                {% empty %}
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div class="sf-product-card h-100 sf-animate">
+                            <div class="sf-product-img-wrapper position-relative">
+                                <div class="sf-skeleton sf-skeleton-img" aria-hidden="true"></div>
+                                <div class="sf-product-hover-overlay" aria-hidden="true">
+                                    <span>Подробнее</span>
+                                </div>
+                            </div>
+                            <div class="sf-product-body">
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 82%; height: 14px;"></div>
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 46%; height: 18px; margin-top: 10px;"></div>
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 100%; height: 42px; margin-top: 14px; border-radius: 14px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div class="sf-product-card h-100 sf-animate delay-1">
+                            <div class="sf-product-img-wrapper position-relative">
+                                <div class="sf-skeleton sf-skeleton-img" aria-hidden="true"></div>
+                                <div class="sf-product-hover-overlay" aria-hidden="true">
+                                    <span>Подробнее</span>
+                                </div>
+                            </div>
+                            <div class="sf-product-body">
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 75%; height: 14px;"></div>
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 40%; height: 18px; margin-top: 10px;"></div>
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 100%; height: 42px; margin-top: 14px; border-radius: 14px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div class="sf-product-card h-100 sf-animate delay-2">
+                            <div class="sf-product-img-wrapper position-relative">
+                                <div class="sf-skeleton sf-skeleton-img" aria-hidden="true"></div>
+                                <div class="sf-product-hover-overlay" aria-hidden="true">
+                                    <span>Подробнее</span>
+                                </div>
+                            </div>
+                            <div class="sf-product-body">
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 80%; height: 14px;"></div>
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 42%; height: 18px; margin-top: 10px;"></div>
+                                <div class="sf-skeleton sf-skeleton-line" style="width: 100%; height: 42px; margin-top: 14px; border-radius: 14px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="sf-section pt-0" id="about">
+        <div class="container">
+            <div class="sf-section-head">
+                <h3 class="sf-section-title">Почему это выглядит как клубный магазин</h3>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="sf-surface p-4 sf-animate delay-1">
+                        <div class="fw-bold mb-2">Современная айдентика</div>
+                        <div class="small text-muted">
+                            Глубокий синий, тишина пространства и “дорогие” мягкие формы без перегруза.
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="sf-surface p-4 sf-animate">
+                        <div class="fw-bold mb-2">Удобно для покупки</div>
+                        <div class="small text-muted">
+                            Читаемая иерархия: фото -> название -> цена -> действие. Всё — на своём месте.
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="sf-surface p-4 sf-animate delay-2">
+                        <div class="fw-bold mb-2">Плавные переходы</div>
+                        <div class="small text-muted">
+                            Hover и появление элементов — мягко, быстро и без дёрганья.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
+

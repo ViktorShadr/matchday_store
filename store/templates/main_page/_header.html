@@ -1,7 +1,69 @@
 <!-- _header.html -->
-<header class="py-2 bg-white border-bottom shadow-sm">
-    <div class="container d-flex justify-content-between align-items-center">
-        <h1 class="h4 fw-bold text-primary m-0">Shinnik Fan Shop</h1>
-        <span class="text-muted small">Твоя энергия. Твой спорт.</span>
+{% load static %}
+<header class="sf-header">
+    <div class="container">
+        <div class="sf-header-row">
+            <a class="sf-logo d-flex align-items-center gap-2" href="{% url 'main_page:base' %}">
+                <img src="{% static 'img/favicon.ico' %}" alt="Шинник" loading="lazy">
+                <div class="d-flex flex-column lh-1">
+                    <span class="sf-logo-title">ФК «Шинник»</span>
+                    <span class="sf-logo-subtitle">Клубный магазин атрибутики</span>
+                </div>
+            </a>
+
+            <div class="sf-actions">
+                <div class="sf-search">
+                    <div class="sf-search-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M21 21l-4.35-4.35"></path>
+                        </svg>
+                        <input type="search" name="q" class="form-control" placeholder="Поиск по товарам…">
+                    </div>
+                </div>
+
+                <a class="sf-icon-btn" href="#" aria-label="Корзина">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 6h15l-1.5 9h-12z"></path>
+                        <path d="M6 6l-2 0"></path>
+                        <circle cx="9" cy="20" r="1"></circle>
+                        <circle cx="18" cy="20" r="1"></circle>
+                    </svg>
+                    <span class="d-none d-lg-inline fw-bold">Корзина</span>
+                    <span class="sf-badge">{{ cart_count|default:0 }}</span>
+                </a>
+
+                {% if user.is_authenticated %}
+                    <a class="sf-icon-btn" href="{% url 'users:profile_detail' pk=user.pk %}" aria-label="Профиль">
+                        {% if user.avatar %}
+                            <img src="{{ user.avatar.url }}"
+                                 alt="avatar"
+                                 loading="lazy"
+                                 style="width:18px;height:18px;border-radius:8px;object-fit:cover;">
+                        {% else %}
+                            <img src="{% static 'img/default_avatar.png' %}"
+                                 alt="avatar"
+                                 loading="lazy"
+                                 style="width:18px;height:18px;border-radius:8px;object-fit:cover;">
+                        {% endif %}
+                        <span class="d-none d-lg-inline fw-bold text-truncate" style="max-width:120px;">
+                            {{ user.email }}
+                        </span>
+                    </a>
+                {% else %}
+                    <a class="sf-icon-btn" href="{% url 'users:login' %}" aria-label="Вход">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                            <path d="M10 17l5-5-5-5"></path>
+                            <path d="M15 12H3"></path>
+                        </svg>
+                        <span class="d-none d-lg-inline fw-bold">Вход</span>
+                    </a>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </header>

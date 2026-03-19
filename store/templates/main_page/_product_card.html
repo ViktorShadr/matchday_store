@@ -1,0 +1,50 @@
+{% comment %}
+Expected product fields (возможны разные имена — шаблон старается быть терпимым):
+- title/name: название
+- price: цена
+- image: объект ImageField/FileField (image.url)
+- get_absolute_url: ссылка на страницу товара (опционально)
+{% endcomment %}
+
+{% load static %}
+
+{% with p=product %}
+<div class="sf-product-card h-100 sf-animate">
+    <a class="d-block text-decoration-none" href="{% if p.get_absolute_url %}{{ p.get_absolute_url }}{% else %}#{% endif %}">
+        <div class="sf-product-img-wrapper">
+            {% if p.image %}
+                <img src="{{ p.image.url }}" alt="{{ p.title|default:p.name|default:'Товар' }}">
+            {% else %}
+                <div class="sf-product-img-placeholder" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                </div>
+            {% endif %}
+
+            <div class="sf-product-hover-overlay" aria-hidden="true">
+                <span>Подробнее</span>
+            </div>
+        </div>
+    </a>
+
+    <div class="sf-product-body">
+        <div class="sf-product-title text-truncate">
+            {{ p.title|default:p.name|default:'Товар' }}
+        </div>
+        <div class="sf-product-price">
+            {{ p.price|default:"—" }} ₽
+        </div>
+
+        <div class="sf-product-actions mt-2">
+            <a href="#" class="btn btn-primary w-100">
+                В корзину
+            </a>
+        </div>
+    </div>
+</div>
+{% endwith %}
+
