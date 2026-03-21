@@ -17,7 +17,7 @@ class CustomLoginView(LoginView):
 
 
 class CustomLogoutView(LogoutView):
-    next_page = reverse_lazy("main_page:base")
+    next_page = reverse_lazy("store:base")
 
 
 class CustomRegistrationView(CreateView):

@@ -36,22 +36,51 @@
                 </a>
 
                 {% if user.is_authenticated %}
-                    <a class="sf-icon-btn" href="{% url 'users:profile_detail' pk=user.pk %}" aria-label="Профиль">
-                        {% if user.avatar %}
-                            <img src="{{ user.avatar.url }}"
-                                 alt="avatar"
-                                 loading="lazy"
-                                 style="width:18px;height:18px;border-radius:8px;object-fit:cover;">
-                        {% else %}
-                            <img src="{% static 'img/default_avatar.png' %}"
-                                 alt="avatar"
-                                 loading="lazy"
-                                 style="width:18px;height:18px;border-radius:8px;object-fit:cover;">
-                        {% endif %}
-                        <span class="d-none d-lg-inline fw-bold text-truncate" style="max-width:120px;">
-                            {{ user.email }}
-                        </span>
-                    </a>
+                    <div class="dropdown">
+                        <button class="sf-icon-btn dropdown-toggle" type="button" id="profileDropdown" 
+                                data-bs-toggle="dropdown" aria-expanded="false" aria-label="Профиль">
+                            {% if user.avatar %}
+                                <img src="{{ user.avatar.url }}"
+                                     alt="avatar"
+                                     loading="lazy"
+                                     style="width:18px;height:18px;border-radius:8px;object-fit:cover;">
+                            {% else %}
+                                <img src="{% static 'img/default_avatar.png' %}"
+                                     alt="avatar"
+                                     loading="lazy"
+                                     style="width:18px;height:18px;border-radius:8px;object-fit:cover;">
+                            {% endif %}
+                            <span class="d-none d-lg-inline fw-bold text-truncate" style="max-width:120px;">
+                                {{ user.email }}
+                            </span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center gap-2" 
+                                   href="{% url 'users:profile_detail' pk=user.pk %}">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="12" cy="7" r="4"></circle>
+                                    </svg>
+                                    Редактировать профиль
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="{% url 'users:logout' %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item d-flex align-items-center gap-2 w-100 border-0 bg-transparent text-start">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                            <polyline points="16 17 21 12 16 7"></polyline>
+                                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                                        </svg>
+                                        Выйти
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
                 {% else %}
                     <a class="sf-icon-btn" href="{% url 'users:login' %}" aria-label="Вход">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

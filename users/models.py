@@ -25,7 +25,7 @@ class User(AbstractUser):
     last_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
     city = models.CharField(max_length=100, blank=True, null=True)
-    avatar = models.ImageField(upload_to="media/avatars", blank=True, null=True)
+    avatar = models.ImageField(upload_to="avatars", blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
