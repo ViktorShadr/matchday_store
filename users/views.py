@@ -29,8 +29,14 @@ class CustomRegistrationView(CreateView):
         user = form.save()
         self.object = user
         login(self.request, user)
-        # Отправка приветственного письма через Celery
-        send_welcome_email.delay(user.email)
+        # Отправка приветственного письма через Celery с обработкой ошибок
+        try:
+            send_welcome_email.delay(user.email)
+        except Exception as e:
+            # Логируем ошибку, но не прерываем регистрацию
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -66,6 +72,12 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse_lazy("users:profile_detail", kwargs={"pk": self.request.user.pk})
+
+    def form_valid(self, form):
+        if self.request.POST.get("clear_avatar"):
+            self.request.user.avatar.delete(save=False)
+            self.request.user.avatar = None
+        return super().form_valid(form)
 
 
 class ProfileDeleteView(LoginRequiredMixin, FormView):
