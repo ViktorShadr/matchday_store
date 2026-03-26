@@ -72,11 +72,31 @@ class UserProfileForm(forms.ModelForm):
         fields = ("first_name", "last_name", "city", "avatar", "phone")
 
         widgets = {
-            "first_name": forms.TextInput(attrs={"class": "form-control"}),
-            "last_name": forms.TextInput(attrs={"class": "form-control"}),
-            "city": forms.TextInput(attrs={"class": "form-control"}),
+            "first_name": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Введите имя",
+                }
+            ),
+            "last_name": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Введите фамилию",
+                }
+            ),
+            "city": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Введите город",
+                }
+            ),
             "avatar": forms.FileInput(attrs={"class": "form-control"}),
-            "phone": forms.TextInput(attrs={"class": "form-control"}),
+            "phone": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Введите номер телефона",
+                }
+            ),
         }
 
 
