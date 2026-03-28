@@ -41,7 +41,7 @@ services:
 
   worker:
     build: .
-    command: celery -A matchday_store worker -l info
+    command: celery -A config worker -l info
     env_file:
       - .env
     depends_on:
