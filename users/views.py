@@ -35,6 +35,7 @@ class CustomRegistrationView(CreateView):
         except Exception as e:
             # Логируем ошибку, но не прерываем регистрацию
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
         return HttpResponseRedirect(self.get_success_url())
