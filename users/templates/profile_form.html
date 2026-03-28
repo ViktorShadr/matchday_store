@@ -63,13 +63,14 @@
             Сохранить изменения
         </button>
 
-        <button type="button" class="btn btn-secondary mt-3 w-100"
-                onclick="window.location.href='{% url 'users:profile_detail' user.pk %}'">
+        <a href="{% url 'users:profile_detail' user.pk %}" class="btn btn-secondary mt-3 w-100">
             Назад
-        </button>
+        </a>
     </form>
 </div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const fileInput = document.querySelector('input[type="file"][name="avatar"]');
@@ -100,7 +101,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    if (clearBtn) {
+    if (clearBtn && fileInput) {
         clearBtn.addEventListener("click", () => {
             fileInput.value = "";
             previewBlock.style.display = "none";

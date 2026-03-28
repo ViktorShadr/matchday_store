@@ -40,8 +40,8 @@ Expected product fields (возможны разные имена — шабло
         </div>
 
         <div class="sf-product-actions mt-2">
-            <a href="#" class="btn btn-primary w-100">
-                В корзину
+            <a href="{% url 'store:product_detail' p.pk %}" class="btn btn-primary w-100">
+                Подробнее
             </a>
         </div>
     </div>

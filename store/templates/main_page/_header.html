@@ -3,7 +3,7 @@
 <header class="sf-header">
     <div class="container">
         <div class="sf-header-row">
-            <a class="sf-logo d-flex align-items-center gap-2" href="{% url 'main_page:base' %}">
+            <a class="sf-logo d-flex align-items-center gap-2" href="{% url 'store:base' %}">
                 <img src="{% static 'img/favicon.ico' %}" alt="Шинник" loading="lazy">
                 <div class="d-flex flex-column lh-1">
                     <span class="sf-logo-title">ФК «Шинник»</span>
@@ -13,17 +13,17 @@
 
             <div class="sf-actions">
                 <div class="sf-search">
-                    <div class="sf-search-wrap">
+                    <form class="sf-search-wrap" action="{% url 'store:product_list' %}" method="get" role="search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <circle cx="11" cy="11" r="7"></circle>
                             <path d="M21 21l-4.35-4.35"></path>
                         </svg>
                         <input type="search" name="q" class="form-control" placeholder="Поиск по товарам…">
-                    </div>
+                    </form>
                 </div>
 
-                <a class="sf-icon-btn" href="#" aria-label="Корзина">
+                <button class="sf-icon-btn" type="button" aria-label="Корзина" disabled title="Корзина появится в следующем этапе">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M6 6h15l-1.5 9h-12z"></path>
@@ -33,7 +33,7 @@
                     </svg>
                     <span class="d-none d-lg-inline fw-bold">Корзина</span>
                     <span class="sf-badge">{{ cart_count|default:0 }}</span>
-                </a>
+                </button>
 
                 {% if user.is_authenticated %}
                     <div class="dropdown">
@@ -62,7 +62,7 @@
                                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                                         <circle cx="12" cy="7" r="4"></circle>
                                     </svg>
-                                    Редактировать профиль
+                                    Профиль
                                 </a>
                             </li>
                             <li><hr class="dropdown-divider"></li>

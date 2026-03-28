@@ -11,23 +11,28 @@
             <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1">
                 <li class="nav-item">
                     <a class="nav-link {% if request.resolver_match.url_name == 'base' %}active{% endif %}"
-                       href="#catalog">Каталог</a>
+                       href="{% if request.resolver_match.url_name == 'base' %}#catalog{% else %}{% url 'store:base' %}#catalog{% endif %}">Каталог</a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="#categories">Категории</a>
+                    <a class="nav-link" href="{% if request.resolver_match.url_name == 'base' %}#categories{% else %}{% url 'store:base' %}#categories{% endif %}">Категории</a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="#popular">Популярное</a>
+                    <a class="nav-link" href="{% if request.resolver_match.url_name == 'base' %}#popular{% else %}{% url 'store:base' %}#popular{% endif %}">Популярное</a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="#about">О клубе</a>
+                    <a class="nav-link" href="{% if request.resolver_match.url_name == 'base' %}#about{% else %}{% url 'store:base' %}#about{% endif %}">О клубе</a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="#contacts">Контакты</a>
+                    <a class="nav-link" href="{% if request.resolver_match.url_name == 'base' %}#contacts{% else %}{% url 'store:base' %}#contacts{% endif %}">Контакты</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'product_list' %}active{% endif %}"
+                       href="{% url 'store:product_list' %}">Все товары</a>
                 </li>
 
                 {% if user.is_authenticated and user.is_staff %}

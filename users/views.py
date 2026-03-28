@@ -44,7 +44,7 @@ class CustomRegistrationView(CreateView):
 class ProfileDetailView(LoginRequiredMixin, DetailView):
     model = User
     template_name = "profile_detail.html"
-    context_object_name = "user"
+    context_object_name = "profile_user"
 
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
@@ -84,7 +84,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 class ProfileDeleteView(LoginRequiredMixin, FormView):
     form_class = ProfileDeleteConfirmForm
     template_name = "profile_confirm_delete.html"
-    success_url = reverse_lazy("main_page:base")
+    success_url = reverse_lazy("store:base")
 
     def form_valid(self, form):
         password = form.cleaned_data.get("password")
