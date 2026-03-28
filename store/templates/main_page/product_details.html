@@ -1,0 +1,57 @@
+{% extends 'main_page/base.html' %}
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">{{ product.name }}</h1>
+                <a class="sf-link" href="{% url 'store:product_list' %}">К каталогу</a>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-6">
+                    <div class="sf-surface p-3">
+                        {% if product.display_image %}
+                            <img class="img-fluid rounded-4" src="{{ product.display_image.url }}" alt="{{ product.name }}">
+                        {% else %}
+                            <div class="sf-product-img-placeholder" style="min-height: 420px;"></div>
+                        {% endif %}
+                    </div>
+
+                    {% if product_images %}
+                        <div class="row g-3 mt-1">
+                            {% for image in product_images %}
+                                <div class="col-4">
+                                    <div class="sf-surface p-2">
+                                        <img class="img-fluid rounded-4" src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}">
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="small text-muted mb-2">{{ product.category.name|default:'Без категории' }}</div>
+                        <div class="fs-4 fw-bold mb-3">{{ product.display_price|default:'—' }} ₽</div>
+                        <p>{{ product.description|default:'Описание пока не добавлено.' }}</p>
+
+                        <div class="mt-4">
+                            <div class="fw-bold mb-2">Доступные варианты</div>
+                            {% for variant in variants %}
+                                <div class="d-flex justify-content-between align-items-center border rounded-4 px-3 py-2 mb-2">
+                                    <div>{{ variant.size }} / {{ variant.color }}</div>
+                                    <div>{{ variant.price }} ₽</div>
+                                </div>
+                            {% empty %}
+                                <div class="text-muted">Варианты пока не добавлены.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

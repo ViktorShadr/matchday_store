@@ -1,0 +1,35 @@
+{% extends 'main_page/base.html' %}
+{% block title %}Каталог товаров{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">Каталог товаров</h1>
+                <a class="sf-link" href="{% url 'store:base' %}">На главную</a>
+            </div>
+
+            <div class="row g-3 mb-4">
+                {% for category in categories %}
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="sf-category-card">
+                            <div class="sf-category-title text-truncate">{{ category.name }}</div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="row g-4">
+                {% for product in products %}
+                    <div class="col-12 col-md-6 col-lg-4">
+                        {% include 'main_page/_product_card.html' with product=product %}
+                    </div>
+                {% empty %}
+                    <div class="col-12">
+                        <div class="sf-surface p-4">Товары пока не добавлены.</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+{% endblock %}
