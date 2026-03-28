@@ -1,0 +1,41 @@
+<!-- _menu.html -->
+{% load static %}
+<nav class="sf-nav navbar navbar-expand-lg navbar-light">
+    <div class="container">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sfNavbar"
+                aria-controls="sfNavbar" aria-expanded="false" aria-label="Открыть меню">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="sfNavbar">
+            <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'base' %}active{% endif %}"
+                       href="#catalog">Каталог</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#categories">Категории</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#popular">Популярное</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#about">О клубе</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#contacts">Контакты</a>
+                </li>
+
+                {% if user.is_authenticated and user.is_staff %}
+                    <li class="nav-item mt-2 mt-lg-0">
+                        <a class="nav-link" href="/admin/">Админ-панель</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</nav>

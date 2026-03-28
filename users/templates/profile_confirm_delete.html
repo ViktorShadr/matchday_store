@@ -1,0 +1,44 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+{% block title %}Удаление профиля — Shinnik Fan Shop{% endblock %}
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-5 col-md-6 col-sm-8">
+            <div class="card shadow-sm border-0 p-4">
+                <div class="text-center mb-4">
+                    <h3 class="text-danger">Удаление профиля</h3>
+                    <p class="text-muted">Это действие нельзя отменить</p>
+                </div>
+
+                <div class="alert alert-warning" role="alert">
+                    <strong>Внимание!</strong> При удалении профиля будут удалены все ваши данные.
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-4">
+                        <label for="{{ form.password.id_for_label }}" class="form-label">
+                            {{ form.password.label }}
+                        </label>
+                        {{ form.password }}
+                        {% if form.password.errors %}
+                            <div class="text-danger mt-1">
+                                {% for error in form.password.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'users:profile_detail' request.user.pk %}" class="btn btn-secondary">Отмена</a>
+                        <button type="submit" class="btn btn-danger">Удалить профиль</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

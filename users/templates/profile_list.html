@@ -1,0 +1,59 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+{% block title %}Список пользователей — Shinnik Fan Shop{% endblock %}
+{% block content %}
+<div class="container mt-5 mb-5">
+    <h2 class="text-center mb-4">Список пользователей</h2>
+
+    <div class="row">
+        {% for user in users %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        {% if user.avatar %}
+                            <img src="{{ user.avatar.url }}"
+                                 alt="avatar"
+                                 class="rounded-circle me-3"
+                                 style="width: 60px; height: 60px; object-fit: cover;">
+                        {% else %}
+                            <img src="{% static 'img/default_avatar.png' %}"
+                                 alt="avatar"
+                                 class="rounded-circle me-3"
+                                 style="width: 60px; height: 60px; object-fit: cover;">
+                        {% endif %}
+                        <div>
+                            <h5 class="card-title mb-1">{{ user.email }}</h5>
+                            {% if user.first_name or user.last_name %}
+                                <small class="text-muted">{{ user.first_name }} {{ user.last_name }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <ul class="list-unstyled mb-3">
+                        {% if user.phone %}
+                            <li><strong>Телефон:</strong> {{ user.phone }}</li>
+                        {% endif %}
+                        {% if user.is_staff %}
+                            <li><span class="badge bg-primary">Администратор</span></li>
+                        {% endif %}
+                    </ul>
+
+                    <a href="{% url 'users:profile_detail' user.pk %}" class="btn btn-outline-primary btn-sm">
+                        Просмотреть профиль
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center">
+            <p class="text-muted">Нет пользователей для отображения.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="text-center mt-4">
+        <a href="{% url 'main_page:base' %}" class="btn btn-secondary">Назад</a>
+    </div>
+</div>
+{% endblock %}

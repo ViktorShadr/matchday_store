@@ -1,0 +1,14 @@
+<!-- registration.html -->
+{% extends 'main_page/base.html' %}
+
+{% block title %}Регистрация в Shinnik Fan Shop{% endblock %}
+{% block content %}
+<div class="container mt-5 mb-5">
+    <h2 class="mb-4">Регистрация</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-primary">Отправить</button>
+    </form>
+</div>
+{% endblock %}
