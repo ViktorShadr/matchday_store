@@ -27,7 +27,7 @@
                                     </thead>
                                     <tbody>
                                         {% for item in items %}
-                                            <tr>
+                                            <tr data-cart-row data-variant-id="{{ item.product_variant.id }}">
                                                 <td>
                                                     <div class="d-flex align-items-center">
                                                         {% if item.product_variant.image %}
@@ -84,7 +84,7 @@
                         <div class="sf-surface p-4">
                             <h5 class="mb-3">Итого</h5>
                             <div class="d-flex justify-content-between mb-2">
-                                <span>Товары ({{ total_items }} шт.):</span>
+                                <span>Товары (<span class="cart-total-items">{{ total_items }}</span> шт.):</span>
                                 <span class="cart-total-price">{{ total_price }} ₽</span>
                             </div>
                             <hr>
@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 // Обновляем значения на странице
-                updateCartDisplay(data);
+                updateCartDisplay(data, variantId);
                 showNotification(data.message, 'success');
             } else {
                 showNotification(data.error, 'error');
@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     location.reload();
                 } else {
                     // Удаляем строку товара из таблицы
-                    const row = document.querySelector(`tr:has(.quantity-input[data-variant-id="${variantId}"])`);
+                    const row = document.querySelector(`[data-cart-row][data-variant-id="${variantId}"]`);
                     if (row) {
                         row.remove();
                     }
@@ -237,19 +237,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    function updateCartDisplay(data) {
+    function updateCartDisplay(data, variantId = null) {
         // Обновляем общую сумму и количество
         const totalElements = document.querySelectorAll('.cart-total-price');
         totalElements.forEach(el => {
             el.textContent = `${data.cart_total} ₽`;
         });
+
+        const totalItemsElement = document.querySelector('.cart-total-items');
+        if (totalItemsElement) {
+            totalItemsElement.textContent = data.cart_items;
+        }
         
         // Обновляем счетчик в шапке
         updateCartCounter(data.cart_items);
         
         // Обновляем сумму конкретного товара
-        if (data.item_total !== undefined) {
-            const variantId = document.querySelector('.quantity-input').dataset.variantId;
+        if (data.item_total !== undefined && variantId !== null) {
             const itemTotal = document.querySelector(`.item-total[data-variant-id="${variantId}"]`);
             if (itemTotal) {
                 itemTotal.textContent = `${data.item_total} ₽`;

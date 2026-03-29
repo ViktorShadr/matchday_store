@@ -9,9 +9,10 @@ from django.views.generic import CreateView, DetailView, FormView, ListView, Upd
 from config.celery import send_welcome_email
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
+from store.mixins.cart_mixins import CartContextMixin
 
 
-class CustomLoginView(LoginView):
+class CustomLoginView(CartContextMixin, LoginView):
     template_name = "login.html"
     form_class = UserLoginForm
 
@@ -34,7 +35,7 @@ class CustomLogoutView(LogoutView):
     next_page = reverse_lazy("store:base")
 
 
-class CustomRegistrationView(CreateView):
+class CustomRegistrationView(CartContextMixin, CreateView):
     template_name = "registration.html"
     form_class = UserRegistrationForm
     success_url = reverse_lazy("users:login")

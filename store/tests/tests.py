@@ -4,7 +4,7 @@ from django.urls import reverse
 from users.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from store.models import Category, Product, ProductVariant, ProductImage
+from store.models import Cart, CartItem, Category, Product, ProductVariant, ProductImage
 
 
 class CategoryModelTest(TestCase):
@@ -215,6 +215,10 @@ class ProductUpdateViewTest(TestCase):
         self.staff_user = User.objects.create_user(
             email="staffuser@example.com", password="staffpass123", is_staff=True
         )
+        # Создаем группу "Модераторы" и добавляем staff пользователя
+        from django.contrib.auth.models import Group
+        moderator_group, created = Group.objects.get_or_create(name="Модераторы")
+        self.staff_user.groups.add(moderator_group)
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
             name="Тестовая футболка", description="Описание товара", category=self.category
@@ -257,6 +261,10 @@ class ProductDeleteViewTest(TestCase):
         self.staff_user = User.objects.create_user(
             email="staffuser@example.com", password="staffpass123", is_staff=True
         )
+        # Создаем группу "Модераторы" и добавляем staff пользователя
+        from django.contrib.auth.models import Group
+        moderator_group, created = Group.objects.get_or_create(name="Модераторы")
+        self.staff_user.groups.add(moderator_group)
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
             name="Тестовая футболка", description="Описание товара", category=self.category
@@ -287,3 +295,41 @@ class ProductDeleteViewTest(TestCase):
         response = self.client.post(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(Product.objects.count(), initial_count - 1)
         self.assertEqual(response.status_code, 302)
+
+
+class RemoveFromCartViewTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name="Аксессуары")
+        self.product = Product.objects.create(name="Тестовый шарф", category=self.category)
+        test_image = SimpleUploadedFile("test_image.jpg", b"fake_image_data", content_type="image/jpeg")
+        self.image = ProductImage.objects.create(product=self.product, image=test_image, is_primary=True)
+        self.variant = ProductVariant.objects.create(
+            product=self.product, size="One Size", color="Красный", price=Decimal("1999.99"), quantity=10, image=self.image
+        )
+
+    def test_remove_from_cart_deletes_item_and_returns_summary(self):
+        session = self.client.session
+        session.save()
+        cart = Cart.objects.create(session_key=session.session_key)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=2)
+
+        response = self.client.post(reverse("main_page:remove_from_cart"), {"variant_id": self.variant.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CartItem.objects.filter(cart=cart, product_variant=self.variant).exists())
+        self.assertJSONEqual(
+            response.content,
+            {
+                "success": True,
+                "message": "Товар удален из корзины",
+                "cart_total": 0.0,
+                "cart_items": 0,
+            },
+        )
+
+    def test_remove_from_cart_returns_404_when_item_is_missing(self):
+        response = self.client.post(reverse("main_page:remove_from_cart"), {"variant_id": self.variant.id})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertJSONEqual(response.content, {"success": False, "error": "Товар не найден в корзине"})
