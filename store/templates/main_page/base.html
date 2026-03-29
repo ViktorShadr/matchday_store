@@ -1,4 +1,3 @@
-<!-- base.html -->
 <!doctype html>
 <html lang="ru">
 {% include 'main_page/_head.html' %}
@@ -14,5 +13,6 @@
 
     {% block footer %}{% include 'main_page/_footer.html' %}{% endblock %}
     {% include 'main_page/_scripts.html' %}
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

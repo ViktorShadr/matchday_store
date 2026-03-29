@@ -22,6 +22,6 @@ class CartView(CartContextMixin, TemplateView):
         context.update(cart_summary)
 
         # Подготовленные данные для шаблона
-        context["items_prepared"] = CartDisplayService.prepare_cart_items(cart_summary.get("items", []))
+        context["items"] = CartDisplayService.prepare_cart_items(cart_summary.get("items", []))
 
         return context
