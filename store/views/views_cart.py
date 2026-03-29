@@ -1,8 +1,8 @@
 import logging
 from django.http import JsonResponse
 from django.views import View
-from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods
 
 from store.services.cart_service import CartService
 from store.services.cart_validator import CartValidator
@@ -34,7 +34,6 @@ def build_error_response(exception: CartException) -> JsonResponse:
     )
 
 
-@require_http_methods(["POST"])
 class AddToCartView(View):
     """
     Добавление товара в корзину.
@@ -53,6 +52,10 @@ class AddToCartView(View):
         "cart_total": количество товаров в корзине
     }
     """
+    
+    @method_decorator(require_http_methods(["POST"]))
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
     
     def post(self, request, *args, **kwargs):
         try:
@@ -84,7 +87,6 @@ class AddToCartView(View):
             return build_error_response(error)
 
 
-@require_http_methods(["POST"])
 class UpdateCartView(View):
     """
     Обновление количества товара в корзине.
@@ -103,6 +105,10 @@ class UpdateCartView(View):
         "cart_items": количество товаров в корзине
     }
     """
+    
+    @method_decorator(require_http_methods(["POST"]))
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
     
     def post(self, request, *args, **kwargs):
         try:
@@ -136,7 +142,6 @@ class UpdateCartView(View):
             return build_error_response(error)
 
 
-@require_http_methods(["POST"])
 class RemoveFromCartView(View):
     """
     Удаление товара из корзины.
@@ -153,6 +158,10 @@ class RemoveFromCartView(View):
         "cart_items": количество товаров в корзине
     }
     """
+    
+    @method_decorator(require_http_methods(["POST"]))
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
     
     def post(self, request, *args, **kwargs):
         try:
