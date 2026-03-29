@@ -15,6 +15,20 @@ class CustomLoginView(LoginView):
     template_name = "login.html"
     form_class = UserLoginForm
 
+    def form_valid(self, form):
+        """
+        Переопределяем метод для сохранения старого session_key перед авторизацией.
+        Это необходимо для корректного слияния корзин при входе пользователя.
+        """
+        # Сохраняем старый session_key перед авторизацией
+        old_session_key = self.request.session.session_key
+        if old_session_key:
+            self.request.session['_pre_login_session_key'] = old_session_key
+            self.request.session.modified = True
+        
+        # Выполняем стандартную авторизацию
+        return super().form_valid(form)
+
 
 class CustomLogoutView(LogoutView):
     next_page = reverse_lazy("store:base")
@@ -28,7 +42,15 @@ class CustomRegistrationView(CreateView):
     def form_valid(self, form):
         user = form.save()
         self.object = user
+        
+        # Сохраняем старый session_key перед авторизацией
+        old_session_key = self.request.session.session_key
+        if old_session_key:
+            self.request.session['_pre_login_session_key'] = old_session_key
+            self.request.session.modified = True
+        
         login(self.request, user)
+        
         # Отправка приветственного письма через Celery с обработкой ошибок
         try:
             send_welcome_email.delay(user.email)

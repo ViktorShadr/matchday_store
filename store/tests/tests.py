@@ -9,10 +9,7 @@ from store.models import Category, Product, ProductVariant, ProductImage
 
 class CategoryModelTest(TestCase):
     def setUp(self):
-        self.category = Category.objects.create(
-            name="Одежда",
-            description="Одежда для спорта"
-        )
+        self.category = Category.objects.create(name="Одежда", description="Одежда для спорта")
 
     def test_category_creation(self):
         self.assertEqual(self.category.name, "Одежда")
@@ -30,14 +27,11 @@ class CategoryModelTest(TestCase):
 
 class ProductModelTest(TestCase):
     def setUp(self):
-        self.category = Category.objects.create(
-            name="Футболки",
-            description="Спортивные футболки"
-        )
+        self.category = Category.objects.create(name="Футболки", description="Спортивные футболки")
         self.product = Product.objects.create(
             name="Футболка Manchester United",
             description="Официальная футболка домашнего комплекта",
-            category=self.category
+            category=self.category,
         )
 
     def test_product_creation(self):
@@ -50,31 +44,18 @@ class ProductModelTest(TestCase):
         self.assertEqual(str(self.product), "Футболка Manchester United")
 
     def test_product_without_category(self):
-        product_no_category = Product.objects.create(
-            name="Футболка без категории",
-            description="Тестовый товар"
-        )
+        product_no_category = Product.objects.create(name="Футболка без категории", description="Тестовый товар")
         self.assertIsNone(product_no_category.category)
 
 
 class ProductImageModelTest(TestCase):
     def setUp(self):
         self.category = Category.objects.create(name="Футболки")
-        self.product = Product.objects.create(
-            name="Тестовая футболка",
-            category=self.category
-        )
+        self.product = Product.objects.create(name="Тестовая футболка", category=self.category)
         # Создаем тестовое изображение
-        test_image = SimpleUploadedFile(
-            "test_image.jpg", 
-            b"fake_image_data", 
-            content_type="image/jpeg"
-        )
+        test_image = SimpleUploadedFile("test_image.jpg", b"fake_image_data", content_type="image/jpeg")
         self.image = ProductImage.objects.create(
-            product=self.product,
-            image=test_image,
-            alt_text="Тестовое изображение",
-            is_primary=True
+            product=self.product, image=test_image, alt_text="Тестовое изображение", is_primary=True
         )
 
     def test_product_image_creation(self):
@@ -90,27 +71,12 @@ class ProductImageModelTest(TestCase):
 class ProductVariantModelTest(TestCase):
     def setUp(self):
         self.category = Category.objects.create(name="Футболки")
-        self.product = Product.objects.create(
-            name="Тестовая футболка",
-            category=self.category
-        )
+        self.product = Product.objects.create(name="Тестовая футболка", category=self.category)
         # Создаем тестовое изображение
-        test_image = SimpleUploadedFile(
-            "test_image.jpg", 
-            b"fake_image_data", 
-            content_type="image/jpeg"
-        )
-        self.image = ProductImage.objects.create(
-            product=self.product,
-            image=test_image
-        )
+        test_image = SimpleUploadedFile("test_image.jpg", b"fake_image_data", content_type="image/jpeg")
+        self.image = ProductImage.objects.create(product=self.product, image=test_image)
         self.variant = ProductVariant.objects.create(
-            product=self.product,
-            size="L",
-            color="Красный",
-            price=Decimal("2999.99"),
-            quantity=10,
-            image=self.image
+            product=self.product, size="L", color="Красный", price=Decimal("2999.99"), quantity=10, image=self.image
         )
 
     def test_product_variant_creation(self):
@@ -128,24 +94,15 @@ class ProductVariantModelTest(TestCase):
     def test_product_variant_unique_constraint(self):
         with self.assertRaises(Exception):
             ProductVariant.objects.create(
-                product=self.product,
-                size="L",
-                color="Красный",
-                price=Decimal("1999.99"),
-                quantity=5,
-                image=self.image
+                product=self.product, size="L", color="Красный", price=Decimal("1999.99"), quantity=5, image=self.image
             )
 
     def test_product_variant_price_validator(self):
         # Проверяем, что отрицательная цена не проходит валидацию при full_clean
         from django.core.exceptions import ValidationError
+
         variant = ProductVariant(
-            product=self.product,
-            size="M",
-            color="Синий",
-            price=Decimal("-100"),
-            quantity=5,
-            image=self.image
+            product=self.product, size="M", color="Синий", price=Decimal("-100"), quantity=5, image=self.image
         )
         with self.assertRaises(ValidationError):
             variant.full_clean()
@@ -156,95 +113,65 @@ class MainViewTest(TestCase):
         self.client = Client()
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
-            name="Тестовая футболка",
-            description="Описание товара",
-            category=self.category
+            name="Тестовая футболка", description="Описание товара", category=self.category
         )
         # Создаем тестовое изображение
-        test_image = SimpleUploadedFile(
-            "test_image.jpg", 
-            b"fake_image_data", 
-            content_type="image/jpeg"
-        )
-        self.image = ProductImage.objects.create(
-            product=self.product,
-            image=test_image,
-            is_primary=True
-        )
+        test_image = SimpleUploadedFile("test_image.jpg", b"fake_image_data", content_type="image/jpeg")
+        self.image = ProductImage.objects.create(product=self.product, image=test_image, is_primary=True)
         self.variant = ProductVariant.objects.create(
-            product=self.product,
-            size="L",
-            color="Красный",
-            price=Decimal("2999.99"),
-            quantity=10,
-            image=self.image
+            product=self.product, size="L", color="Красный", price=Decimal("2999.99"), quantity=10, image=self.image
         )
 
     def test_main_view_status_code(self):
-        response = self.client.get(reverse('store:base'))
+        response = self.client.get(reverse("store:base"))
         self.assertEqual(response.status_code, 200)
 
     def test_main_view_template(self):
-        response = self.client.get(reverse('store:base'))
-        self.assertTemplateUsed(response, 'main_page/index.html')
+        response = self.client.get(reverse("store:base"))
+        self.assertTemplateUsed(response, "main_page/index.html")
 
     def test_main_view_context(self):
-        response = self.client.get(reverse('store:base'))
-        self.assertIn('categories', response.context)
-        self.assertIn('popular_products', response.context)
-        self.assertEqual(len(response.context['categories']), 1)
-        self.assertEqual(len(response.context['popular_products']), 1)
+        response = self.client.get(reverse("store:base"))
+        self.assertIn("categories", response.context)
+        self.assertIn("popular_products", response.context)
+        self.assertEqual(len(response.context["categories"]), 1)
+        self.assertEqual(len(response.context["popular_products"]), 1)
 
 
 class ProductListViewTest(TestCase):
     def setUp(self):
         self.client = Client()
         self.category = Category.objects.create(name="Футболки")
-        
+
         for i in range(15):
             product = Product.objects.create(
-                name=f"Футболка {i}",
-                description=f"Описание футболки {i}",
-                category=self.category
+                name=f"Футболка {i}", description=f"Описание футболки {i}", category=self.category
             )
             # Создаем тестовое изображение
-            test_image = SimpleUploadedFile(
-                f"test_image_{i}.jpg", 
-                b"fake_image_data", 
-                content_type="image/jpeg"
-            )
-            image = ProductImage.objects.create(
-                product=product,
-                image=test_image,
-                is_primary=True
-            )
+            test_image = SimpleUploadedFile(f"test_image_{i}.jpg", b"fake_image_data", content_type="image/jpeg")
+            image = ProductImage.objects.create(product=product, image=test_image, is_primary=True)
             ProductVariant.objects.create(
-                product=product,
-                size="L",
-                color="Красный",
-                price=Decimal("2999.99"),
-                quantity=10,
-                image=image
+                product=product, size="L", color="Красный", price=Decimal("2999.99"), quantity=10, image=image
             )
 
     def test_product_list_view_status_code(self):
-        response = self.client.get(reverse('store:product_list'))
+        response = self.client.get(reverse("store:product_list"))
         self.assertEqual(response.status_code, 200)
 
     def test_product_list_view_template(self):
-        response = self.client.get(reverse('store:product_list'))
-        self.assertTemplateUsed(response, 'main_page/product_list.html')
+        response = self.client.get(reverse("store:product_list"))
+        self.assertTemplateUsed(response, "main_page/product_list.html")
 
     def test_product_list_view_context(self):
-        response = self.client.get(reverse('store:product_list'))
-        self.assertIn('products', response.context)
-        self.assertIn('categories', response.context)
-        self.assertEqual(len(response.context['products']), 12)  # paginate_by = 12
+        response = self.client.get(reverse("store:product_list"))
+        self.assertIn("products", response.context)
+        self.assertIn("categories", response.context)
+        self.assertEqual(len(response.context["products"]), 12)  # paginate_by = 12
 
     def test_product_list_pagination(self):
-        response = self.client.get(reverse('store:product_list') + '?page=2')
+        response = self.client.get(reverse("store:product_list") + "?page=2")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['products']), 3)
+        self.assertEqual(len(response.context["products"]), 3)
 
 
 class ProductDetailsViewTest(TestCase):
@@ -252,144 +179,111 @@ class ProductDetailsViewTest(TestCase):
         self.client = Client()
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
-            name="Тестовая футболка",
-            description="Описание товара",
-            category=self.category
+            name="Тестовая футболка", description="Описание товара", category=self.category
         )
         # Создаем тестовое изображение
-        test_image = SimpleUploadedFile(
-            "test_image.jpg", 
-            b"fake_image_data", 
-            content_type="image/jpeg"
-        )
-        self.image = ProductImage.objects.create(
-            product=self.product,
-            image=test_image,
-            is_primary=True
-        )
+        test_image = SimpleUploadedFile("test_image.jpg", b"fake_image_data", content_type="image/jpeg")
+        self.image = ProductImage.objects.create(product=self.product, image=test_image, is_primary=True)
         self.variant = ProductVariant.objects.create(
-            product=self.product,
-            size="L",
-            color="Красный",
-            price=Decimal("2999.99"),
-            quantity=10,
-            image=self.image
+            product=self.product, size="L", color="Красный", price=Decimal("2999.99"), quantity=10, image=self.image
         )
 
     def test_product_detail_view_status_code(self):
-        response = self.client.get(reverse('store:product_detail', kwargs={'pk': self.product.pk}))
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_product_detail_view_template(self):
-        response = self.client.get(reverse('store:product_detail', kwargs={'pk': self.product.pk}))
-        self.assertTemplateUsed(response, 'main_page/product_details.html')
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+        self.assertTemplateUsed(response, "main_page/product_details.html")
 
     def test_product_detail_view_context(self):
-        response = self.client.get(reverse('store:product_detail', kwargs={'pk': self.product.pk}))
-        self.assertIn('product', response.context)
-        self.assertIn('product_images', response.context)
-        self.assertIn('variants', response.context)
-        self.assertEqual(response.context['product'], self.product)
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+        self.assertIn("product", response.context)
+        self.assertIn("product_images", response.context)
+        self.assertIn("variants", response.context)
+        self.assertEqual(response.context["product"], self.product)
 
     def test_product_detail_view_404(self):
-        response = self.client.get(reverse('store:product_detail', kwargs={'pk': 99999}))
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": 99999}))
         self.assertEqual(response.status_code, 404)
 
 
 class ProductUpdateViewTest(TestCase):
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user(
-            email='testuser@example.com',
-            password='testpass123'
-        )
+        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123")
         self.staff_user = User.objects.create_user(
-            email='staffuser@example.com',
-            password='staffpass123',
-            is_staff=True
+            email="staffuser@example.com", password="staffpass123", is_staff=True
         )
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
-            name="Тестовая футболка",
-            description="Описание товара",
-            category=self.category
+            name="Тестовая футболка", description="Описание товара", category=self.category
         )
 
     def test_product_update_view_requires_staff(self):
-        response = self.client.get(reverse('store:product_edit', kwargs={'pk': self.product.pk}))
+        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 302)  # Redirect to login
 
     def test_product_update_view_denied_for_regular_user(self):
-        self.client.login(email='testuser@example.com', password='testpass123')
-        response = self.client.get(reverse('store:product_edit', kwargs={'pk': self.product.pk}))
+        self.client.login(email="testuser@example.com", password="testpass123")
+        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 403)
 
     def test_product_update_view_allowed_for_staff(self):
-        self.client.login(email='staffuser@example.com', password='staffpass123')
-        response = self.client.get(reverse('store:product_edit', kwargs={'pk': self.product.pk}))
+        self.client.login(email="staffuser@example.com", password="staffpass123")
+        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_product_update_view_template(self):
-        self.client.login(email='staffuser@example.com', password='staffpass123')
-        response = self.client.get(reverse('store:product_edit', kwargs={'pk': self.product.pk}))
-        self.assertTemplateUsed(response, 'main_page/product_update.html')
+        self.client.login(email="staffuser@example.com", password="staffpass123")
+        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
+        self.assertTemplateUsed(response, "main_page/product_update.html")
 
     def test_product_update_form_submission(self):
-        self.client.login(email='staffuser@example.com', password='staffpass123')
+        self.client.login(email="staffuser@example.com", password="staffpass123")
         response = self.client.post(
-            reverse('store:product_edit', kwargs={'pk': self.product.pk}),
-            {
-                'name': 'Обновленная футболка',
-                'description': 'Обновленное описание',
-                'category': self.category.pk
-            }
+            reverse("store:product_edit", kwargs={"pk": self.product.pk}),
+            {"name": "Обновленная футболка", "description": "Обновленное описание", "category": self.category.pk},
         )
         self.product.refresh_from_db()
-        self.assertEqual(self.product.name, 'Обновленная футболка')
+        self.assertEqual(self.product.name, "Обновленная футболка")
         self.assertEqual(response.status_code, 302)
 
 
 class ProductDeleteViewTest(TestCase):
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user(
-            email='testuser@example.com',
-            password='testpass123'
-        )
+        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123")
         self.staff_user = User.objects.create_user(
-            email='staffuser@example.com',
-            password='staffpass123',
-            is_staff=True
+            email="staffuser@example.com", password="staffpass123", is_staff=True
         )
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
-            name="Тестовая футболка",
-            description="Описание товара",
-            category=self.category
+            name="Тестовая футболка", description="Описание товара", category=self.category
         )
 
     def test_product_delete_view_requires_staff(self):
-        response = self.client.get(reverse('store:product_delete', kwargs={'pk': self.product.pk}))
+        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 302)  # Redirect to login
 
     def test_product_delete_view_denied_for_regular_user(self):
-        self.client.login(email='testuser@example.com', password='testpass123')
-        response = self.client.get(reverse('store:product_delete', kwargs={'pk': self.product.pk}))
+        self.client.login(email="testuser@example.com", password="testpass123")
+        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 403)
 
     def test_product_delete_view_allowed_for_staff(self):
-        self.client.login(email='staffuser@example.com', password='staffpass123')
-        response = self.client.get(reverse('store:product_delete', kwargs={'pk': self.product.pk}))
+        self.client.login(email="staffuser@example.com", password="staffpass123")
+        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_product_delete_view_template(self):
-        self.client.login(email='staffuser@example.com', password='staffpass123')
-        response = self.client.get(reverse('store:product_delete', kwargs={'pk': self.product.pk}))
-        self.assertTemplateUsed(response, 'main_page/product_delete.html')
+        self.client.login(email="staffuser@example.com", password="staffpass123")
+        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
+        self.assertTemplateUsed(response, "main_page/product_delete.html")
 
     def test_product_delete_confirmation(self):
-        self.client.login(email='staffuser@example.com', password='staffpass123')
+        self.client.login(email="staffuser@example.com", password="staffpass123")
         initial_count = Product.objects.count()
-        response = self.client.post(reverse('store:product_delete', kwargs={'pk': self.product.pk}))
+        response = self.client.post(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(Product.objects.count(), initial_count - 1)
         self.assertEqual(response.status_code, 302)

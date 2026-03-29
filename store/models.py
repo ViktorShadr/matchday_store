@@ -7,15 +7,16 @@ from django.urls import reverse
 class Category(models.Model):
     """
     Модель категории товаров.
-    
+
     Представляет категорию для группировки товаров.
-    
+
     Attributes:
         name (str): Уникальное название категории
         description (str): Описание категории (необязательно)
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
     """
+
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -25,7 +26,7 @@ class Category(models.Model):
         return self.name
 
     def get_absolute_url(self):
-        return reverse('store:category_detail', kwargs={'pk': self.pk})
+        return reverse("store:category_detail", kwargs={"pk": self.pk})
 
     class Meta:
         verbose_name = "Категория"
@@ -35,9 +36,9 @@ class Category(models.Model):
 class Product(models.Model):
     """
     Модель товара.
-    
+
     Представляет основной товар в каталоге.
-    
+
     Attributes:
         name (str): Название товара
         description (str): Описание товара (необязательно)
@@ -45,6 +46,7 @@ class Product(models.Model):
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
     """
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     category = models.ForeignKey(
@@ -68,10 +70,10 @@ class Product(models.Model):
 class ProductVariant(models.Model):
     """
     Модель варианта товара.
-    
+
     Представляет конкретный вариант товара с определённым размером,
     цветом и ценой. Один товар может иметь несколько вариантов.
-    
+
     Attributes:
         product (Product): Базовый товар
         size (str): Размер варианта
@@ -82,6 +84,7 @@ class ProductVariant(models.Model):
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
     """
+
     product = models.ForeignKey(
         "Product",
         on_delete=models.CASCADE,
@@ -120,9 +123,9 @@ class ProductVariant(models.Model):
 class ProductImage(models.Model):
     """
     Модель изображения товара.
-    
+
     Представляет изображение, связанное с товаром.
-    
+
     Attributes:
         product (Product): Связанный товар
         image (ImageField): Файл изображения
@@ -130,6 +133,7 @@ class ProductImage(models.Model):
         is_primary (bool): Флаг основного изображения товара
         created_at (datetime): Дата создания
     """
+
     product = models.ForeignKey(
         "Product",
         on_delete=models.CASCADE,
@@ -151,29 +155,21 @@ class ProductImage(models.Model):
 class Cart(models.Model):
     """
     Модель корзины.
-    
+
     Представляет корзину пользователя для хранения выбранных товаров.
     Может быть привязана к пользователю или к сессии.
-    
+
     Attributes:
         user (User): Владелец корзины (необязательно)
         session_key (str): Ключ сессии для анонимных пользователей (необязательно)
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
     """
+
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="cart",
-        null=True,
-        blank=True
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cart", null=True, blank=True
     )
-    session_key = models.CharField(
-        max_length=40,
-        null=True,
-        blank=True,
-        db_index=True
-    )
+    session_key = models.CharField(max_length=40, null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -197,15 +193,9 @@ class Cart(models.Model):
         verbose_name = "Корзина"
         verbose_name_plural = "Корзины"
         constraints = [
+            models.UniqueConstraint(fields=["user"], condition=models.Q(user__isnull=False), name="unique_user_cart"),
             models.UniqueConstraint(
-                fields=["user"],
-                condition=models.Q(user__isnull=False),
-                name="unique_user_cart"
-            ),
-            models.UniqueConstraint(
-                fields=["session_key"],
-                condition=models.Q(user__isnull=True),
-                name="unique_session_cart"
+                fields=["session_key"], condition=models.Q(user__isnull=True), name="unique_session_cart"
             ),
         ]
 
@@ -213,9 +203,9 @@ class Cart(models.Model):
 class CartItem(models.Model):
     """
     Модель элемента корзины.
-    
+
     Представляет товар в корзине с указанием количества.
-    
+
     Attributes:
         cart (Cart): Корзина, в которой находится элемент
         product_variant (ProductVariant): Вариант товара
@@ -223,20 +213,10 @@ class CartItem(models.Model):
         created_at (datetime): Дата добавления в корзину
         updated_at (datetime): Дата последнего обновления
     """
-    cart = models.ForeignKey(
-        "Cart",
-        on_delete=models.CASCADE,
-        related_name="items"
-    )
-    product_variant = models.ForeignKey(
-        "ProductVariant",
-        on_delete=models.CASCADE,
-        related_name="cart_items"
-    )
-    quantity = models.PositiveIntegerField(
-        default=1,
-        validators=[MinValueValidator(1)]
-    )
+
+    cart = models.ForeignKey("Cart", on_delete=models.CASCADE, related_name="items")
+    product_variant = models.ForeignKey("ProductVariant", on_delete=models.CASCADE, related_name="cart_items")
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

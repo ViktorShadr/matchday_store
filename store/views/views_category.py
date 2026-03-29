@@ -9,17 +9,18 @@ from store.services import PermissionService, CategoryService, ProductDisplaySer
 class CategoryListView(ListView):
     """
     Список всех категорий.
-    
+
     Отображает пагинированный список категорий.
-    
+
     Attributes:
         paginate_by: Количество категорий на странице (20)
         context_object_name: Имя переменной в контексте ('categories')
-        
+
     Context:
         categories: Список всех категорий
         user_permissions: Права текущего пользователя
     """
+
     model = Category
     template_name = "main_page/category_list.html"
     context_object_name = "categories"
@@ -27,7 +28,7 @@ class CategoryListView(ListView):
 
     def get_queryset(self):
         return Category.objects.all().order_by("name")
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
@@ -37,15 +38,16 @@ class CategoryListView(ListView):
 class CategoryDetailView(DetailView):
     """
     Детальная страница категории.
-    
+
     Отображает информацию о категории и связанные товары.
-    
+
     Context:
         category: Объект категории
         products: Товары этой категории
         category_data: Обогащённые данные категории
         user_permissions: Права текущего пользователя
     """
+
     model = Category
     template_name = "main_page/category_detail.html"
     context_object_name = "category"
@@ -53,11 +55,9 @@ class CategoryDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         products = self.object.products.all().order_by("-created_at")
-        
+
         context["products"] = products
-        context["products_prepared"] = [
-            ProductDisplayService.prepare_category_product(p) for p in products
-        ]
+        context["products_prepared"] = [ProductDisplayService.prepare_category_product(p) for p in products]
         context["category_data"] = CategoryService.enrich_category(self.object, self.request.user)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
@@ -66,15 +66,16 @@ class CategoryDetailView(DetailView):
 class CategoryCreateView(ModeratorRequiredMixin, CreateView):
     """
     Создание новой категории (только для модераторов).
-    
+
     Позволяет модераторам создавать новые категории.
-    
+
     Fields:
         name, description: Поля категории
-        
+
     Returns:
         HttpResponseRedirect: Перенаправление на страницу созданной категории
     """
+
     model = Category
     template_name = "main_page/category_create.html"
     fields = ["name", "description"]
@@ -82,7 +83,7 @@ class CategoryCreateView(ModeratorRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
@@ -92,15 +93,16 @@ class CategoryCreateView(ModeratorRequiredMixin, CreateView):
 class CategoryUpdateView(ModeratorRequiredMixin, UpdateView):
     """
     Редактирование категории (только для модераторов).
-    
+
     Позволяет модераторам редактировать информацию о категории.
-    
+
     Fields:
         name, description: Поля категории
-        
+
     Returns:
         HttpResponseRedirect: Перенаправление на страницу категории после сохранения
     """
+
     model = Category
     template_name = "main_page/category_update.html"
     fields = ["name", "description"]
@@ -108,7 +110,7 @@ class CategoryUpdateView(ModeratorRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
@@ -118,17 +120,18 @@ class CategoryUpdateView(ModeratorRequiredMixin, UpdateView):
 class CategoryDeleteView(ModeratorRequiredMixin, DeleteView):
     """
     Удаление категории (только для модераторов).
-    
+
     Позволяет модераторам удалять категории.
-    
+
     Returns:
         HttpResponseRedirect: Перенаправление на список категорий после удаления
     """
+
     model = Category
     template_name = "main_page/category_delete.html"
     context_object_name = "category"
     success_url = reverse_lazy("store:category_list")
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
