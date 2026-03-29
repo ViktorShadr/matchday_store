@@ -45,10 +45,12 @@ class CartAdmin(admin.ModelAdmin):
 
     def total_items(self, obj):
         return obj.total_items
+
     total_items.short_description = 'Количество товаров'
 
     def total_price(self, obj):
         return f"{obj.total_price:.2f} ₽"
+
     total_price.short_description = 'Общая стоимость'
 
 
@@ -62,4 +64,5 @@ class CartItemAdmin(admin.ModelAdmin):
 
     def total_price(self, obj):
         return f"{obj.total_price:.2f} ₽"
+
     total_price.short_description = 'Общая стоимость'

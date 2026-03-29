@@ -32,6 +32,7 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
     Список товаров каталога.
     
     Отображает пагинированный список всех товаров с категориями.
+    Поддерживает фильтрацию по категориям через параметр category_id.
     
     Attributes:
         paginate_by: Количество товаров на странице (12)
@@ -40,6 +41,7 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
     Context:
         categories: Все категории магазина
         products: Список товаров с обогащёнными данными
+        selected_category: Выбранная категория (если передана)
     """
     model = Product
     template_name = "main_page/product_list.html"
@@ -47,11 +49,24 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
     paginate_by = 12
 
     def get_queryset(self):
-        return self.get_catalog_queryset().order_by("-created_at")
+        queryset = self.get_catalog_queryset().order_by("-created_at")
+        category_id = self.request.GET.get('category_id')
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context[self.context_object_name] = enrich_products(context[self.context_object_name])
+        
+        category_id = self.request.GET.get('category_id')
+        if category_id:
+            try:
+                from store.models import Category
+                context['selected_category'] = Category.objects.get(id=category_id)
+            except:
+                pass
+        
         return context
 
 

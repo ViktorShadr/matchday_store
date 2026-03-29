@@ -1,18 +1,29 @@
 {% extends 'main_page/base.html' %}
-{% block title %}Каталог товаров{% endblock %}
+{% block title %}{% if selected_category %}{{ selected_category.name }}{% else %}Каталог товаров{% endif %}{% endblock %}
 
 {% block content %}
     <section class="sf-section">
         <div class="container">
             <div class="sf-section-head">
-                <h1 class="sf-section-title">Каталог товаров</h1>
+                <h1 class="sf-section-title">{% if selected_category %}{{ selected_category.name }}{% else %}Каталог товаров{% endif %}</h1>
                 <a class="sf-link" href="{% url 'store:base' %}">На главную</a>
             </div>
 
+            {% if selected_category %}
+                <div class="mb-4">
+                    <a href="{% url 'store:product_list' %}" class="btn btn-outline-secondary">← Все товары</a>
+                </div>
+            {% endif %}
+
             <div class="row g-3 mb-4">
+                <div class="col-6 col-md-4 col-lg-3">
+                    <a class="sf-category-card text-decoration-none {% if not selected_category %}active{% endif %}" href="{% url 'store:product_list' %}">
+                        <div class="sf-category-title text-truncate">Все категории</div>
+                    </a>
+                </div>
                 {% for category in categories %}
                     <div class="col-6 col-md-4 col-lg-3">
-                        <a class="sf-category-card text-decoration-none" href="{% url 'store:base' %}#categories">
+                        <a class="sf-category-card text-decoration-none {% if selected_category.id == category.id %}active{% endif %}" href="{% url 'store:product_list' %}?category_id={{ category.id }}">
                             <div class="sf-category-title text-truncate">{{ category.name }}</div>
                         </a>
                     </div>
@@ -26,10 +37,36 @@
                     </div>
                 {% empty %}
                     <div class="col-12">
-                        <div class="sf-surface p-4">Товары пока не добавлены.</div>
+                        <div class="sf-surface p-4">{% if selected_category %}В этой категории товары пока не добавлены.{% else %}Товары пока не добавлены.{% endif %}</div>
                     </div>
                 {% endfor %}
             </div>
+
+            {% if is_paginated %}
+                <div class="d-flex justify-content-center mt-4">
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item"><a class="page-link" href="?page=1{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">Первая</a></li>
+                                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">← Назад</a></li>
+                            {% endif %}
+
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                    <li class="page-item"><a class="page-link" href="?page={{ num }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">{{ num }}</a></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">Вперёд →</a></li>
+                                <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">Последняя</a></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+            {% endif %}
         </div>
     </section>
 {% endblock %}

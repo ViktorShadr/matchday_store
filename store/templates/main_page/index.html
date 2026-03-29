@@ -75,7 +75,7 @@
             <div class="row g-3">
                 {% for c in categories %}
                     <div class="col-6 col-md-4 col-lg-3">
-                        <a href="{% if c.get_absolute_url %}{{ c.get_absolute_url }}{% else %}#{% endif %}"
+                        <a href="{% url 'store:product_list' %}?category_id={{ c.id }}"
                            class="sf-category-card sf-animate">
                             <div class="sf-category-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
