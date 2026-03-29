@@ -1,78 +1,81 @@
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Prefetch
 from django.urls import reverse_lazy
-from django.views.generic import DeleteView, DetailView, ListView, TemplateView, UpdateView
+from django.views.generic import DeleteView, DetailView, ListView, TemplateView, UpdateView, CreateView
 
-from store.models import Category, Product, ProductVariant
-
-
-def _catalog_queryset():
-    return Product.objects.select_related("category").prefetch_related(
-        "images",
-        Prefetch(
-            "variants",
-            queryset=ProductVariant.objects.select_related("image").order_by("price", "id"),
-        ),
-    )
+from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, StaffRequiredMixin, ModeratorRequiredMixin
+from store.models import Product
+from store.services import enrich_product, enrich_products
 
 
-def _enrich_product(product):
-    images = list(product.images.all())
-    variants = list(product.variants.all())
-
-    primary_image = next((image for image in images if image.is_primary), None)
-    first_image = primary_image or (images[0] if images else None)
-    first_variant = variants[0] if variants else None
-
-    product.display_image = first_image.image if first_image else getattr(getattr(first_variant, "image", None), "image", None)
-    product.display_price = first_variant.price if first_variant else None
-    return product
-
-
-class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    def test_func(self):
-        return self.request.user.is_staff
-
-
-class MainView(TemplateView):
+class MainView(CategoriesContextMixin, CatalogQuerysetMixin, TemplateView):
+    """
+    Главная страница магазина.
+    
+    Отображает главную страницу с популярными товарами и категориями.
+    
+    Context:
+        categories: Все категории магазина
+        popular_products: 6 последних товаров с обогащёнными данными
+    """
     template_name = "main_page/index.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        categories = Category.objects.order_by("name")
-        products = [_enrich_product(product) for product in _catalog_queryset().order_by("-created_at")[:6]]
-
-        context["categories"] = categories
-        context["popular_products"] = products
+        context["popular_products"] = enrich_products(
+            self.get_catalog_queryset().order_by("-created_at")[:6]
+        )
         return context
 
 
-class ProductListView(ListView):
+class ProductListView(CategoriesContextMixin, CatalogQuerysetMixin, ListView):
+    """
+    Список товаров каталога.
+    
+    Отображает пагинированный список всех товаров с категориями.
+    
+    Attributes:
+        paginate_by: Количество товаров на странице (12)
+        context_object_name: Имя переменной в контексте ('products')
+        
+    Context:
+        categories: Все категории магазина
+        products: Список товаров с обогащёнными данными
+    """
     model = Product
     template_name = "main_page/product_list.html"
     context_object_name = "products"
     paginate_by = 12
 
     def get_queryset(self):
-        return [_enrich_product(product) for product in _catalog_queryset().order_by("-created_at")]
+        return self.get_catalog_queryset().order_by("-created_at")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["categories"] = Category.objects.order_by("name")
+        context[self.context_object_name] = enrich_products(context[self.context_object_name])
         return context
 
 
-class ProductDetailsView(DetailView):
+class ProductDetailsView(CatalogQuerysetMixin, DetailView):
+    """
+    Детальная страница товара.
+    
+    Отображает подробную информацию о товаре,
+    включая изображения и варианты.
+    
+    Context:
+        product: Обогащённый объект товара
+        product_images: Все изображения товара
+        variants: Все варианты товара
+    """
     model = Product
     template_name = "main_page/product_details.html"
     context_object_name = "product"
 
     def get_queryset(self):
-        return _catalog_queryset()
+        return self.get_catalog_queryset()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        product = _enrich_product(self.object)
+        product = enrich_product(self.object)
 
         context["product"] = product
         context["product_images"] = product.images.all()
@@ -80,7 +83,18 @@ class ProductDetailsView(DetailView):
         return context
 
 
-class ProductUpdateView(StaffRequiredMixin, UpdateView):
+class ProductUpdateView(ModeratorRequiredMixin, UpdateView):
+    """
+    Редактирование товара (только для персонала).
+    
+    Позволяет сотрудникам редактировать основную информацию о товаре.
+    
+    Fields:
+        name, description, category: Основные поля товара
+        
+    Returns:
+        HttpResponseRedirect: Перенаправление на страницу товара после сохранения
+    """
     model = Product
     template_name = "main_page/product_update.html"
     fields = ["name", "description", "category"]
@@ -90,7 +104,36 @@ class ProductUpdateView(StaffRequiredMixin, UpdateView):
         return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
 
 
-class ProductDeleteView(StaffRequiredMixin, DeleteView):
+class ProductCreateView(ModeratorRequiredMixin, CreateView):
+    """
+    Создание нового товара (только для персонала).
+    
+    Позволяет сотрудникам создавать новые товары в каталоге.
+    
+    Fields:
+        name, description, category: Основные поля товара
+        
+    Returns:
+        HttpResponseRedirect: Перенаправление на страницу созданного товара
+    """
+    model = Product
+    template_name = "main_page/product_create.html"
+    fields = ["name", "description", "category"]
+    context_object_name = "product"
+
+    def get_success_url(self):
+        return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
+
+
+class ProductDeleteView(ModeratorRequiredMixin, DeleteView):
+    """
+    Удаление товара (только для персонала).
+    
+    Позволяет сотрудникам удалять товары из каталога.
+    
+    Returns:
+        HttpResponseRedirect: Перенаправление на список товаров после удаления
+    """
     model = Product
     template_name = "main_page/product_delete.html"
     context_object_name = "product"
