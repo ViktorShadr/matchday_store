@@ -3,7 +3,7 @@
 <header class="sf-header">
     <div class="container">
         <div class="sf-header-row">
-            <a class="sf-logo d-flex align-items-center gap-2" href="{% url 'store:base' %}">
+            <a class="sf-logo d-flex align-items-center gap-2" href="{% url 'main_page:base' %}">
                 <img src="{% static 'img/favicon.ico' %}" alt="Шинник" loading="lazy">
                 <div class="d-flex flex-column lh-1">
                     <span class="sf-logo-title">ФК «Шинник»</span>
@@ -13,7 +13,7 @@
 
             <div class="sf-actions">
                 <div class="sf-search">
-                    <form class="sf-search-wrap" action="{% url 'store:product_list' %}" method="get" role="search">
+                    <form class="sf-search-wrap" action="{% url 'main_page:product_list' %}" method="get" role="search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <circle cx="11" cy="11" r="7"></circle>
@@ -23,7 +23,7 @@
                     </form>
                 </div>
 
-                <button class="sf-icon-btn" type="button" aria-label="Корзина" disabled title="Корзина появится в следующем этапе">
+                <a href="{% url 'main_page:cart' %}" class="sf-icon-btn" aria-label="Корзина" title="Корзина">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M6 6h15l-1.5 9h-12z"></path>
@@ -32,8 +32,8 @@
                         <circle cx="18" cy="20" r="1"></circle>
                     </svg>
                     <span class="d-none d-lg-inline fw-bold">Корзина</span>
-                    <span class="sf-badge">{{ cart_count|default:0 }}</span>
-                </button>
+                    <span class="sf-badge cart-counter">{{ cart_count|default:0 }}</span>
+                </a>
 
                 {% if user.is_authenticated %}
                     <div class="dropdown">

@@ -1,12 +1,13 @@
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView, DetailView, ListView, TemplateView, UpdateView, CreateView
 
-from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, StaffRequiredMixin, ModeratorRequiredMixin
+from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, ModeratorRequiredMixin
+from store.mixins.cart_mixins import CartContextMixin
 from store.models import Product
-from store.services import enrich_product, enrich_products
+from store.services import enrich_product, enrich_products, ProductDisplayService, PermissionService
 
 
-class MainView(CategoriesContextMixin, CatalogQuerysetMixin, TemplateView):
+class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, TemplateView):
     """
     Главная страница магазина.
     
@@ -26,7 +27,7 @@ class MainView(CategoriesContextMixin, CatalogQuerysetMixin, TemplateView):
         return context
 
 
-class ProductListView(CategoriesContextMixin, CatalogQuerysetMixin, ListView):
+class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, ListView):
     """
     Список товаров каталога.
     
@@ -54,7 +55,7 @@ class ProductListView(CategoriesContextMixin, CatalogQuerysetMixin, ListView):
         return context
 
 
-class ProductDetailsView(CatalogQuerysetMixin, DetailView):
+class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
     """
     Детальная страница товара.
     
@@ -78,8 +79,10 @@ class ProductDetailsView(CatalogQuerysetMixin, DetailView):
         product = enrich_product(self.object)
 
         context["product"] = product
+        context["product_details"] = ProductDisplayService.prepare_product_details(product)
         context["product_images"] = product.images.all()
         context["variants"] = product.variants.all()
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
 
 
@@ -102,6 +105,11 @@ class ProductUpdateView(ModeratorRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+        return context
 
 
 class ProductCreateView(ModeratorRequiredMixin, CreateView):
@@ -123,6 +131,11 @@ class ProductCreateView(ModeratorRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+        return context
 
 
 class ProductDeleteView(ModeratorRequiredMixin, DeleteView):
@@ -138,3 +151,8 @@ class ProductDeleteView(ModeratorRequiredMixin, DeleteView):
     template_name = "main_page/product_delete.html"
     context_object_name = "product"
     success_url = reverse_lazy("store:product_list")
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+        return context

@@ -1,5 +1,6 @@
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.conf import settings
 
 
 class Category(models.Model):
@@ -141,3 +142,114 @@ class ProductImage(models.Model):
     class Meta:
         verbose_name = "Изображение товара"
         verbose_name_plural = "Изображения товаров"
+
+
+class Cart(models.Model):
+    """
+    Модель корзины.
+    
+    Представляет корзину пользователя для хранения выбранных товаров.
+    Может быть привязана к пользователю или к сессии.
+    
+    Attributes:
+        user (User): Владелец корзины (необязательно)
+        session_key (str): Ключ сессии для анонимных пользователей (необязательно)
+        created_at (datetime): Дата создания
+        updated_at (datetime): Дата последнего обновления
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cart",
+        null=True,
+        blank=True
+    )
+    session_key = models.CharField(
+        max_length=40,
+        null=True,
+        blank=True,
+        db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        if self.user:
+            return f"Корзина пользователя {self.user.email}"
+        else:
+            return f"Корзина сессии {self.session_key[:8]}..."
+
+    @property
+    def total_price(self):
+        """Общая стоимость всех товаров в корзине"""
+        return sum(item.total_price for item in self.items.all())
+
+    @property
+    def total_items(self):
+        """Общее количество товаров в корзине"""
+        return sum(item.quantity for item in self.items.all())
+
+    class Meta:
+        verbose_name = "Корзина"
+        verbose_name_plural = "Корзины"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(user__isnull=False),
+                name="unique_user_cart"
+            ),
+            models.UniqueConstraint(
+                fields=["session_key"],
+                condition=models.Q(user__isnull=True),
+                name="unique_session_cart"
+            ),
+        ]
+
+
+class CartItem(models.Model):
+    """
+    Модель элемента корзины.
+    
+    Представляет товар в корзине с указанием количества.
+    
+    Attributes:
+        cart (Cart): Корзина, в которой находится элемент
+        product_variant (ProductVariant): Вариант товара
+        quantity (int): Количество товара
+        created_at (datetime): Дата добавления в корзину
+        updated_at (datetime): Дата последнего обновления
+    """
+    cart = models.ForeignKey(
+        "Cart",
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
+    product_variant = models.ForeignKey(
+        "ProductVariant",
+        on_delete=models.CASCADE,
+        related_name="cart_items"
+    )
+    quantity = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)]
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.product_variant.product.name} ({self.product_variant.size}, {self.product_variant.color}) - {self.quantity} шт."
+
+    class Meta:
+        verbose_name = "Элемент корзины"
+        verbose_name_plural = "Элементы корзины"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cart", "product_variant"],
+                name="unique_cart_product_variant",
+            ),
+        ]
+
+    @property
+    def total_price(self):
+        """Общая стоимость элемента корзины"""
+        return self.product_variant.price * self.quantity

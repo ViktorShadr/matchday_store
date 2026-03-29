@@ -4,6 +4,8 @@ from store.views.views_product import MainView, ProductListView, ProductDetailsV
     ProductDeleteView, ProductCreateView
 from store.views.views_category import CategoryListView, CategoryDetailView, CategoryCreateView, \
     CategoryUpdateView, CategoryDeleteView
+from store.views.views_cart import AddToCartView, UpdateCartView, RemoveFromCartView
+from store.views.views_cart_page import CartView
 
 app_name = "store"
 
@@ -20,4 +22,10 @@ urlpatterns = [
     path("categories/<int:pk>/", CategoryDetailView.as_view(), name="category_detail"),
     path("categories/<int:pk>/edit/", CategoryUpdateView.as_view(), name="category_edit"),
     path("categories/<int:pk>/delete/", CategoryDeleteView.as_view(), name="category_delete"),
+    
+    # Корзина
+    path("cart/", CartView.as_view(), name="cart"),
+    path("cart/add/", AddToCartView.as_view(), name="add_to_cart"),
+    path("cart/update/", UpdateCartView.as_view(), name="update_cart"),
+    path("cart/remove/", RemoveFromCartView.as_view(), name="remove_from_cart"),
 ]

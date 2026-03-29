@@ -3,6 +3,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from store.mixins import ModeratorRequiredMixin
 from store.models import Category
+from store.services import PermissionService, CategoryService, ProductDisplayService
 
 
 class CategoryListView(ListView):
@@ -17,6 +18,7 @@ class CategoryListView(ListView):
         
     Context:
         categories: Список всех категорий
+        user_permissions: Права текущего пользователя
     """
     model = Category
     template_name = "main_page/category_list.html"
@@ -25,6 +27,11 @@ class CategoryListView(ListView):
 
     def get_queryset(self):
         return Category.objects.all().order_by("name")
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+        return context
 
 
 class CategoryDetailView(DetailView):
@@ -36,6 +43,8 @@ class CategoryDetailView(DetailView):
     Context:
         category: Объект категории
         products: Товары этой категории
+        category_data: Обогащённые данные категории
+        user_permissions: Права текущего пользователя
     """
     model = Category
     template_name = "main_page/category_detail.html"
@@ -43,7 +52,14 @@ class CategoryDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["products"] = self.object.products.all().order_by("-created_at")
+        products = self.object.products.all().order_by("-created_at")
+        
+        context["products"] = products
+        context["products_prepared"] = [
+            ProductDisplayService.prepare_category_product(p) for p in products
+        ]
+        context["category_data"] = CategoryService.enrich_category(self.object, self.request.user)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
 
 
@@ -66,6 +82,11 @@ class CategoryCreateView(ModeratorRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+        return context
 
 
 class CategoryUpdateView(ModeratorRequiredMixin, UpdateView):
@@ -87,6 +108,11 @@ class CategoryUpdateView(ModeratorRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+        return context
 
 
 class CategoryDeleteView(ModeratorRequiredMixin, DeleteView):
@@ -102,3 +128,8 @@ class CategoryDeleteView(ModeratorRequiredMixin, DeleteView):
     template_name = "main_page/category_delete.html"
     context_object_name = "category"
     success_url = reverse_lazy("store:category_list")
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+        return context

@@ -6,7 +6,7 @@
         <div class="container">
             <div class="sf-section-head">
                 <h1 class="sf-section-title">Категории товаров</h1>
-                {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                {% if user_permissions.is_moderator %}
                     <a class="btn btn-primary" href="{% url 'store:category_create' %}">Создать категорию</a>
                 {% endif %}
             </div>
