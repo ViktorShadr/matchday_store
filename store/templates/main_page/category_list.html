@@ -1,0 +1,76 @@
+{% extends 'main_page/base.html' %}
+{% block title %}Категории{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">Категории товаров</h1>
+                {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                    <a class="btn btn-primary" href="{% url 'store:category_create' %}">Создать категорию</a>
+                {% endif %}
+            </div>
+
+            <div class="row">
+                {% for category in categories %}
+                    <div class="col-12 col-md-6 col-lg-4 mb-4">
+                        <div class="sf-surface p-3 h-100">
+                            <h3><a href="{% url 'store:category_detail' category.pk %}" class="sf-link">{{ category.name }}</a></h3>
+                            {% if category.description %}
+                                <p class="text-muted">{{ category.description|truncatewords:20 }}</p>
+                            {% endif %}
+                            <div class="mt-auto">
+                                <small class="text-muted">Товаров: {{ category.products.count }}</small>
+                                {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                                    <div class="mt-2">
+                                        <a href="{% url 'store:category_edit' category.pk %}" class="btn btn-sm btn-outline-primary me-2">Редактировать</a>
+                                        <a href="{% url 'store:category_delete' category.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="col-12">
+                        <div class="text-center text-muted">
+                            <p>Категории пока не созданы</p>
+                            {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                                <a href="{% url 'store:category_create' %}" class="btn btn-primary">Создать первую категорию</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if is_paginated %}
+                <nav aria-label="Пагинация категорий">
+                    <ul class="pagination justify-content-center">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page=1">&laquo; Первая</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Предыдущая</a>
+                            </li>
+                        {% endif %}
+
+                        <li class="page-item active">
+                            <span class="page-link">
+                                Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}
+                            </span>
+                        </li>
+
+                        {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Следующая</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Последняя &raquo;</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+        </div>
+    </section>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'main_page/base.html' %}
+{% block title %}Удаление категории{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">Удаление категории</h1>
+                <a class="sf-link" href="{% url 'store:category_detail' category.pk %}">Назад к категории</a>
+            </div>
+
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-8">
+                    <div class="sf-surface p-4">
+                        <div class="alert alert-warning">
+                            <h5>Подтвердите удаление</h5>
+                            <p>Вы уверены, что хотите удалить категорию "<strong>{{ category.name }}</strong>"?</p>
+                            
+                            {% if category.products.count > 0 %}
+                                <div class="alert alert-danger">
+                                    <strong>Внимание!</strong> В этой категории есть {{ category.products.count }} товар(ов). 
+                                    При удалении категории все связанные товары также будут удалены.
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-danger">Удалить</button>
+                                <a href="{% url 'store:category_detail' category.pk %}" class="btn btn-secondary">Отмена</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

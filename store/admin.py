@@ -1,40 +1,35 @@
 from django.contrib import admin
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth.models import Permission
+
+from .models import Category, Product, ProductVariant, ProductImage
 
 
-@admin.register(Group)
-class GroupAdmin(admin.ModelAdmin):
-    list_display = ['name', 'permissions_count']
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'created_at', 'updated_at']
     search_fields = ['name']
-
-    def permissions_count(self, obj):
-        return obj.permissions.count()
-
-    permissions_count.short_description = 'Количество прав'
+    ordering = ['name']
 
 
-def create_moderator_group():
-    """
-    Создает группу 'Модераторы' с правами на управление товарами.
-    """
-    group, created = Group.objects.get_or_create(name='Модераторы')
-
-    if created:
-        # Получаем права для управления товарами
-        product_permissions = Permission.objects.filter(
-            content_type__app_label='store',
-            content_type__model='product'
-        )
-
-        # Добавляем права: просмотр, добавление, изменение, удаление
-        allowed_codenames = ['view_product', 'add_product', 'change_product', 'delete_product']
-        for permission in product_permissions.filter(codename__in=allowed_codenames):
-            group.permissions.add(permission)
-
-        print(f"Группа 'Модераторы' создана с правами: {', '.join(allowed_codenames)}")
-    else:
-        print("Группа 'Модераторы' уже существует")
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'created_at', 'updated_at']
+    list_filter = ['category', 'created_at']
+    search_fields = ['name', 'description']
+    ordering = ['name']
 
 
-# Автоматическое создание группы при регистрации админки
-create_moderator_group()
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = ['product', 'size', 'color', 'price', 'quantity']
+    list_filter = ['size', 'color', 'product']
+    search_fields = ['product__name', 'size', 'color']
+    ordering = ['product', 'size', 'color']
+
+
+@admin.register(ProductImage)
+class ProductImageAdmin(admin.ModelAdmin):
+    list_display = ['product', 'alt_text', 'is_primary', 'created_at']
+    list_filter = ['is_primary', 'product']
+    search_fields = ['product__name', 'alt_text']
+    ordering = ['-created_at']
