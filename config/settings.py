@@ -1,5 +1,4 @@
 import os
-from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -29,6 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "djcelery_email",
+    "orders.apps.OrdersConfig",
     "store.apps.StoreConfig",
     "users.apps.UsersConfig",
 ]
