@@ -89,7 +89,7 @@ Notes:
 - Inline display added to order admin
 - Migration created
 
-### 1.4 Payment model
+### 1.4 Payment model <span style="background-color:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-weight:600;">DONE</span>
 Add `Payment` with fields:
 - `order`
 - `provider`
@@ -103,6 +103,12 @@ Add `Payment` with fields:
 - `failure_reason`
 - `paid_at`
 - `refunded_amount`
+
+Notes:
+- Model created in `payments.models.Payment`
+- App connected in Django settings
+- Admin registration added
+- Initial migration created
 
 ### 1.5 Shipment model
 Add `Shipment` with fields:
@@ -132,7 +138,7 @@ They should store:
 - timestamps
 - link to order/payment
 
-### 1.7 Status enums
+### 1.7 Status enums <span style="background-color:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-weight:600;">DONE</span>
 Introduce explicit enums.
 
 `OrderStatus`:
@@ -162,6 +168,10 @@ Introduce explicit enums.
 - `delivered`
 - `returned`
 - `cancelled`
+
+Notes:
+- `OrderStatus`, `PaymentStatus`, and `FulfillmentStatus` are implemented via `TextChoices`
+- Delivery method enum is also implemented on `Order`
 
 ## Stage 2. Checkout Flow
 Build a real checkout path from cart to order creation.

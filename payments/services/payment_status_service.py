@@ -1,0 +1,30 @@
+from orders.models import Order
+from payments.models import Payment
+
+
+class PaymentStatusSyncService:
+    @staticmethod
+    def resolve_order_payment_status(order: Order) -> str:
+        payments = order.payments.order_by("-updated_at", "-created_at", "-pk")
+        latest_payment = payments.first()
+
+        if latest_payment is None:
+            return Order.PaymentStatus.PENDING
+
+        if payments.filter(status=Payment.Status.REFUNDED).exists():
+            return Order.PaymentStatus.REFUNDED
+
+        if payments.filter(status=Payment.Status.SUCCEEDED).exists():
+            return Order.PaymentStatus.SUCCEEDED
+
+        return latest_payment.status
+
+    @classmethod
+    def sync_order_payment_status(cls, order: Order) -> str:
+        payment_status = cls.resolve_order_payment_status(order)
+
+        if order.payment_status != payment_status:
+            order.payment_status = payment_status
+            order.save(update_fields=["payment_status", "updated_at"])
+
+        return payment_status

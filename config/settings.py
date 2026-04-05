@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "djcelery_email",
     "orders.apps.OrdersConfig",
+    "payments.apps.PaymentsConfig",
     "store.apps.StoreConfig",
     "users.apps.UsersConfig",
 ]
