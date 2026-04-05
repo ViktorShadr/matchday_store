@@ -9,8 +9,8 @@
             <div class="card shadow-sm border-0 p-4">
 
                 <div class="text-center">
-                    {% if user.avatar %}
-                        <img src="{{ user.avatar.url }}"
+                    {% if profile_user.avatar %}
+                        <img src="{{ profile_user.avatar.url }}"
                              alt="avatar"
                              class="rounded-circle mb-3"
                              style="width: 150px; height: 150px; object-fit: cover;">
@@ -22,21 +22,21 @@
                     {% endif %}
                 </div>
 
-                <h3 class="text-center mb-3">{{ user.email }}</h3>
+                <h3 class="text-center mb-3">{{ profile_user.email }}</h3>
 
                 <ul class="list-group list-group-flush mb-4">
                     <li class="list-group-item">
                         <strong>Телефон:</strong>
-                        {% if user.phone %} {{ user.phone }} {% else %} не указан {% endif %}
+                        {% if profile_user.phone %} {{ profile_user.phone }} {% else %} не указан {% endif %}
                     </li>
                     <li class="list-group-item">
                         <strong>Город:</strong>
-                        {% if user.city %} {{ user.city }} {% else %} не указан {% endif %}
+                        {% if profile_user.city %} {{ profile_user.city }} {% else %} не указан {% endif %}
                     </li>
                 </ul>
 
                 <div class="d-flex justify-content-between">
-                    <a href="{% url 'main_page:base' %}" class="btn btn-secondary">Назад</a>
+                    <a href="{% url 'store:base' %}" class="btn btn-secondary">Назад</a>
                     <a href="{% url 'users:profile_edit'%}" class="btn btn-warning">Редактировать профиль</a>
                 </div>
 

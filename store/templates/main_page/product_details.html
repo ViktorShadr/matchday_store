@@ -1,0 +1,175 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">{{ product.name }}</h1>
+                <a class="sf-link" href="{% url 'main_page:product_list' %}">К каталогу</a>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-6">
+                    <div class="sf-surface p-3">
+                        {% if product.display_image %}
+                            <img class="img-fluid rounded-4" src="{{ product.display_image.url }}" alt="{{ product.name }}">
+                        {% else %}
+                            <div class="sf-product-img-placeholder" style="min-height: 420px;"></div>
+                        {% endif %}
+                    </div>
+
+                    {% if product_images %}
+                        <div class="row g-3 mt-1">
+                            {% for image in product_images %}
+                                <div class="col-4">
+                                    <div class="sf-surface p-2">
+                                        <img class="img-fluid rounded-4" src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}">
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="small text-muted mb-2">{{ product.category.name|default:'Без категории' }}</div>
+                        <div class="fs-4 fw-bold mb-3">{{ product.display_price|default:'—' }} ₽</div>
+                        <p>{{ product.description|default:'Описание пока не добавлено.' }}</p>
+
+                        <div class="mt-4">
+                            <div class="fw-bold mb-2">Доступные варианты</div>
+                            {% for variant in variants %}
+                                <div class="d-flex justify-content-between align-items-center border rounded-4 px-3 py-2 mb-2">
+                                    <div>{{ variant.size }} / {{ variant.color }}</div>
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-3">{{ variant.price }} ₽</div>
+                                        {% if variant.quantity > 0 %}
+                                            <div class="d-flex align-items-center">
+                                                <input type="number" 
+                                                       class="form-control form-control-sm me-2" 
+                                                       style="width: 70px;" 
+                                                       value="1" 
+                                                       min="1" 
+                                                       max="{{ variant.quantity }}"
+                                                       id="quantity-{{ variant.id }}">
+                                                <button class="btn btn-primary btn-sm add-to-cart-btn" 
+                                                        data-variant-id="{{ variant.id }}"
+                                                        data-product-name="{{ variant.product.name }}">
+                                                    В корзину
+                                                </button>
+                                            </div>
+                                        {% else %}
+                                            <span class="text-danger small">Нет в наличии</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="text-muted">Варианты пока не добавлены.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+    console.log('Cart script loaded');
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded');
+        const addToCartButtons = document.querySelectorAll('.add-to-cart-btn');
+        console.log('Buttons found:', addToCartButtons.length);
+        
+        addToCartButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const variantId = this.dataset.variantId;
+                const productName = this.dataset.productName;
+                const quantityInput = document.getElementById(`quantity-${variantId}`);
+                const quantity = parseInt(quantityInput.value);
+                
+                // Отключаем кнопку на время запроса
+                this.disabled = true;
+                this.textContent = 'Добавление...';
+                
+                fetch('{% url "main_page:add_to_cart" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken')
+                    },
+                    body: `variant_id=${variantId}&quantity=${quantity}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Показываем уведомление об успехе
+                        showNotification(data.message, 'success');
+                        
+                        // Обновляем счетчик корзины в шапке (если он есть)
+                        updateCartCounter(data.cart_total);
+                        
+                        // Восстанавливаем кнопку
+                        this.disabled = false;
+                        this.textContent = 'В корзину';
+                    } else {
+                        // Показываем ошибку
+                        showNotification(data.error, 'error');
+                        this.disabled = false;
+                        this.textContent = 'В корзину';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showNotification('Произошла ошибка при добавлении товара', 'error');
+                    this.disabled = false;
+                    this.textContent = 'В корзину';
+                });
+            });
+        });
+        
+        // Функция для показа уведомлений
+        function showNotification(message, type) {
+            // Создаем элемент уведомления
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed top-0 start-50 translate-middle-x mt-3`;
+            notification.style.zIndex = '9999';
+            notification.style.minWidth = '300px';
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Автоматически удаляем через 3 секунды
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+        
+        // Функция для получения CSRF токена
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        // Функция для обновления счетчика корзины
+        function updateCartCounter(count) {
+            const cartCounter = document.querySelector('.cart-counter');
+            if (cartCounter) {
+                cartCounter.textContent = count;
+            }
+        }
+    });
+    </script>
+{% endblock %}

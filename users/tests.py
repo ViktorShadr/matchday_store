@@ -136,7 +136,7 @@ class UserViewsTest(TestCase):
         self.client.login(email="user@example.com", password="userpass123")
         response = self.client.post(reverse("users:logout"))
         self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, reverse("main_page:base"))
+        self.assertRedirects(response, reverse("store:base"))
 
     def test_profile_detail_view_own_profile(self):
         self.client.login(email="user@example.com", password="userpass123")
@@ -183,7 +183,7 @@ class UserViewsTest(TestCase):
         response = self.client.post(reverse("users:profile_delete"), data=form_data)
 
         self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, reverse("main_page:base"))
+        self.assertRedirects(response, reverse("store:base"))
         self.assertFalse(User.objects.filter(email="user@example.com").exists())
 
     def test_profile_delete_view_wrong_password(self):

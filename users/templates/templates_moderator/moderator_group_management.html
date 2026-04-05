@@ -1,0 +1,123 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' 'auth' %}">Authentication and Authorization</a>
+&rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module">
+        <h2>Текущие модераторы ({{ moderators.count }})</h2>
+        {% if moderators %}
+            <div class="results">
+                <table id="result_list">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="sortable column-id"><div class="text"><span>ID</span></div></th>
+                            <th scope="col" class="sortable column-email"><div class="text"><span>Email</span></div></th>
+                            <th scope="col" class="sortable column-first_name"><div class="text"><span>Имя</span></div></th>
+                            <th scope="col" class="sortable column-last_name"><div class="text"><span>Фамилия</span></div></th>
+                            <th scope="col" class="column-is_active"><div class="text"><span>Активен</span></div></th>
+                            <th scope="col" class="column-actions"><div class="text"><span>Действия</span></div></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in moderators %}
+                        <tr class="{% cycle 'row1' 'row2' %}">
+                            <td class="field-id">{{ user.id }}</td>
+                            <td class="field-email">{{ user.email }}</td>
+                            <td class="field-first_name">{{ user.first_name|default:"-" }}</td>
+                            <td class="field-last_name">{{ user.last_name|default:"-" }}</td>
+                            <td class="field-is_active">
+                                {% if user.is_active %}
+                                    <img src="{% static 'admin/img/icon-yes.svg' %}" alt="Да">
+                                {% else %}
+                                    <img src="{% static 'admin/img/icon-no.svg' %}" alt="Нет">
+                                {% endif %}
+                            </td>
+                            <td class="field-actions">
+                                <form method="post" action="{% url 'admin:users_user_changelist' %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="remove_from_moderators">
+                                    <input type="hidden" name="_selected_action" value="{{ user.id }}">
+                                    <button type="submit" class="button" onclick="return confirm('Вы уверены, что хотите удалить пользователя из группы модераторов?');">
+                                        Удалить из модераторов
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="paginator">В группе модераторов пока нет пользователей.</p>
+        {% endif %}
+    </div>
+
+    <div class="module">
+        <h2>Доступные пользователи для добавления в модераторы ({{ non_moderators.count }})</h2>
+        {% if non_moderators %}
+            <div class="results">
+                <table id="result_list">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="sortable column-id"><div class="text"><span>ID</span></div></th>
+                            <th scope="col" class="sortable column-email"><div class="text"><span>Email</span></div></th>
+                            <th scope="col" class="sortable column-first_name"><div class="text"><span>Имя</span></div></th>
+                            <th scope="col" class="sortable column-last_name"><div class="text"><span>Фамилия</span></div></th>
+                            <th scope="col" class="column-is_active"><div class="text"><span>Активен</span></div></th>
+                            <th scope="col" class="column-actions"><div class="text"><span>Действия</span></div></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in non_moderators %}
+                        <tr class="{% cycle 'row1' 'row2' %}">
+                            <td class="field-id">{{ user.id }}</td>
+                            <td class="field-email">{{ user.email }}</td>
+                            <td class="field-first_name">{{ user.first_name|default:"-" }}</td>
+                            <td class="field-last_name">{{ user.last_name|default:"-" }}</td>
+                            <td class="field-is_active">
+                                {% if user.is_active %}
+                                    <img src="{% static 'admin/img/icon-yes.svg' %}" alt="Да">
+                                {% else %}
+                                    <img src="{% static 'admin/img/icon-no.svg' %}" alt="Нет">
+                                {% endif %}
+                            </td>
+                            <td class="field-actions">
+                                <form method="post" action="{% url 'admin:users_user_changelist' %}" style="display: inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="add_to_moderators">
+                                    <input type="hidden" name="_selected_action" value="{{ user.id }}">
+                                    <button type="submit" class="button">
+                                        Добавить в модераторы
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="paginator">Нет доступных пользователей для добавления в группу модераторов.</p>
+            <p class="help">Только сотрудники (is_staff=True) могут быть добавлены в группу модераторов.</p>
+        {% endif %}
+    </div>
+
+    <div class="module">
+        <h2>Массовое управление</h2>
+        <p>Вы также можете использовать массовые действия на странице <a href="{% url 'admin:users_user_changelist' %}">пользователей</a>:</p>
+        <ul>
+            <li>Выберите нескольких пользователей</li>
+            <li>Выберите действие "Добавить в группу модераторов" или "Удалить из группы модераторов"</li>
+            <li>Нажмите "Выполнить"</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

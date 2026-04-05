@@ -6,13 +6,13 @@
     <h2 class="text-center mb-4">Список пользователей</h2>
 
     <div class="row">
-        {% for user in users %}
+        {% for listed_user in users %}
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-body">
                     <div class="d-flex align-items-center mb-3">
-                        {% if user.avatar %}
-                            <img src="{{ user.avatar.url }}"
+                        {% if listed_user.avatar %}
+                            <img src="{{ listed_user.avatar.url }}"
                                  alt="avatar"
                                  class="rounded-circle me-3"
                                  style="width: 60px; height: 60px; object-fit: cover;">
@@ -23,23 +23,23 @@
                                  style="width: 60px; height: 60px; object-fit: cover;">
                         {% endif %}
                         <div>
-                            <h5 class="card-title mb-1">{{ user.email }}</h5>
-                            {% if user.first_name or user.last_name %}
-                                <small class="text-muted">{{ user.first_name }} {{ user.last_name }}</small>
+                            <h5 class="card-title mb-1">{{ listed_user.email }}</h5>
+                            {% if listed_user.first_name or listed_user.last_name %}
+                                <small class="text-muted">{{ listed_user.first_name }} {{ listed_user.last_name }}</small>
                             {% endif %}
                         </div>
                     </div>
 
                     <ul class="list-unstyled mb-3">
-                        {% if user.phone %}
-                            <li><strong>Телефон:</strong> {{ user.phone }}</li>
+                        {% if listed_user.phone %}
+                            <li><strong>Телефон:</strong> {{ listed_user.phone }}</li>
                         {% endif %}
-                        {% if user.is_staff %}
+                        {% if listed_user.is_staff %}
                             <li><span class="badge bg-primary">Администратор</span></li>
                         {% endif %}
                     </ul>
 
-                    <a href="{% url 'users:profile_detail' user.pk %}" class="btn btn-outline-primary btn-sm">
+                    <a href="{% url 'users:profile_detail' listed_user.pk %}" class="btn btn-outline-primary btn-sm">
                         Просмотреть профиль
                     </a>
                 </div>
@@ -53,7 +53,7 @@
     </div>
 
     <div class="text-center mt-4">
-        <a href="{% url 'main_page:base' %}" class="btn btn-secondary">Назад</a>
+        <a href="{% url 'store:base' %}" class="btn btn-secondary">Назад</a>
     </div>
 </div>
 {% endblock %}

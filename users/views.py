@@ -6,21 +6,36 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView
 
-from matchday_store.celery import send_welcome_email
+from config.celery import send_welcome_email
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
+from store.mixins.cart_mixins import CartContextMixin
 
 
-class CustomLoginView(LoginView):
+class CustomLoginView(CartContextMixin, LoginView):
     template_name = "login.html"
     form_class = UserLoginForm
+
+    def form_valid(self, form):
+        """
+        Переопределяем метод для сохранения старого session_key перед авторизацией.
+        Это необходимо для корректного слияния корзин при входе пользователя.
+        """
+        # Сохраняем старый session_key перед авторизацией
+        old_session_key = self.request.session.session_key
+        if old_session_key:
+            self.request.session['_pre_login_session_key'] = old_session_key
+            self.request.session.modified = True
+        
+        # Выполняем стандартную авторизацию
+        return super().form_valid(form)
 
 
 class CustomLogoutView(LogoutView):
     next_page = reverse_lazy("store:base")
 
 
-class CustomRegistrationView(CreateView):
+class CustomRegistrationView(CartContextMixin, CreateView):
     template_name = "registration.html"
     form_class = UserRegistrationForm
     success_url = reverse_lazy("users:login")
@@ -28,13 +43,22 @@ class CustomRegistrationView(CreateView):
     def form_valid(self, form):
         user = form.save()
         self.object = user
+        
+        # Сохраняем старый session_key перед авторизацией
+        old_session_key = self.request.session.session_key
+        if old_session_key:
+            self.request.session['_pre_login_session_key'] = old_session_key
+            self.request.session.modified = True
+        
         login(self.request, user)
+        
         # Отправка приветственного письма через Celery с обработкой ошибок
         try:
             send_welcome_email.delay(user.email)
         except Exception as e:
             # Логируем ошибку, но не прерываем регистрацию
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
         return HttpResponseRedirect(self.get_success_url())
@@ -43,7 +67,7 @@ class CustomRegistrationView(CreateView):
 class ProfileDetailView(LoginRequiredMixin, DetailView):
     model = User
     template_name = "profile_detail.html"
-    context_object_name = "user"
+    context_object_name = "profile_user"
 
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
@@ -83,7 +107,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 class ProfileDeleteView(LoginRequiredMixin, FormView):
     form_class = ProfileDeleteConfirmForm
     template_name = "profile_confirm_delete.html"
-    success_url = reverse_lazy("main_page:base")
+    success_url = reverse_lazy("store:base")
 
     def form_valid(self, form):
         password = form.cleaned_data.get("password")

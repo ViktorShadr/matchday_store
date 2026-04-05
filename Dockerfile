@@ -22,4 +22,4 @@ COPY . .
 RUN mkdir -p logs
 
 # Команда по умолчанию для worker
-CMD ["celery", "-A", "matchday_store", "worker", "-l", "info"]
+CMD ["celery", "-A", "config", "worker", "-l", "info"]

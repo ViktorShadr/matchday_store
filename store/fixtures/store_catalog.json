@@ -1,0 +1,311 @@
+[
+  {
+    "model": "store.category",
+    "pk": 1,
+    "fields": {
+      "name": "Игровые футболки",
+      "description": "Официальные и фанатские футбольные футболки клубов и сборных.",
+      "created_at": "2026-03-28T18:00:00Z",
+      "updated_at": "2026-03-28T18:00:00Z"
+    }
+  },
+  {
+    "model": "store.category",
+    "pk": 2,
+    "fields": {
+      "name": "Шарфы",
+      "description": "Клубные и матчевые шарфы для болельщиков.",
+      "created_at": "2026-03-28T18:00:00Z",
+      "updated_at": "2026-03-28T18:00:00Z"
+    }
+  },
+  {
+    "model": "store.category",
+    "pk": 3,
+    "fields": {
+      "name": "Кепки и шапки",
+      "description": "Головные уборы с футбольной символикой.",
+      "created_at": "2026-03-28T18:00:00Z",
+      "updated_at": "2026-03-28T18:00:00Z"
+    }
+  },
+  {
+    "model": "store.category",
+    "pk": 4,
+    "fields": {
+      "name": "Аксессуары",
+      "description": "Повседневная футбольная атрибутика и подарочные товары.",
+      "created_at": "2026-03-28T18:00:00Z",
+      "updated_at": "2026-03-28T18:00:00Z"
+    }
+  },
+  {
+    "model": "store.product",
+    "pk": 1,
+    "fields": {
+      "name": "Футболка FC Barcelona Home 2025/26",
+      "description": "Домашняя футболка в клубных цветах для матчдэй и повседневной носки.",
+      "category": 1,
+      "created_at": "2026-03-28T18:05:00Z",
+      "updated_at": "2026-03-28T18:05:00Z"
+    }
+  },
+  {
+    "model": "store.product",
+    "pk": 2,
+    "fields": {
+      "name": "Футболка Real Madrid Away 2025/26",
+      "description": "Выездная футболка с лёгкой дышащей тканью.",
+      "category": 1,
+      "created_at": "2026-03-28T18:06:00Z",
+      "updated_at": "2026-03-28T18:06:00Z"
+    }
+  },
+  {
+    "model": "store.product",
+    "pk": 3,
+    "fields": {
+      "name": "Шарф Manchester United Classic",
+      "description": "Классический двусторонний шарф в красно-чёрной гамме.",
+      "category": 2,
+      "created_at": "2026-03-28T18:07:00Z",
+      "updated_at": "2026-03-28T18:07:00Z"
+    }
+  },
+  {
+    "model": "store.product",
+    "pk": 4,
+    "fields": {
+      "name": "Шарф Juventus Matchday",
+      "description": "Тёплый шарф с контрастной чёрно-белой символикой клуба.",
+      "category": 2,
+      "created_at": "2026-03-28T18:08:00Z",
+      "updated_at": "2026-03-28T18:08:00Z"
+    }
+  },
+  {
+    "model": "store.product",
+    "pk": 5,
+    "fields": {
+      "name": "Кепка Arsenal Red Crest",
+      "description": "Бейсболка с вышитой эмблемой клуба.",
+      "category": 3,
+      "created_at": "2026-03-28T18:09:00Z",
+      "updated_at": "2026-03-28T18:09:00Z"
+    }
+  },
+  {
+    "model": "store.product",
+    "pk": 6,
+    "fields": {
+      "name": "Кружка Liverpool You'll Never Walk Alone",
+      "description": "Керамическая кружка для дома и офиса с клубным слоганом.",
+      "category": 4,
+      "created_at": "2026-03-28T18:10:00Z",
+      "updated_at": "2026-03-28T18:10:00Z"
+    }
+  },
+  {
+    "model": "store.productimage",
+    "pk": 1,
+    "fields": {
+      "product": 1,
+      "image": "product_images/barcelona-home-front.jpg",
+      "alt_text": "Футболка FC Barcelona Home вид спереди",
+      "is_primary": true,
+      "created_at": "2026-03-28T18:11:00Z"
+    }
+  },
+  {
+    "model": "store.productimage",
+    "pk": 2,
+    "fields": {
+      "product": 1,
+      "image": "product_images/barcelona-home-back.jpg",
+      "alt_text": "Футболка FC Barcelona Home вид сзади",
+      "is_primary": false,
+      "created_at": "2026-03-28T18:11:30Z"
+    }
+  },
+  {
+    "model": "store.productimage",
+    "pk": 3,
+    "fields": {
+      "product": 2,
+      "image": "product_images/real-madrid-away-front.jpg",
+      "alt_text": "Футболка Real Madrid Away вид спереди",
+      "is_primary": true,
+      "created_at": "2026-03-28T18:12:00Z"
+    }
+  },
+  {
+    "model": "store.productimage",
+    "pk": 4,
+    "fields": {
+      "product": 3,
+      "image": "product_images/man-utd-scarf.jpg",
+      "alt_text": "Шарф Manchester United Classic",
+      "is_primary": true,
+      "created_at": "2026-03-28T18:12:30Z"
+    }
+  },
+  {
+    "model": "store.productimage",
+    "pk": 5,
+    "fields": {
+      "product": 4,
+      "image": "product_images/juventus-scarf.jpg",
+      "alt_text": "Шарф Juventus Matchday",
+      "is_primary": true,
+      "created_at": "2026-03-28T18:13:00Z"
+    }
+  },
+  {
+    "model": "store.productimage",
+    "pk": 6,
+    "fields": {
+      "product": 5,
+      "image": "product_images/arsenal-cap.jpg",
+      "alt_text": "Кепка Arsenal Red Crest",
+      "is_primary": true,
+      "created_at": "2026-03-28T18:13:30Z"
+    }
+  },
+  {
+    "model": "store.productimage",
+    "pk": 7,
+    "fields": {
+      "product": 6,
+      "image": "product_images/liverpool-mug.jpg",
+      "alt_text": "Кружка Liverpool You'll Never Walk Alone",
+      "is_primary": true,
+      "created_at": "2026-03-28T18:14:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 1,
+    "fields": {
+      "product": 1,
+      "size": "S",
+      "color": "Сине-гранатовый",
+      "price": "8990.00",
+      "quantity": 5,
+      "image": 1,
+      "created_at": "2026-03-28T18:15:00Z",
+      "updated_at": "2026-03-28T18:15:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 2,
+    "fields": {
+      "product": 1,
+      "size": "M",
+      "color": "Сине-гранатовый",
+      "price": "8990.00",
+      "quantity": 7,
+      "image": 1,
+      "created_at": "2026-03-28T18:16:00Z",
+      "updated_at": "2026-03-28T18:16:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 3,
+    "fields": {
+      "product": 1,
+      "size": "L",
+      "color": "Сине-гранатовый",
+      "price": "8990.00",
+      "quantity": 4,
+      "image": 1,
+      "created_at": "2026-03-28T18:17:00Z",
+      "updated_at": "2026-03-28T18:17:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 4,
+    "fields": {
+      "product": 2,
+      "size": "M",
+      "color": "Белый",
+      "price": "9290.00",
+      "quantity": 6,
+      "image": 3,
+      "created_at": "2026-03-28T18:18:00Z",
+      "updated_at": "2026-03-28T18:18:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 5,
+    "fields": {
+      "product": 2,
+      "size": "L",
+      "color": "Белый",
+      "price": "9290.00",
+      "quantity": 3,
+      "image": 3,
+      "created_at": "2026-03-28T18:19:00Z",
+      "updated_at": "2026-03-28T18:19:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 6,
+    "fields": {
+      "product": 3,
+      "size": "ONE",
+      "color": "Красный",
+      "price": "2490.00",
+      "quantity": 12,
+      "image": 4,
+      "created_at": "2026-03-28T18:20:00Z",
+      "updated_at": "2026-03-28T18:20:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 7,
+    "fields": {
+      "product": 4,
+      "size": "ONE",
+      "color": "Черно-белый",
+      "price": "2390.00",
+      "quantity": 9,
+      "image": 5,
+      "created_at": "2026-03-28T18:21:00Z",
+      "updated_at": "2026-03-28T18:21:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 8,
+    "fields": {
+      "product": 5,
+      "size": "ONE",
+      "color": "Красный",
+      "price": "2790.00",
+      "quantity": 8,
+      "image": 6,
+      "created_at": "2026-03-28T18:22:00Z",
+      "updated_at": "2026-03-28T18:22:00Z"
+    }
+  },
+  {
+    "model": "store.productvariant",
+    "pk": 9,
+    "fields": {
+      "product": 6,
+      "size": "ONE",
+      "color": "Красный",
+      "price": "1490.00",
+      "quantity": 15,
+      "image": 7,
+      "created_at": "2026-03-28T18:23:00Z",
+      "updated_at": "2026-03-28T18:23:00Z"
+    }
+  }
+]

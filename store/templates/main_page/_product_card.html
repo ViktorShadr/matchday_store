@@ -10,10 +10,10 @@ Expected product fields (возможны разные имена — шабло
 
 {% with p=product %}
 <div class="sf-product-card h-100 sf-animate">
-    <a class="d-block text-decoration-none" href="{% if p.get_absolute_url %}{{ p.get_absolute_url }}{% else %}#{% endif %}">
+    <a class="d-block text-decoration-none" href="{% url 'store:product_detail' p.pk %}">
         <div class="sf-product-img-wrapper">
-            {% if p.image %}
-                <img src="{{ p.image.url }}" alt="{{ p.title|default:p.name|default:'Товар' }}">
+            {% if p.display_image %}
+                <img src="{{ p.display_image.url }}" alt="{{ p.title|default:p.name|default:'Товар' }}">
             {% else %}
                 <div class="sf-product-img-placeholder" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -36,15 +36,14 @@ Expected product fields (возможны разные имена — шабло
             {{ p.title|default:p.name|default:'Товар' }}
         </div>
         <div class="sf-product-price">
-            {{ p.price|default:"—" }} ₽
+            {{ p.display_price|default:"—" }} ₽
         </div>
 
         <div class="sf-product-actions mt-2">
-            <a href="#" class="btn btn-primary w-100">
-                В корзину
+            <a href="{% url 'store:product_detail' p.pk %}" class="btn btn-primary w-100">
+                Подробнее
             </a>
         </div>
     </div>
 </div>
 {% endwith %}
-
