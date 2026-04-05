@@ -21,7 +21,7 @@
                             {% endif %}
                             <div class="mt-auto">
                                 <small class="text-muted">Товаров: {{ category.products.count }}</small>
-                                {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                                {% if user_permissions.is_moderator %}
                                     <div class="mt-2">
                                         <a href="{% url 'store:category_edit' category.pk %}" class="btn btn-sm btn-outline-primary me-2">Редактировать</a>
                                         <a href="{% url 'store:category_delete' category.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
@@ -34,7 +34,7 @@
                     <div class="col-12">
                         <div class="text-center text-muted">
                             <p>Категории пока не созданы</p>
-                            {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                            {% if user_permissions.is_moderator %}
                                 <a href="{% url 'store:category_create' %}" class="btn btn-primary">Создать первую категорию</a>
                             {% endif %}
                         </div>

@@ -62,6 +62,9 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
+    def get_absolute_url(self):
+        return reverse("store:product_detail", kwargs={"pk": self.pk})
+
     class Meta:
         verbose_name = "Товар"
         verbose_name_plural = "Товары"

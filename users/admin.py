@@ -98,7 +98,7 @@ class ModeratorGroupAdmin(admin.ModelAdmin):
             "title": "Управление группой модераторов",
         }
 
-        return render(request, "admin/moderator_group_management.html", context)
+        return render(request, "templates_moderator/moderator_group_management.html", context)
 
     def response_add(self, request, obj, post_url_continue=None):
         return HttpResponseRedirect(reverse("admin:users_user_changelist"))

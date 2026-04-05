@@ -8,7 +8,7 @@
                 <h1 class="sf-section-title">{{ category.name }}</h1>
                 <div class="d-flex gap-2">
                     <a class="sf-link" href="{% url 'store:category_list' %}">Назад к категориям</a>
-                    {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                    {% if user_permissions.is_moderator %}
                         <a class="sf-link" href="{% url 'store:category_edit' category.pk %}">Редактировать</a>
                     {% endif %}
                 </div>
@@ -49,7 +49,7 @@
                     {% else %}
                         <div class="sf-surface p-4 text-center">
                             <p class="text-muted">В этой категории пока нет товаров</p>
-                            {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                            {% if user_permissions.is_moderator %}
                                 <a href="{% url 'store:product_create' %}" class="btn btn-primary">Добавить товар</a>
                             {% endif %}
                         </div>
@@ -57,7 +57,7 @@
                 </div>
 
                 <div class="col-12 col-lg-4">
-                    {% if request.user.is_staff and request.user.groups.filter.name='Модераторы' %}
+                    {% if user_permissions.is_moderator %}
                         <div class="sf-surface p-3">
                             <h5>Действия</h5>
                             <div class="d-grid gap-2">
