@@ -210,6 +210,16 @@ class ProductListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["products"]), 3)
 
+    def test_product_list_shows_out_of_stock_status(self):
+        """Товар без остатков должен маркироваться как отсутствующий."""
+        visible_product = Product.objects.order_by("-created_at").first()
+        visible_product.variants.update(quantity=0)
+
+        response = self.client.get(reverse("store:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Нет в наличии")
+
 
 class ProductDetailsViewTest(TestCase):
     """Тесты для ProductDetailsViewTest."""
@@ -250,6 +260,16 @@ class ProductDetailsViewTest(TestCase):
         """Проверяет сценарий 'product detail view 404'."""
         response = self.client.get(reverse("store:product_detail", kwargs={"pk": 99999}))
         self.assertEqual(response.status_code, 404)
+
+    def test_product_detail_shows_out_of_stock_status(self):
+        """На странице товара должен отображаться статус отсутствия."""
+        self.variant.quantity = 0
+        self.variant.save(update_fields=["quantity"])
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Нет в наличии")
 
 
 class ProductUpdateViewTest(TestCase):

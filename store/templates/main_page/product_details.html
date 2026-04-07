@@ -37,6 +37,9 @@
                     <div class="sf-surface p-4 h-100">
                         <div class="small text-muted mb-2">{{ product.category.name|default:'Без категории' }}</div>
                         <div class="fs-4 fw-bold mb-3">{{ product.display_price|default:'—' }} ₽</div>
+                        {% if not product.in_stock %}
+                            <div class="text-danger fw-semibold mb-3">Нет в наличии</div>
+                        {% endif %}
                         <p>{{ product.description|default:'Описание пока не добавлено.' }}</p>
 
                         <div class="mt-4">

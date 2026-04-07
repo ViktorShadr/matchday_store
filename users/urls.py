@@ -8,6 +8,7 @@ from users.views import (
     ProfileUpdateView,
     ProfileDeleteView,
     ProfileList,
+    UserOrderListView,
 )
 
 app_name = "users"
@@ -19,5 +20,6 @@ urlpatterns = [
     path("profile/<int:pk>/", ProfileDetailView.as_view(), name="profile_detail"),
     path("profile/edit/", ProfileUpdateView.as_view(), name="profile_edit"),
     path("profile/delete/", ProfileDeleteView.as_view(), name="profile_delete"),
+    path("orders/", UserOrderListView.as_view(), name="order_list"),
     path("profile_list/", ProfileList.as_view(), name="profile_list"),
 ]

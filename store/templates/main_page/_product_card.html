@@ -38,6 +38,9 @@ Expected product fields (возможны разные имена — шабло
         <div class="sf-product-price">
             {{ p.display_price|default:"—" }} ₽
         </div>
+        {% if not p.in_stock %}
+            <div class="small text-danger mt-1">Нет в наличии</div>
+        {% endif %}
 
         <div class="sf-product-actions mt-2">
             <a href="{% url 'store:product_detail' p.pk %}" class="btn btn-primary w-100">

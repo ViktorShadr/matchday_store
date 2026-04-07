@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.urls import reverse
 
+from orders.models import Order, OrderItem
+from store.models import Category, Product, ProductImage, ProductVariant
 from users.forms import UserRegistrationForm, UserProfileForm, ProfileDeleteConfirmForm
 
 User = get_user_model()
@@ -125,6 +127,17 @@ class UserViewsTest(TestCase):
         self.client = Client()
         self.user = User.objects.create_user(email="user@example.com", password="userpass123")
         self.staff_user = User.objects.create_user(email="staff@example.com", password="staffpass123", is_staff=True)
+        self.category = Category.objects.create(name="Атрибутика")
+        self.product = Product.objects.create(name="Шарф", category=self.category)
+        self.image = ProductImage.objects.create(product=self.product, image="product_images/test.jpg")
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Синий",
+            price="1500.00",
+            quantity=10,
+            image=self.image,
+        )
 
     @patch("users.views.send_welcome_email")
     def test_registration_view_success(self, mock_email):
@@ -237,6 +250,52 @@ class UserViewsTest(TestCase):
         """Проверяет сценарий 'profile delete view not authenticated'."""
         response = self.client.get(reverse("users:profile_delete"))
         self.assertEqual(response.status_code, 302)  # Redirect to login
+
+    def test_user_order_list_requires_authentication(self):
+        """Список заказов должен требовать авторизацию."""
+        response = self.client.get(reverse("users:order_list"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("users:login"), response.url)
+
+    def test_user_order_list_shows_current_user_orders(self):
+        """Список заказов должен показывать данные только текущего пользователя."""
+        other_user = User.objects.create_user(email="other@example.com", password="otherpass123")
+        order = Order.objects.create(
+            number="ORD-USER-1",
+            user=self.user,
+            recipient_name="Покупатель",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            total_amount="3000.00",
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot="Шарф",
+            unit_price="1500.00",
+            quantity=2,
+            line_total="3000.00",
+        )
+        Order.objects.create(
+            number="ORD-OTHER-1",
+            user=other_user,
+            recipient_name="Другой покупатель",
+            email=other_user.email,
+            phone="+79991111111",
+            status=Order.Status.CANCELLED,
+            total_amount="1000.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ORD-USER-1")
+        self.assertContains(response, "2")
+        self.assertContains(response, "3000,00")
+        self.assertContains(response, "Оформлен")
+        self.assertNotContains(response, "ORD-OTHER-1")
 
     def test_profile_list_view_staff(self):
         """Проверяет сценарий 'profile list view staff'."""

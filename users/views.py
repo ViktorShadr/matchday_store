@@ -2,11 +2,14 @@ from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
+from django.db.models import Sum
+from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView
 
 from config.celery import send_welcome_email
+from orders.models import Order
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
@@ -239,3 +242,28 @@ class ProfileDeleteView(LoginRequiredMixin, FormView):
 
         user.delete()
         return super().form_valid(form)
+
+
+class UserOrderListView(LoginRequiredMixin, CartContextMixin, ListView):
+    """
+    Представление списка заказов текущего пользователя.
+
+    Отображает историю заказов пользователя с основной сводной информацией.
+    """
+
+    model = Order
+    template_name = "user_orders.html"
+    context_object_name = "orders"
+
+    def get_queryset(self):
+        """
+        Получить список заказов текущего пользователя.
+
+        Returns:
+            QuerySet: Заказы пользователя с аннотацией количества товаров
+        """
+        return (
+            Order.objects.filter(user=self.request.user)
+            .annotate(total_items=Coalesce(Sum("items__quantity"), 0))
+            .order_by("-created_at")
+        )
