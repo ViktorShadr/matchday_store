@@ -1,263 +1,275 @@
-# Technical Plan: MVP Production Readiness
+# Технический план: готовность MVP к production
 
-## Goal
-Prepare the project for a first production launch as an MVP with the following scope:
-- pickup from store only
-- payment on receipt only
-- no online payment provider
-- no external delivery provider
+## Цель
+Подготовить проект к первому production-запуску в формате MVP со следующим объёмом:
+- только самовывоз из магазина
+- только оплата при получении
+- без онлайн-провайдера оплаты
+- без внешнего провайдера доставки
 
-The plan below prioritizes a working and supportable order flow in production over future integrations.
+План ниже ориентирован на рабочий и поддерживаемый в production сценарий оформления заказа, а не на преждевременную интеграцию будущих платёжных и логистических систем.
 
-## Product Scope for MVP
+## Объём MVP
 
-### Included in MVP
-- catalog browsing
-- cart management
-- user authentication
-- checkout for authenticated users
-- one delivery method: `pickup`
-- one payment method: `manual` / pay on receipt
-- order creation from cart
-- order visibility in admin
-- manual staff processing of orders
+### Что входит в MVP
+- просмотр каталога
+- управление корзиной
+- аутентификация пользователей
+- checkout для авторизованных пользователей
+- один способ получения: `pickup`
+- один способ оплаты: `manual` / оплата при получении
+- создание заказа из корзины
+- просмотр заказов в админке
+- ручная обработка заказов сотрудниками
 
-### Explicitly excluded from MVP
-- online payments
-- payment webhooks
-- courier delivery
-- PVZ integrations
-- shipment providers
-- delivery price calculation via external APIs
-- automatic stock reservation release by timeout
+### Что явно не входит в MVP
+- онлайн-оплата
+- платёжные webhook-и
+- курьерская доставка
+- интеграции с ПВЗ
+- провайдеры отправлений
+- расчёт стоимости доставки через внешние API
+- автоматическое снятие резервов по таймауту
 
-## Current State
-- Catalog, cart, and user profile flows are present.
-- `Order`, `OrderItem`, `Address`, and `Payment` models already exist.
-- `Payment` admin and payment status sync logic already exist.
-- There is still no real checkout flow.
-- The cart page still contains a placeholder checkout action.
-- The current order model is broader than MVP and is not yet aligned with pickup-only checkout.
-- The current infrastructure is not production-ready yet.
+## Актуальное состояние проекта
+- Потоки каталога, корзины и профиля пользователя реализованы.
+- Модели `Order`, `OrderItem`, `Address` и `Payment` уже существуют.
+- Реализован настоящий checkout flow с маршрутом `/checkout/` и страницей успешного оформления.
+- Кнопка оформления заказа в корзине подключена к реальному checkout.
+- Заказ создаётся из корзины транзакционно, с повторной проверкой остатков и очисткой корзины после успеха.
+- Для заказа создаётся запись `Payment` с `provider=manual`.
+- Остатки списываются в момент оформления заказа.
+- Для `Payment` есть админка и логика синхронизации `Order.payment_status`.
+- Инфраструктура и документация для production пока не доведены до готовности.
 
-## Release Decision
-The next release should target a narrower scope than the original integration plan:
-- launch with `pickup` only
-- treat payment as manual settlement at pickup
-- create orders without payment provider integration
-- postpone real delivery and online payment integrations until after MVP launch
+## Решение по выпуску
+Следующий релиз должен идти в более узком объёме, чем исходный интеграционный план:
+- запуск только с `pickup`
+- оплата считается ручной, при получении
+- заказ создаётся без интеграции с внешним платёжным провайдером
+- полноценная доставка и онлайн-оплата откладываются до этапа post-MVP
 
-## Stage 1. Align Domain Model With MVP
-Keep the existing order domain, but make it compatible with pickup-only checkout.
+## Этап 1. Привести доменную модель к MVP
+Сохраняем существующую доменную модель заказа, но используем её в совместимом с pickup-only режиме.
 
-### 1.1 Address model <span style="background-color:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-weight:600;">DONE</span>
-Implemented in `orders.models.Address`.
+### 1.1 Модель Address [DONE]
+Реализована в `orders.models.Address`.
 
-MVP note:
-- address management may remain in the project
-- address must not be required for pickup-only checkout
+Примечание для MVP:
+- управление адресами можно оставить в проекте
+- адрес не должен быть обязательным для pickup-only checkout
 
-### 1.2 Order model <span style="background-color:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-weight:600;">PARTIAL</span>
-Implemented in `orders.models.Order`, but requires MVP adjustments.
+### 1.2 Модель Order [DONE]
+Реализована в `orders.models.Order` и уже приведена к минимально нужному для MVP виду.
 
-Required MVP changes:
-- make `delivery_address` optional for `pickup`
-- set `delivery_method` default to `pickup`, or force it in checkout service
-- define one store pickup location source of truth
-- keep `pickup_point_code` or replace it with a simpler `pickup_location_code`
-- ensure order creation does not depend on courier-specific data
+Что уже закрыто:
+- `delivery_address` опционален для `pickup`
+- `delivery_method` по умолчанию установлен в `pickup`
+- единый pickup location вынесен в настройки
+- в checkout используется `pickup_point_code`
+- создание заказа не зависит от courier-specific данных
 
-### 1.3 OrderItem model <span style="background-color:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-weight:600;">DONE</span>
-Implemented in `orders.models.OrderItem`.
+Что можно улучшить после MVP:
+- переименовать `pickup_point_code` в более узкий `pickup_location_code`, если это упростит модель
+- убрать из доменной модели неиспользуемые для MVP статусы и поля, если они начнут мешать сопровождению
 
-MVP note:
-- use immutable snapshots during checkout
-- preserve item title, attributes, and price at order creation time
+### 1.3 Модель OrderItem [DONE]
+Реализована в `orders.models.OrderItem`.
 
-### 1.4 Payment model <span style="background-color:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-weight:600;">PARTIAL</span>
-Implemented in `payments.models.Payment`, but only part of it is needed for MVP.
+Для MVP уже используется корректный подход:
+- при checkout сохраняются snapshot-поля
+- в заказ копируются название товара, атрибуты и цена на момент оформления
 
-MVP usage:
-- use `provider=manual`
-- create a payment record only if it simplifies admin operations
-- keep status transitions manual from admin for now
+### 1.4 Модель Payment [PARTIAL]
+Реализована в `payments.models.Payment`, и для MVP уже используется в рабочем режиме.
 
-Post-MVP:
-- external providers
+Что уже закрыто:
+- используется `provider=manual`
+- запись о платеже создаётся при оформлении заказа
+- синхронизация `Order.payment_status` с платежами работает
+- статус оплаты можно менять вручную через админку
+
+Что ещё не нужно блокировать MVP, но модель пока шире необходимого:
+- внешние провайдеры
 - provider IDs
-- webhook payload processing
+- обработка webhook payload
 
-### 1.5 Shipment model
-Deferred until post-MVP.
+### 1.5 Модель Shipment [DEFERRED]
+Отложено до post-MVP.
 
-Reason:
-- pickup from store does not require shipment creation
-- introducing `Shipment` now adds complexity without supporting the first release
+Причина:
+- самовывоз не требует создания сущности отправления
+- добавление `Shipment` сейчас увеличит сложность без пользы для первого релиза
 
-### 1.6 Event log models
-Deferred until post-MVP.
+### 1.6 Модели event log [PARTIAL]
+Отложены как отдельные модели до post-MVP.
 
-MVP substitute:
-- rely on Django admin history
-- add concise application logs for checkout and order creation
+Текущее MVP-замещение:
+- можно опираться на историю изменений в Django admin
 
-### 1.7 Status enums <span style="background-color:#d1fae5;color:#065f46;padding:2px 8px;border-radius:999px;font-weight:600;">DONE</span>
-Enums already exist and can be reused.
+Что ещё желательно сделать до production:
+- добавить прикладное логирование checkout и order creation
 
-MVP recommendation:
-- `Order.status`: start with `placed`, then manual progression by staff
-- `Order.payment_status`: keep `pending` until paid at pickup
-- `Order.fulfillment_status`: start with `new` and move manually
+### 1.7 Статусы и enum-ы [DONE]
+Enum-ы уже есть и используются повторно.
 
-## Stage 2. Build Real MVP Checkout
-Implement the shortest complete path from cart to placed order.
+Для MVP фактически применяется следующий сценарий:
+- `Order.status`: стартует с `placed`
+- `Order.payment_status`: стартует с `pending`
+- `Order.fulfillment_status`: стартует с `new`
 
-### 2.1 Checkout route and page
-Add `/checkout/` for authenticated users only.
+## Этап 2. Построить реальный MVP checkout
+Нужно обеспечить кратчайший рабочий путь от корзины до оформленного заказа.
 
-The page should contain:
-- contact data
-- pickup location
-- payment method summary
-- order summary
+### 2.1 Checkout route и страница [DONE]
+Реализован маршрут `/checkout/` только для авторизованных пользователей.
+
+На странице уже присутствуют:
+- контактные данные
+- информация о точке самовывоза
+- summary по заказу
 - submit action
 
-### 2.2 Checkout form scope
-Use MVP-specific forms instead of future-proof generic abstractions.
+### 2.2 Объём checkout form [DONE]
+Используется MVP-специфичная форма без преждевременных абстракций.
 
-Required fields:
-- customer name
-- phone
+Реализованные поля:
+- имя получателя
+- телефон
 - email
-- optional customer comment
+- необязательный комментарий
 
-Fixed choices in MVP:
+Жёстко задано для MVP:
 - delivery method: `pickup`
 - payment method: `manual`
-- pickup location: one configured store location
+- pickup location: одна настроенная точка магазина
 
-### 2.3 Create order from cart
-When checkout is submitted:
-- validate that cart is not empty
-- re-check stock availability
-- lock cart item variants transactionally where needed
-- create `Order`
-- copy cart items into `OrderItem`
-- store immutable price snapshots
-- set `delivery_amount=0`
-- set `total_amount=subtotal_amount`
-- set `payment_status=pending`
-- set `status=placed`
+### 2.3 Создание заказа из корзины [DONE]
+При отправке checkout уже выполняется:
+- проверка, что корзина не пуста
+- повторная проверка остатков
+- транзакционная блокировка нужных позиций
+- создание `Order`
+- копирование позиций корзины в `OrderItem`
+- сохранение immutable price snapshots
+- установка `delivery_amount=0`
+- установка `total_amount=subtotal_amount`
+- установка `payment_status=pending`
+- установка `status=placed`
 
-### 2.4 Cart cleanup rule
-For MVP use one explicit rule:
-- clear cart immediately after successful order creation
+### 2.4 Правило очистки корзины [DONE]
+Для MVP уже действует явное правило:
+- корзина очищается сразу после успешного создания заказа
 
-Reason:
-- payment is manual and happens outside the site
-- keeping items in cart after order placement increases support noise and duplicate orders
+### 2.5 Страница успешного оформления [DONE]
+Добавлена confirmation page после оформления.
 
-### 2.5 Checkout success page
-Add a confirmation page after order placement with:
-- order number
-- pickup store address
-- store opening hours
-- payment on receipt explanation
-- contact phone for support
+На странице должны и уже могут отображаться:
+- номер заказа
+- адрес магазина для самовывоза
+- часы работы
+- информация об оплате при получении
+- телефон для связи
 
-## Stage 3. Stock Consistency for MVP
-Implement only the level of stock protection required for a safe first launch.
+## Этап 3. Консистентность остатков для MVP
+Нужно реализовать только тот уровень защиты остатков, который требуется для безопасного первого запуска.
 
-### 3.1 Minimum consistency rule
-Before creating an order:
-- re-check all cart item quantities against current stock
-- fail checkout if any item is unavailable
+### 3.1 Минимальное правило консистентности [DONE]
+Перед созданием заказа уже выполняется:
+- повторная проверка количества каждого товара из корзины
+- отказ в checkout, если позиции недоступны
 
-### 3.2 Transactional order placement
-During checkout:
-- use `select_for_update()` on affected variants
-- create order and order items in one transaction
+### 3.2 Транзакционное оформление заказа [DONE]
+Во время checkout уже используется:
+- `select_for_update()` для затрагиваемых позиций
+- единая транзакция на создание заказа и его позиций
 
-### 3.3 Stock write-off strategy for MVP
-Choose one explicit operational rule and document it.
+### 3.3 Стратегия списания остатков [DONE]
+Выбрано и реализовано явное правило для MVP:
+- остатки списываются в момент оформления заказа
 
-Recommended MVP rule:
-- deduct stock at order placement time
+Причина:
+- это проще, чем резервирование
+- это безопаснее для небольшого pickup-only MVP
+- это легче для понимания сотрудниками в админке
 
-Reason:
-- simpler than reservations
-- safer for small-volume pickup MVP
-- easier for staff to reason about in admin
+### 3.4 Обработка отмены [PARTIAL]
+Автоматического восстановления остатков при отмене пока нет.
 
-### 3.4 Cancellation handling
-If an order is cancelled before pickup:
-- staff restores stock manually or through a simple admin action
+Для MVP допустим временный режим:
+- сотрудники восстанавливают остатки вручную
 
-Post-MVP:
-- reservation model
-- timeout release
-- automatic stock restoration workflows
+Что желательно сделать до production:
+- либо описать ручную процедуру в runbook
+- либо добавить простое admin action для возврата остатков при отмене
 
-## Stage 4. Admin and Backoffice Flow
-Staff must be able to process orders without engineering support.
+## Этап 4. Админка и backoffice-процесс
+Сотрудники должны уметь обрабатывать заказы без участия разработки.
 
-### 4.1 Order admin
-Admin must support:
-- list of orders
-- search by order number
-- search by email and phone
-- filters by order status
-- filters by payment status
-- filters by fulfillment status
+### 4.1 Order admin [DONE]
+Админка заказов уже поддерживает:
+- список заказов
+- поиск по номеру заказа
+- поиск по email и телефону
+- фильтры по статусу заказа
+- фильтры по статусу оплаты
+- фильтры по статусу исполнения
 
-### 4.2 Operational fields in admin
-Staff should be able to view and update:
-- pickup location
-- customer contacts
-- order items
-- payment status
-- fulfillment status
-- internal comment if needed
+### 4.2 Операционные поля в админке [PARTIAL]
+Сотрудники уже могут видеть и редактировать большую часть нужных данных:
+- точку самовывоза
+- контакты клиента
+- состав заказа
+- статус оплаты
+- статус исполнения
 
-### 4.3 Manual payment flow
-For MVP, payment is recorded manually.
+Что ещё желательно проверить/добавить до production:
+- отдельное внутреннее служебное поле комментария сотрудника, если оно действительно нужно в процессе
+- явный регламент, какие поля меняются вручную и в какой последовательности
 
-Required admin scenario:
-- order is created with unpaid status
-- staff prepares order
-- customer picks up order and pays
-- staff marks payment as received
+### 4.3 Ручной платёжный процесс [PARTIAL]
+Базовый сценарий поддержан:
+- заказ создаётся в неоплаченном статусе
+- платёж существует как ручная запись
+- сотрудник может отметить оплату через админку
 
-### 4.4 Minimal staff process documentation
-Document:
-- how to find a new order
-- how to confirm stock and pickup readiness
-- how to mark an order as paid
-- how to mark an order as completed or cancelled
+Что ещё остаётся:
+- зафиксировать пошаговый операционный процесс в документации
 
-## Stage 5. Production Infrastructure
-The application must be deployable and operable as a web service.
+### 4.4 Минимальная документация для staff [TODO]
+Нужно задокументировать:
+- как найти новый заказ
+- как проверить остатки и готовность к выдаче
+- как отметить заказ как оплаченный
+- как перевести заказ в completed или cancelled
 
-### 5.1 Runtime topology
-Add a production-capable app stack:
+## Этап 5. Production-инфраструктура
+Приложение должно быть разворачиваемым и операционно пригодным как веб-сервис.
+
+### 5.1 Runtime topology [TODO]
+Нужно добавить production-пригодный стек приложения:
 - `web`
 - `db`
-- `redis` if Celery remains in use
-- `worker` only if background tasks are actually required for MVP
+- `redis`, только если Celery действительно остаётся нужен для MVP
+- `worker`, только если фоновые задачи реально обязательны для MVP
 
-Optional:
-- reverse proxy such as Nginx
+Сейчас:
+- в `docker-compose.yaml` есть только `db` и `redis`
+- сервиса `web` нет
 
-### 5.2 Application startup
-The project must have a clear web entrypoint:
-- run migrations
-- collect static files
-- start Django via Gunicorn
+### 5.2 Startup приложения [TODO]
+У проекта должен быть явный web entrypoint:
+- запуск миграций
+- сбор статики
+- запуск Django через Gunicorn
 
-The current container default must not remain worker-only.
+Сейчас:
+- контейнер по умолчанию остаётся worker-only
 
-### 5.3 Environment configuration
-Define and document required environment variables:
+### 5.3 Конфигурация окружения [PARTIAL]
+Часть env-переменных уже используется в настройках.
+
+Обязательно нужно явно определить и задокументировать:
 - `SECRET_KEY`
 - `DEBUG`
 - `ALLOWED_HOSTS`
@@ -266,146 +278,172 @@ Define and document required environment variables:
 - `DB_PASSWORD`
 - `DB_HOST`
 - `DB_PORT`
-- email settings if transactional emails are kept
+- настройки email, если они остаются в MVP
+- параметры pickup location
 
-For MVP, `.env.example` must describe production-safe defaults and required overrides.
+Что ещё нужно довести:
+- привести `.env.example` к production-friendly шаблону
+- описать обязательные и опциональные переменные в README
 
-### 5.4 Static and media handling
-Define production handling for:
+### 5.4 Работа со static и media [PARTIAL]
+В проекте уже определены:
 - `STATIC_ROOT`
 - `MEDIA_ROOT`
-- media persistence across deploys
 
-### 5.5 Database readiness
-Use PostgreSQL as the supported production database.
+Что ещё нужно сделать:
+- описать production-стратегию хранения media
+- описать persistence media между деплоями
+- включить `collectstatic` в понятный deploy flow
 
-Required:
-- migrations must run cleanly
-- test database creation must be reproducible
-- no release dependency on the committed SQLite file
+### 5.5 Готовность базы данных [PARTIAL]
+Production database уже нацелена на PostgreSQL.
 
-## Stage 6. Production Security Baseline
-Implement only the security controls required for a public MVP launch.
+Что ещё нужно довести:
+- обеспечить чистый запуск миграций в reproducible окружении
+- сделать воспроизводимым создание test database
+- убрать зависимость релизного процесса от commit-нутого SQLite файла
 
-### 6.1 Django settings
-Configure for production:
+## Этап 6. Базовая production-безопасность
+Нужно реализовать только те меры безопасности, которые реально требуются для публичного MVP.
+
+### 6.1 Django settings [TODO]
+Для production нужно настроить:
 - `DEBUG=False`
-- mandatory non-empty `SECRET_KEY`
-- explicit `ALLOWED_HOSTS`
+- обязательный непустой `SECRET_KEY`
+- явный `ALLOWED_HOSTS`
 - `SESSION_COOKIE_SECURE`
 - `CSRF_COOKIE_SECURE`
 - `SECURE_PROXY_SSL_HEADER`
-- `SECURE_SSL_REDIRECT` where applicable
+- `SECURE_SSL_REDIRECT`, где применимо
 - `CSRF_TRUSTED_ORIGINS`
 
-### 6.2 Admin safety
-Before launch:
-- create admin users explicitly
-- remove any default or shared credentials
-- restrict admin exposure to production domain only
+### 6.2 Безопасность админки [TODO]
+Перед запуском нужно:
+- явно создать admin-пользователей
+- убрать любые общие или дефолтные учётные данные
+- ограничить доступность admin production-доменом и операционными правилами
 
-### 6.3 Error visibility
-Add:
-- application logging for checkout and order creation
-- server error logging
+### 6.3 Наблюдаемость и ошибки [TODO]
+Нужно добавить:
+- прикладное логирование checkout и создания заказа
+- логирование серверных ошибок
 
-Recommended:
-- Sentry or equivalent monitoring
+Рекомендуется:
+- Sentry или аналогичный monitoring
 
-## Stage 7. Documentation and Operability
-The project must be understandable to the next person who deploys or supports it.
+## Этап 7. Документация и операционная пригодность
+Проект должен быть понятен следующему человеку, который будет его деплоить или поддерживать.
 
-### 7.1 README
-Fill `README.md` with:
-- project purpose
-- local startup
-- docker startup
-- migrations
-- admin creation
-- static collection
-- test run
-- production deployment notes
+### 7.1 README [TODO]
+Нужно заполнить `README.md`:
+- назначение проекта
+- локальный запуск
+- запуск через Docker
+- миграции
+- создание админа
+- сбор статики
+- запуск тестов
+- production-заметки по деплою
 
-### 7.2 Runbook
-Add a short operational runbook covering:
-- order processing flow
-- pickup and payment workflow
-- cancellation handling
-- stock correction procedure
+### 7.2 Runbook [TODO]
+Нужно добавить короткий operational runbook с описанием:
+- процесса обработки заказа
+- сценария самовывоза и оплаты
+- обработки отмены
+- процедуры ручной коррекции остатков
 
-### 7.3 Release checklist
-Create a pre-release checklist:
-- migrations applied
-- static files collected
-- admin available
-- checkout works
-- order appears in admin
-- cart clears after checkout
-- logs are being written
+### 7.3 Release checklist [TODO]
+Нужно создать pre-release checklist:
+- миграции применены
+- статика собрана
+- админка доступна
+- checkout работает
+- заказ появляется в админке
+- корзина очищается после checkout
+- логи пишутся
 
-## Stage 8. Testing
-MVP launch should be blocked until the core flow is covered by automated tests.
+## Этап 8. Тестирование
+Выпуск MVP должен блокироваться, пока core flow не покрыт автоматизированными тестами.
 
-### 8.1 Unit tests
-Add tests for:
-- order creation from cart
-- total amount calculation
-- pickup checkout validation
-- manual payment status transitions
-- stock deduction on order placement
+### 8.1 Unit-тесты [PARTIAL]
+Уже есть тесты на:
+- создание заказа из корзины
+- ручные платёжные статусы и их синхронизацию
+- сценарий недостатка остатков
 
-### 8.2 Integration tests
-Add tests for:
+Что ещё желательно добавить:
+- отдельный тест на расчёт total amount
+- отдельный тест на валидацию pickup checkout form
+- отдельный тест на стратегию списания остатков
+
+### 8.2 Integration-тесты [PARTIAL]
+Частично покрыты сценарии:
 - authenticated user checkout
 - cart to order conversion
 - checkout with insufficient stock
-- admin payment status update flow
 
-### 8.3 End-to-end smoke scenarios
-Cover at minimum:
+Что ещё нужно добавить:
+- admin flow обновления статуса оплаты
+
+### 8.3 End-to-end smoke-сценарии [TODO]
+Минимально нужно покрыть:
 - `catalog -> cart -> checkout -> order created`
 - `order created -> visible in admin`
 - `order paid at pickup -> status updated`
-- `cancelled order -> stock restored` if restoration is automated
+- `cancelled order -> stock restored`, если восстановление будет автоматизировано
 
-### 8.4 Test environment
-Make test execution reproducible without manual database preparation.
+### 8.4 Тестовое окружение [TODO]
+Нужно сделать запуск тестов воспроизводимым без ручной подготовки БД.
 
-Recommended:
-- test database configuration for Django
-- one documented command that works in a clean environment
+Рекомендуется:
+- задокументировать конфигурацию test database
+- обеспечить одну рабочую команду запуска в чистом окружении
 
-## P0 Before MVP Production Launch
-- implement real checkout route and form
-- create order from cart transactionally
-- align order model with pickup-only checkout
-- replace placeholder checkout button with real route
-- define one pickup location and display it consistently
-- implement explicit stock handling on order placement
-- ensure orders are manageable in admin
-- make Docker/runtime start the web application
-- harden production settings
-- document setup and release steps
-- add tests for the main checkout and admin flow
+## Что уже реализовано
+- реальный checkout для авторизованных пользователей
+- форма оформления заказа под pickup-only MVP
+- создание заказа из корзины в транзакции
+- сохранение snapshot-данных позиций заказа
+- ручной `Payment` при оформлении
+- синхронизация статуса оплаты заказа по платежам
+- очистка корзины после успешного checkout
+- списание остатков при оформлении заказа
+- базовая админка заказов и платежей
+- тесты на основной checkout flow и payment status sync
+
+## Что остаётся сделать для выпуска MVP в production
+
+### P0
+- добавить `web`-сервис и production entrypoint для Django/Gunicorn
+- включить в deploy flow миграции и `collectstatic`
+- довести production settings: secure cookies, trusted origins, SSL-related параметры
+- добавить прикладное логирование checkout и order creation
+- заполнить `README.md`
+- написать runbook для staff
+- создать release checklist
+- сделать воспроизводимым запуск тестов на PostgreSQL
+- описать и зафиксировать процедуру отмены заказа и возврата остатков
+
+### P1
+- добавить admin action или простой механизм возврата остатков при отмене
+- расширить тесты для admin payment flow и smoke-сценариев
+- упростить доменную модель после MVP, если лишние поля начнут мешать сопровождению
 
 ## Post-MVP
-These items should not block the first production launch:
-- online payment provider integration
-- payment webhooks
-- courier delivery
-- PVZ support
-- shipment model and tracking
-- delivery gateway abstraction
-- payment gateway abstraction beyond manual payment
-- stock reservation expiration jobs
-- audit/event log models
+Эти пункты не должны блокировать первый production-запуск:
+- интеграция онлайн-платежей
+- webhook-и платежей
+- курьерская доставка
+- поддержка ПВЗ
+- модель `Shipment` и трекинг
+- абстракция delivery gateway
+- абстракция payment gateway сверх ручной оплаты
+- задачи по истечению резерва
+- отдельные audit/event log модели
 
-## Recommended Implementation Order
-1. Align `Order` and checkout data model with pickup-only MVP.
-2. Implement checkout, order creation, and cart cleanup.
-3. Implement stock deduction strategy and cancellation handling.
-4. Finalize admin workflow for manual processing.
-5. Build production runtime: web container, migrations, static files, env handling.
-6. Harden production settings and logging.
-7. Document deployment and support procedures.
-8. Add automated tests and release checklist.
+## Рекомендуемый порядок завершения работ
+1. Доделать production runtime: `web`, Gunicorn, миграции, статика.
+2. Закрыть production settings и логирование.
+3. Подготовить README, runbook и release checklist.
+4. Зафиксировать процесс отмены и возврата остатков.
+5. Довести тестовое окружение и добрать недостающие тесты.
