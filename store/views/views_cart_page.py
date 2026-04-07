@@ -16,6 +16,7 @@ class CartView(CartContextMixin, TemplateView):
     template_name = "main_page/cart.html"
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
 
         cart_summary = CartService.get_cart_summary(self.request)

@@ -10,7 +10,10 @@ User = get_user_model()
 
 
 class UserModelTest(TestCase):
+    """Тесты для UserModelTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.user_data = {
             "email": "test@example.com",
             "password": "testpass123",
@@ -19,6 +22,7 @@ class UserModelTest(TestCase):
         }
 
     def test_create_user_with_email(self):
+        """Проверяет сценарий 'create user with email'."""
         user = User.objects.create_user(**self.user_data)
         self.assertEqual(user.email, "test@example.com")
         self.assertEqual(user.first_name, "Test")
@@ -28,31 +32,39 @@ class UserModelTest(TestCase):
         self.assertFalse(user.is_superuser)
 
     def test_create_user_without_email_fails(self):
+        """Проверяет сценарий 'create user without email fails'."""
         with self.assertRaises(ValueError):
             User.objects.create_user(email=None, password="testpass123")
 
     def test_create_superuser(self):
+        """Проверяет сценарий 'create superuser'."""
         admin_user = User.objects.create_superuser(email="admin@example.com", password="adminpass123")
         self.assertTrue(admin_user.is_staff)
         self.assertTrue(admin_user.is_superuser)
         self.assertEqual(admin_user.email, "admin@example.com")
 
     def test_user_str_method(self):
+        """Проверяет сценарий 'user str method'."""
         user = User.objects.create_user(**self.user_data)
         self.assertEqual(str(user), "test@example.com")
 
     def test_email_normalization(self):
+        """Проверяет сценарий 'email normalization'."""
         user = User.objects.create_user(email="Test@EXAMPLE.COM", password="testpass123")
         self.assertEqual(user.email, "Test@example.com")
 
 
 class UserRegistrationFormTest(TestCase):
+    """Тесты для UserRegistrationFormTest."""
+
     def test_valid_registration_form(self):
+        """Проверяет сценарий 'valid registration form'."""
         form_data = {"email": "newuser@example.com", "password1": "complexpass123", "password2": "complexpass123"}
         form = UserRegistrationForm(data=form_data)
         self.assertTrue(form.is_valid())
 
     def test_duplicate_email_validation(self):
+        """Проверяет сценарий 'duplicate email validation'."""
         User.objects.create_user(email="existing@example.com", password="pass123")
         form_data = {"email": "existing@example.com", "password1": "complexpass123", "password2": "complexpass123"}
         form = UserRegistrationForm(data=form_data)
@@ -61,21 +73,27 @@ class UserRegistrationFormTest(TestCase):
         self.assertIn("Пользователь с таким email уже зарегистрирован", form.errors["email"])
 
     def test_password_mismatch(self):
+        """Проверяет сценарий 'password mismatch'."""
         form_data = {"email": "test@example.com", "password1": "pass123", "password2": "different123"}
         form = UserRegistrationForm(data=form_data)
         self.assertFalse(form.is_valid())
 
 
 class UserProfileFormTest(TestCase):
+    """Тесты для UserProfileFormTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.user = User.objects.create_user(email="test@example.com", password="testpass123")
 
     def test_valid_profile_form(self):
+        """Проверяет сценарий 'valid profile form'."""
         form_data = {"first_name": "John", "last_name": "Doe", "city": "New York", "phone": "+1234567890"}
         form = UserProfileForm(data=form_data, instance=self.user)
         self.assertTrue(form.is_valid())
 
     def test_form_save(self):
+        """Проверяет сценарий 'form save'."""
         form_data = {"first_name": "Jane", "last_name": "Smith"}
         form = UserProfileForm(data=form_data, instance=self.user)
         form.save()
@@ -85,24 +103,32 @@ class UserProfileFormTest(TestCase):
 
 
 class ProfileDeleteConfirmFormTest(TestCase):
+    """Тесты для ProfileDeleteConfirmFormTest."""
+
     def test_empty_password(self):
+        """Проверяет сценарий 'empty password'."""
         form = ProfileDeleteConfirmForm(data={})
         self.assertFalse(form.is_valid())
         self.assertIn("password", form.errors)
 
     def test_valid_password(self):
+        """Проверяет сценарий 'valid password'."""
         form = ProfileDeleteConfirmForm(data={"password": "somepassword"})
         self.assertTrue(form.is_valid())
 
 
 class UserViewsTest(TestCase):
+    """Тесты для UserViewsTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
         self.user = User.objects.create_user(email="user@example.com", password="userpass123")
         self.staff_user = User.objects.create_user(email="staff@example.com", password="staffpass123", is_staff=True)
 
     @patch("users.views.send_welcome_email")
     def test_registration_view_success(self, mock_email):
+        """Проверяет сценарий 'registration view success'."""
         form_data = {"email": "newuser@example.com", "password1": "complexpass123", "password2": "complexpass123"}
         response = self.client.post(reverse("users:registration"), data=form_data)
 
@@ -113,6 +139,7 @@ class UserViewsTest(TestCase):
         mock_email.delay.assert_called_once_with("newuser@example.com")
 
     def test_registration_view_failure(self):
+        """Проверяет сценарий 'registration view failure'."""
         form_data = {"email": "user@example.com", "password1": "pass123", "password2": "different"}  # Already exists
         response = self.client.post(reverse("users:registration"), data=form_data)
 
@@ -120,12 +147,14 @@ class UserViewsTest(TestCase):
         self.assertFalse(User.objects.filter(email="user@example.com").count() > 1)
 
     def test_login_view_success(self):
+        """Проверяет сценарий 'login view success'."""
         response = self.client.post(
             reverse("users:login"), {"username": "user@example.com", "password": "userpass123"}
         )
         self.assertEqual(response.status_code, 302)
 
     def test_login_view_failure(self):
+        """Проверяет сценарий 'login view failure'."""
         response = self.client.post(
             reverse("users:login"), {"username": "user@example.com", "password": "wrongpassword"}
         )
@@ -133,12 +162,14 @@ class UserViewsTest(TestCase):
         self.assertFalse(response.wsgi_request.user.is_authenticated)
 
     def test_logout_view(self):
+        """Проверяет сценарий 'logout view'."""
         self.client.login(email="user@example.com", password="userpass123")
         response = self.client.post(reverse("users:logout"))
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, reverse("store:base"))
 
     def test_profile_detail_view_own_profile(self):
+        """Проверяет сценарий 'profile detail view own profile'."""
         self.client.login(email="user@example.com", password="userpass123")
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
 
@@ -146,6 +177,7 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "user@example.com")
 
     def test_profile_detail_view_other_profile_denied(self):
+        """Проверяет сценарий 'profile detail view other profile denied'."""
         other_user = User.objects.create_user(email="other@example.com", password="otherpass123")
         self.client.login(email="user@example.com", password="userpass123")
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": other_user.pk}))
@@ -153,6 +185,7 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_profile_detail_view_staff_can_see_all(self):
+        """Проверяет сценарий 'profile detail view staff can see all'."""
         other_user = User.objects.create_user(email="other@example.com", password="otherpass123")
         self.client.login(email="staff@example.com", password="staffpass123")
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": other_user.pk}))
@@ -160,10 +193,12 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_profile_detail_view_not_authenticated(self):
+        """Проверяет сценарий 'profile detail view not authenticated'."""
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
         self.assertEqual(response.status_code, 302)  # Redirect to login
 
     def test_profile_update_view(self):
+        """Проверяет сценарий 'profile update view'."""
         self.client.login(email="user@example.com", password="userpass123")
         form_data = {"first_name": "Updated", "last_name": "Name", "city": "New City", "phone": "+9876543210"}
         response = self.client.post(reverse("users:profile_edit"), data=form_data)
@@ -174,10 +209,12 @@ class UserViewsTest(TestCase):
         self.assertEqual(self.user.last_name, "Name")
 
     def test_profile_update_view_not_authenticated(self):
+        """Проверяет сценарий 'profile update view not authenticated'."""
         response = self.client.get(reverse("users:profile_edit"))
         self.assertEqual(response.status_code, 302)  # Redirect to login
 
     def test_profile_delete_view_success(self):
+        """Проверяет сценарий 'profile delete view success'."""
         self.client.login(email="user@example.com", password="userpass123")
         form_data = {"password": "userpass123"}
         response = self.client.post(reverse("users:profile_delete"), data=form_data)
@@ -187,6 +224,7 @@ class UserViewsTest(TestCase):
         self.assertFalse(User.objects.filter(email="user@example.com").exists())
 
     def test_profile_delete_view_wrong_password(self):
+        """Проверяет сценарий 'profile delete view wrong password'."""
         self.client.login(email="user@example.com", password="userpass123")
         form_data = {"password": "wrongpassword"}
         response = self.client.post(reverse("users:profile_delete"), data=form_data)
@@ -196,10 +234,12 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Неверный пароль")
 
     def test_profile_delete_view_not_authenticated(self):
+        """Проверяет сценарий 'profile delete view not authenticated'."""
         response = self.client.get(reverse("users:profile_delete"))
         self.assertEqual(response.status_code, 302)  # Redirect to login
 
     def test_profile_list_view_staff(self):
+        """Проверяет сценарий 'profile list view staff'."""
         self.client.login(email="staff@example.com", password="staffpass123")
         response = self.client.get(reverse("users:profile_list"))
 
@@ -208,23 +248,29 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "staff@example.com")
 
     def test_profile_list_view_regular_user_denied(self):
+        """Проверяет сценарий 'profile list view regular user denied'."""
         self.client.login(email="user@example.com", password="userpass123")
         response = self.client.get(reverse("users:profile_list"))
 
         self.assertEqual(response.status_code, 403)
 
     def test_profile_list_view_not_authenticated(self):
+        """Проверяет сценарий 'profile list view not authenticated'."""
         response = self.client.get(reverse("users:profile_list"))
         self.assertEqual(response.status_code, 403)  # Permission denied due to raise_exception=True
 
 
 class UserIntegrationTest(TestCase):
+    """Тесты для UserIntegrationTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
 
     @patch("users.views.send_welcome_email")
     def test_full_user_flow(self, mock_email):
         # 1. Register new user
+        """Проверяет сценарий 'full user flow'."""
         form_data = {"email": "flowtest@example.com", "password1": "complexpass123", "password2": "complexpass123"}
         response = self.client.post(reverse("users:registration"), data=form_data)
         self.assertEqual(response.status_code, 302)
@@ -255,7 +301,10 @@ class UserIntegrationTest(TestCase):
 
 
 class UserFormTest(TestCase):
+    """Тесты для UserFormTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         from users.forms import UserRegistrationForm, UserLoginForm, UserProfileForm, ProfileDeleteConfirmForm
 
         self.UserRegistrationForm = UserRegistrationForm
@@ -264,6 +313,7 @@ class UserFormTest(TestCase):
         self.ProfileDeleteConfirmForm = ProfileDeleteConfirmForm
 
     def test_user_login_form_fields(self):
+        """Проверяет сценарий 'user login form fields'."""
         form = self.UserLoginForm()
         self.assertIn("username", form.fields)
         self.assertIn("password", form.fields)

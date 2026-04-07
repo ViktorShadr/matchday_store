@@ -6,6 +6,8 @@ from .models import Category, Product, ProductVariant, ProductImage, Cart, CartI
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для Category."""
+
     list_display = ["name", "created_at", "updated_at"]
     search_fields = ["name"]
     ordering = ["name"]
@@ -13,6 +15,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для Product."""
+
     list_display = ["name", "category", "created_at", "updated_at"]
     list_filter = ["category", "created_at"]
     search_fields = ["name", "description"]
@@ -21,6 +25,8 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(ProductVariant)
 class ProductVariantAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для ProductVariant."""
+
     list_display = ["product", "size", "color", "price", "quantity"]
     list_filter = ["size", "color", "product"]
     search_fields = ["product__name", "size", "color"]
@@ -29,6 +35,8 @@ class ProductVariantAdmin(admin.ModelAdmin):
 
 @admin.register(ProductImage)
 class ProductImageAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для ProductImage."""
+
     list_display = ["product", "alt_text", "is_primary", "created_at"]
     list_filter = ["is_primary", "product"]
     search_fields = ["product__name", "alt_text"]
@@ -37,6 +45,8 @@ class ProductImageAdmin(admin.ModelAdmin):
 
 @admin.register(Cart)
 class CartAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для Cart."""
+
     list_display = ["user", "total_items", "total_price", "created_at", "updated_at"]
     list_filter = ["created_at", "updated_at"]
     search_fields = ["user__email", "user__first_name", "user__last_name"]
@@ -44,11 +54,13 @@ class CartAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at", "updated_at"]
 
     def total_items(self, obj):
+        """Возвращает общее количество товаров."""
         return obj.total_items
 
     total_items.short_description = "Количество товаров"
 
     def total_price(self, obj):
+        """Возвращает общую стоимость."""
         return f"{obj.total_price:.2f} ₽"
 
     total_price.short_description = "Общая стоимость"
@@ -56,6 +68,8 @@ class CartAdmin(admin.ModelAdmin):
 
 @admin.register(CartItem)
 class CartItemAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для CartItem."""
+
     list_display = ["cart", "product_variant", "quantity", "total_price", "created_at"]
     list_filter = ["created_at", "product_variant__product"]
     search_fields = ["cart__user__email", "product_variant__product__name"]
@@ -63,6 +77,7 @@ class CartItemAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at", "updated_at"]
 
     def total_price(self, obj):
+        """Возвращает общую стоимость."""
         return f"{obj.total_price:.2f} ₽"
 
     total_price.short_description = "Общая стоимость"

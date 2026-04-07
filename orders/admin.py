@@ -4,6 +4,8 @@ from orders.models import Address, Order, OrderItem
 
 
 class OrderItemInline(admin.TabularInline):
+    """Класс OrderItemInline."""
+
     model = OrderItem
     extra = 0
     autocomplete_fields = ("product_variant",)
@@ -11,6 +13,8 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Address)
 class AddressAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для Address."""
+
     list_display = (
         "id",
         "recipient_name",
@@ -30,6 +34,8 @@ class AddressAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для Order."""
+
     inlines = (OrderItemInline,)
     list_display = (
         "id",
@@ -60,6 +66,8 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для OrderItem."""
+
     list_display = (
         "id",
         "order",

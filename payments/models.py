@@ -3,13 +3,40 @@ from django.db import models
 
 
 class Payment(models.Model):
+    """
+    Модель платежа в системе.
+
+    Представляет запись о платеже или попытке платежа по заказу.
+    Может быть несколько платежей по одному заказу.
+
+    Attributes:
+        order (Order): Заказ, по которому осуществляется платеж
+        provider (str): Поставщик платежа (из Provider.choices)
+        provider_payment_id (str): ID платежа у поставщика
+        idempotency_key (str): Ключ идемпотентности платежа
+        status (str): Статус платежа (из Status.choices)
+        amount (Decimal): Сумма платежа
+        currency (str): Валюта платежа
+        raw_request (dict): Сырой запрос к платежной системе
+        raw_response (dict): Сырой ответ от платежной системы
+        failure_reason (str): Причина отказа (если есть)
+        paid_at (datetime): Дата успешной оплаты
+        refunded_amount (Decimal): Сумма возврата
+        created_at (datetime): Дата создания
+        updated_at (datetime): Дата последнего обновления
+    """
+
     class Provider(models.TextChoices):
+        """Класс поставщиков платежей."""
+
         MANUAL = "manual", "Ручная оплата"
         YOOKASSA = "yookassa", "YooKassa"
         STRIPE = "stripe", "Stripe"
         CLOUDPAYMENTS = "cloudpayments", "CloudPayments"
 
     class Status(models.TextChoices):
+        """Класс статусов платежа."""
+
         PENDING = "pending", "Ожидает оплаты"
         REQUIRES_ACTION = "requires_action", "Требует действия"
         SUCCEEDED = "succeeded", "Успешно"
@@ -38,9 +65,12 @@ class Payment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Платеж"
         verbose_name_plural = "Платежи"
         ordering = ["-created_at"]
 
     def __str__(self):
+        """Возвращает строковое представление платежа."""
         return f"Платеж {self.id} для заказа {self.order.number}"

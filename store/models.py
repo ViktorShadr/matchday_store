@@ -23,12 +23,16 @@ class Category(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return self.name
 
     def get_absolute_url(self):
+        """Возвращает URL для просмотра объекта."""
         return reverse("store:category_detail", kwargs={"pk": self.pk})
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Категория"
         verbose_name_plural = "Категории"
 
@@ -60,12 +64,16 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return self.name
 
     def get_absolute_url(self):
+        """Возвращает URL для просмотра объекта."""
         return reverse("store:product_detail", kwargs={"pk": self.pk})
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Товар"
         verbose_name_plural = "Товары"
 
@@ -110,9 +118,12 @@ class ProductVariant(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return f"{self.product.name} ({self.size}, {self.color})"
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Вариант товара"
         verbose_name_plural = "Варианты товара"
         constraints = [
@@ -148,9 +159,12 @@ class ProductImage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return f"Изображение для {self.product.name}"
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Изображение товара"
         verbose_name_plural = "Изображения товаров"
 
@@ -177,6 +191,7 @@ class Cart(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         if self.user:
             return f"Корзина пользователя {self.user.email}"
         else:
@@ -193,6 +208,8 @@ class Cart(models.Model):
         return sum(item.quantity for item in self.items.all())
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Корзина"
         verbose_name_plural = "Корзины"
         constraints = [
@@ -224,9 +241,12 @@ class CartItem(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return f"{self.product_variant.product.name} ({self.product_variant.size}, {self.product_variant.color}) - {self.quantity} шт."
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Элемент корзины"
         verbose_name_plural = "Элементы корзины"
         constraints = [

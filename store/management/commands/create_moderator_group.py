@@ -3,9 +3,12 @@ from django.contrib.auth.models import Group, Permission
 
 
 class Command(BaseCommand):
+    """Команда управления проектом."""
+
     help = 'Создает группу "Модераторы" с правами на управление товарами и категориями'
 
     def handle(self, *args, **options):
+        """Выполняет основную логику команды."""
         group, created = Group.objects.get_or_create(name="Модераторы")
 
         if created:

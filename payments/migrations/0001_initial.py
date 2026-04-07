@@ -10,33 +10,77 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('orders', '0003_orderitem'),
+        ("orders", "0003_orderitem"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Payment',
+            name="Payment",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('provider', models.CharField(choices=[('manual', 'Ручная оплата'), ('yookassa', 'YooKassa'), ('stripe', 'Stripe'), ('cloudpayments', 'CloudPayments')], default='manual', max_length=32)),
-                ('provider_payment_id', models.CharField(blank=True, max_length=255)),
-                ('idempotency_key', models.CharField(max_length=255, unique=True)),
-                ('status', models.CharField(choices=[('pending', 'Ожидает оплаты'), ('requires_action', 'Требует действия'), ('succeeded', 'Успешно'), ('failed', 'Ошибка'), ('cancelled', 'Отменен'), ('refunded', 'Возвращен')], default='pending', max_length=32)),
-                ('amount', models.DecimalField(decimal_places=2, max_digits=10, validators=[django.core.validators.MinValueValidator(0)])),
-                ('currency', models.CharField(default='RUB', max_length=3)),
-                ('raw_request', models.JSONField(blank=True, default=dict)),
-                ('raw_response', models.JSONField(blank=True, default=dict)),
-                ('failure_reason', models.TextField(blank=True)),
-                ('paid_at', models.DateTimeField(blank=True, null=True)),
-                ('refunded_amount', models.DecimalField(decimal_places=2, default=0, max_digits=10, validators=[django.core.validators.MinValueValidator(0)])),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('order', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='payments', to='orders.order')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "provider",
+                    models.CharField(
+                        choices=[
+                            ("manual", "Ручная оплата"),
+                            ("yookassa", "YooKassa"),
+                            ("stripe", "Stripe"),
+                            ("cloudpayments", "CloudPayments"),
+                        ],
+                        default="manual",
+                        max_length=32,
+                    ),
+                ),
+                ("provider_payment_id", models.CharField(blank=True, max_length=255)),
+                ("idempotency_key", models.CharField(max_length=255, unique=True)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Ожидает оплаты"),
+                            ("requires_action", "Требует действия"),
+                            ("succeeded", "Успешно"),
+                            ("failed", "Ошибка"),
+                            ("cancelled", "Отменен"),
+                            ("refunded", "Возвращен"),
+                        ],
+                        default="pending",
+                        max_length=32,
+                    ),
+                ),
+                (
+                    "amount",
+                    models.DecimalField(
+                        decimal_places=2, max_digits=10, validators=[django.core.validators.MinValueValidator(0)]
+                    ),
+                ),
+                ("currency", models.CharField(default="RUB", max_length=3)),
+                ("raw_request", models.JSONField(blank=True, default=dict)),
+                ("raw_response", models.JSONField(blank=True, default=dict)),
+                ("failure_reason", models.TextField(blank=True)),
+                ("paid_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "refunded_amount",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=0,
+                        max_digits=10,
+                        validators=[django.core.validators.MinValueValidator(0)],
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "order",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="payments", to="orders.order"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Платеж',
-                'verbose_name_plural': 'Платежи',
-                'ordering': ['-created_at'],
+                "verbose_name": "Платеж",
+                "verbose_name_plural": "Платежи",
+                "ordering": ["-created_at"],
             },
         ),
     ]

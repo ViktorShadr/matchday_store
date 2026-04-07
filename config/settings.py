@@ -13,6 +13,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 
 def env_bool(name: str, default: bool = False) -> bool:
+    """Выполняет логику 'env_bool'."""
     return os.getenv(name, str(default)).lower() in {"1", "true", "yes", "on"}
 
 

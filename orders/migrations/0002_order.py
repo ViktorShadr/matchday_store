@@ -8,42 +8,105 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('orders', '0001_initial'),
+        ("orders", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Order',
+            name="Order",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('number', models.CharField(max_length=32, unique=True)),
-                ('email', models.EmailField(max_length=254)),
-                ('phone', models.CharField(max_length=32)),
-                ('status', models.CharField(choices=[('draft', 'Черновик'), ('placed', 'Оформлен'), ('awaiting_payment', 'Ожидает оплаты'), ('paid', 'Оплачен'), ('processing', 'В обработке'), ('shipped', 'Отправлен'), ('delivered', 'Доставлен'), ('cancelled', 'Отменен'), ('refunded', 'Возвращен')], default='draft', max_length=32)),
-                ('payment_status', models.CharField(choices=[('pending', 'Ожидает оплаты'), ('requires_action', 'Требует действия'), ('succeeded', 'Успешно'), ('failed', 'Ошибка'), ('cancelled', 'Отменен'), ('refunded', 'Возвращен')], default='pending', max_length=32)),
-                ('fulfillment_status', models.CharField(choices=[('new', 'Новый'), ('reserved', 'Зарезервирован'), ('packing', 'Комплектуется'), ('shipped', 'Отправлен'), ('delivered', 'Доставлен'), ('returned', 'Возвращен'), ('cancelled', 'Отменен')], default='new', max_length=32)),
-                ('delivery_method', models.CharField(choices=[('courier', 'Курьер'), ('pickup', 'Самовывоз'), ('pvz', 'Пункт выдачи')], default='courier', max_length=32)),
-                ('pickup_point_code', models.CharField(blank=True, max_length=100)),
-                ('subtotal_amount', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
-                ('delivery_amount', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
-                ('discount_amount', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
-                ('total_amount', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
-                ('currency', models.CharField(default='RUB', max_length=3)),
-                ('customer_comment', models.TextField(blank=True)),
-                ('source_cart_id', models.PositiveBigIntegerField(blank=True, null=True)),
-                ('confirmed_at', models.DateTimeField(blank=True, null=True)),
-                ('paid_at', models.DateTimeField(blank=True, null=True)),
-                ('cancelled_at', models.DateTimeField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('delivery_address', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='orders', to='orders.address')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='orders', to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("number", models.CharField(max_length=32, unique=True)),
+                ("email", models.EmailField(max_length=254)),
+                ("phone", models.CharField(max_length=32)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("draft", "Черновик"),
+                            ("placed", "Оформлен"),
+                            ("awaiting_payment", "Ожидает оплаты"),
+                            ("paid", "Оплачен"),
+                            ("processing", "В обработке"),
+                            ("shipped", "Отправлен"),
+                            ("delivered", "Доставлен"),
+                            ("cancelled", "Отменен"),
+                            ("refunded", "Возвращен"),
+                        ],
+                        default="draft",
+                        max_length=32,
+                    ),
+                ),
+                (
+                    "payment_status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Ожидает оплаты"),
+                            ("requires_action", "Требует действия"),
+                            ("succeeded", "Успешно"),
+                            ("failed", "Ошибка"),
+                            ("cancelled", "Отменен"),
+                            ("refunded", "Возвращен"),
+                        ],
+                        default="pending",
+                        max_length=32,
+                    ),
+                ),
+                (
+                    "fulfillment_status",
+                    models.CharField(
+                        choices=[
+                            ("new", "Новый"),
+                            ("reserved", "Зарезервирован"),
+                            ("packing", "Комплектуется"),
+                            ("shipped", "Отправлен"),
+                            ("delivered", "Доставлен"),
+                            ("returned", "Возвращен"),
+                            ("cancelled", "Отменен"),
+                        ],
+                        default="new",
+                        max_length=32,
+                    ),
+                ),
+                (
+                    "delivery_method",
+                    models.CharField(
+                        choices=[("courier", "Курьер"), ("pickup", "Самовывоз"), ("pvz", "Пункт выдачи")],
+                        default="courier",
+                        max_length=32,
+                    ),
+                ),
+                ("pickup_point_code", models.CharField(blank=True, max_length=100)),
+                ("subtotal_amount", models.DecimalField(decimal_places=2, default=0, max_digits=10)),
+                ("delivery_amount", models.DecimalField(decimal_places=2, default=0, max_digits=10)),
+                ("discount_amount", models.DecimalField(decimal_places=2, default=0, max_digits=10)),
+                ("total_amount", models.DecimalField(decimal_places=2, default=0, max_digits=10)),
+                ("currency", models.CharField(default="RUB", max_length=3)),
+                ("customer_comment", models.TextField(blank=True)),
+                ("source_cart_id", models.PositiveBigIntegerField(blank=True, null=True)),
+                ("confirmed_at", models.DateTimeField(blank=True, null=True)),
+                ("paid_at", models.DateTimeField(blank=True, null=True)),
+                ("cancelled_at", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "delivery_address",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT, related_name="orders", to="orders.address"
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="orders", to=settings.AUTH_USER_MODEL
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Заказ',
-                'verbose_name_plural': 'Заказы',
-                'ordering': ['-created_at'],
+                "verbose_name": "Заказ",
+                "verbose_name_plural": "Заказы",
+                "ordering": ["-created_at"],
             },
         ),
     ]

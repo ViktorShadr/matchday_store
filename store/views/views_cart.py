@@ -55,9 +55,11 @@ class AddToCartView(View):
 
     @method_decorator(require_http_methods(["POST"]))
     def dispatch(self, *args, **kwargs):
+        """Обрабатывает входящий HTTP-запрос и выбирает нужный метод."""
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Обрабатывает POST-запрос."""
         try:
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
@@ -110,9 +112,11 @@ class UpdateCartView(View):
 
     @method_decorator(require_http_methods(["POST"]))
     def dispatch(self, *args, **kwargs):
+        """Обрабатывает входящий HTTP-запрос и выбирает нужный метод."""
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Обрабатывает POST-запрос."""
         try:
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
@@ -165,9 +169,11 @@ class RemoveFromCartView(View):
 
     @method_decorator(require_http_methods(["POST"]))
     def dispatch(self, *args, **kwargs):
+        """Обрабатывает входящий HTTP-запрос и выбирает нужный метод."""
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Обрабатывает POST-запрос."""
         try:
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")

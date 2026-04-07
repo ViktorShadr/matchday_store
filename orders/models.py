@@ -4,6 +4,29 @@ from django.db import models
 
 
 class Address(models.Model):
+    """
+    Модель адреса доставки пользователя.
+
+    Хранит информацию об адресах доставки пользователей.
+    Может быть несколько адресов на одного пользователя.
+
+    Attributes:
+        user (User): Владелец адреса
+        recipient_name (str): ФИО получателя
+        phone (str): Номер телефона получателя
+        country (str): Страна
+        city (str): Город
+        postal_code (str): Почтовый индекс
+        street (str): Улица
+        house (str): Номер дома
+        building (str): Корпус (опционально)
+        apartment (str): Номер квартиры (опционально)
+        comment (str): Комментарий к адресу (опционально)
+        is_default (bool): Флаг адреса по умолчанию
+        created_at (datetime): Дата создания
+        updated_at (datetime): Дата последнего обновления
+    """
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="addresses")
     recipient_name = models.CharField(max_length=255)
     phone = models.CharField(max_length=32)
@@ -20,16 +43,52 @@ class Address(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Адрес"
         verbose_name_plural = "Адреса"
         ordering = ["-is_default", "-updated_at", "-created_at"]
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return f"{self.recipient_name} - {self.city}, {self.street}, {self.house}"
 
 
 class Order(models.Model):
+    """
+    Модель заказа в системе.
+
+    Представляет полный заказ пользователя со статусом оплаты,
+    доставки и исполнения.
+
+    Attributes:
+        number (str): Уникальный номер заказа
+        user (User): Пользователь, сделавший заказ
+        email (str): Email заказчика
+        phone (str): Номер телефона заказчика
+        status (str): Статус заказа (из Status.choices)
+        payment_status (str): Статус оплаты (из PaymentStatus.choices)
+        fulfillment_status (str): Статус исполнения (из FulfillmentStatus.choices)
+        delivery_method (str): Способ доставки (из DeliveryMethod.choices)
+        delivery_address (Address): Адрес доставки
+        pickup_point_code (str): Код пункта выдачи (для самовывоза)
+        subtotal_amount (Decimal): Сумма товаров
+        delivery_amount (Decimal): Стоимость доставки
+        discount_amount (Decimal): Сумма скидки
+        total_amount (Decimal): Итоговая сумма
+        currency (str): Валюта
+        customer_comment (str): Комментарий заказчика
+        source_cart_id (int): ID корзины-источника
+        confirmed_at (datetime): Дата подтверждения
+        paid_at (datetime): Дата оплаты
+        cancelled_at (datetime): Дата отмены
+        created_at (datetime): Дата создания
+        updated_at (datetime): Дата последнего обновления
+    """
+
     class Status(models.TextChoices):
+        """Класс статусов заказа."""
+
         DRAFT = "draft", "Черновик"
         PLACED = "placed", "Оформлен"
         AWAITING_PAYMENT = "awaiting_payment", "Ожидает оплаты"
@@ -41,6 +100,8 @@ class Order(models.Model):
         REFUNDED = "refunded", "Возвращен"
 
     class PaymentStatus(models.TextChoices):
+        """Класс статусов оплаты заказа."""
+
         PENDING = "pending", "Ожидает оплаты"
         REQUIRES_ACTION = "requires_action", "Требует действия"
         SUCCEEDED = "succeeded", "Успешно"
@@ -49,6 +110,8 @@ class Order(models.Model):
         REFUNDED = "refunded", "Возвращен"
 
     class FulfillmentStatus(models.TextChoices):
+        """Класс статусов исполнения заказа."""
+
         NEW = "new", "Новый"
         RESERVED = "reserved", "Зарезервирован"
         PACKING = "packing", "Комплектуется"
@@ -58,6 +121,8 @@ class Order(models.Model):
         CANCELLED = "cancelled", "Отменен"
 
     class DeliveryMethod(models.TextChoices):
+        """Класс способов доставки."""
+
         COURIER = "courier", "Курьер"
         PICKUP = "pickup", "Самовывоз"
         PVZ = "pvz", "Пункт выдачи"
@@ -102,15 +167,38 @@ class Order(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Заказ"
         verbose_name_plural = "Заказы"
         ordering = ["-created_at"]
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return f"Заказ {self.number}"
 
 
 class OrderItem(models.Model):
+    """
+    Модель элемента заказа.
+
+    Представляет один товар в заказе с сохранением снимка информации
+    на момент создания заказа.
+
+    Attributes:
+        order (Order): Заказ, содержащий этот товар
+        product_variant (ProductVariant): Вариант товара
+        product_name_snapshot (str): Название товара на момент заказа
+        sku_snapshot (str): SKU товара на момент заказа
+        size_snapshot (str): Размер товара на момент заказа
+        color_snapshot (str): Цвет товара на момент заказа
+        unit_price (Decimal): Цена единицы товара
+        quantity (int): Количество товара в заказе
+        line_total (Decimal): Итоговая сумма за товар
+        created_at (datetime): Дата создания
+        updated_at (datetime): Дата последнего обновления
+    """
+
     order = models.ForeignKey("orders.Order", on_delete=models.CASCADE, related_name="items")
     product_variant = models.ForeignKey(
         "store.ProductVariant",
@@ -130,9 +218,12 @@ class OrderItem(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        """Мета-настройки класса."""
+
         verbose_name = "Позиция заказа"
         verbose_name_plural = "Позиции заказа"
         ordering = ["id"]
 
     def __str__(self):
+        """Возвращает строковое представление объекта."""
         return f"{self.product_name_snapshot} x {self.quantity}"

@@ -8,25 +8,34 @@ from store.models import Cart, CartItem, Category, Product, ProductVariant, Prod
 
 
 class CategoryModelTest(TestCase):
+    """Тесты для CategoryModelTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.category = Category.objects.create(name="Одежда", description="Одежда для спорта")
 
     def test_category_creation(self):
+        """Проверяет сценарий 'category creation'."""
         self.assertEqual(self.category.name, "Одежда")
         self.assertEqual(self.category.description, "Одежда для спорта")
         self.assertTrue(self.category.created_at)
         self.assertTrue(self.category.updated_at)
 
     def test_category_str_method(self):
+        """Проверяет сценарий 'category str method'."""
         self.assertEqual(str(self.category), "Одежда")
 
     def test_category_unique_name(self):
+        """Проверяет сценарий 'category unique name'."""
         with self.assertRaises(Exception):
             Category.objects.create(name="Одежда")
 
 
 class ProductModelTest(TestCase):
+    """Тесты для ProductModelTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.category = Category.objects.create(name="Футболки", description="Спортивные футболки")
         self.product = Product.objects.create(
             name="Футболка Manchester United",
@@ -35,21 +44,27 @@ class ProductModelTest(TestCase):
         )
 
     def test_product_creation(self):
+        """Проверяет сценарий 'product creation'."""
         self.assertEqual(self.product.name, "Футболка Manchester United")
         self.assertEqual(self.product.category, self.category)
         self.assertTrue(self.product.created_at)
         self.assertTrue(self.product.updated_at)
 
     def test_product_str_method(self):
+        """Проверяет сценарий 'product str method'."""
         self.assertEqual(str(self.product), "Футболка Manchester United")
 
     def test_product_without_category(self):
+        """Проверяет сценарий 'product without category'."""
         product_no_category = Product.objects.create(name="Футболка без категории", description="Тестовый товар")
         self.assertIsNone(product_no_category.category)
 
 
 class ProductImageModelTest(TestCase):
+    """Тесты для ProductImageModelTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(name="Тестовая футболка", category=self.category)
         # Создаем тестовое изображение
@@ -59,17 +74,22 @@ class ProductImageModelTest(TestCase):
         )
 
     def test_product_image_creation(self):
+        """Проверяет сценарий 'product image creation'."""
         self.assertEqual(self.image.product, self.product)
         self.assertEqual(self.image.alt_text, "Тестовое изображение")
         self.assertTrue(self.image.is_primary)
 
     def test_product_image_str_method(self):
+        """Проверяет сценарий 'product image str method'."""
         expected = "Изображение для Тестовая футболка"
         self.assertEqual(str(self.image), expected)
 
 
 class ProductVariantModelTest(TestCase):
+    """Тесты для ProductVariantModelTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(name="Тестовая футболка", category=self.category)
         # Создаем тестовое изображение
@@ -80,6 +100,7 @@ class ProductVariantModelTest(TestCase):
         )
 
     def test_product_variant_creation(self):
+        """Проверяет сценарий 'product variant creation'."""
         self.assertEqual(self.variant.product, self.product)
         self.assertEqual(self.variant.size, "L")
         self.assertEqual(self.variant.color, "Красный")
@@ -88,10 +109,12 @@ class ProductVariantModelTest(TestCase):
         self.assertEqual(self.variant.image, self.image)
 
     def test_product_variant_str_method(self):
+        """Проверяет сценарий 'product variant str method'."""
         expected = "Тестовая футболка (L, Красный)"
         self.assertEqual(str(self.variant), expected)
 
     def test_product_variant_unique_constraint(self):
+        """Проверяет сценарий 'product variant unique constraint'."""
         with self.assertRaises(Exception):
             ProductVariant.objects.create(
                 product=self.product, size="L", color="Красный", price=Decimal("1999.99"), quantity=5, image=self.image
@@ -99,6 +122,7 @@ class ProductVariantModelTest(TestCase):
 
     def test_product_variant_price_validator(self):
         # Проверяем, что отрицательная цена не проходит валидацию при full_clean
+        """Проверяет сценарий 'product variant price validator'."""
         from django.core.exceptions import ValidationError
 
         variant = ProductVariant(
@@ -109,7 +133,10 @@ class ProductVariantModelTest(TestCase):
 
 
 class MainViewTest(TestCase):
+    """Тесты для MainViewTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
@@ -123,14 +150,17 @@ class MainViewTest(TestCase):
         )
 
     def test_main_view_status_code(self):
+        """Проверяет сценарий 'main view status code'."""
         response = self.client.get(reverse("store:base"))
         self.assertEqual(response.status_code, 200)
 
     def test_main_view_template(self):
+        """Проверяет сценарий 'main view template'."""
         response = self.client.get(reverse("store:base"))
         self.assertTemplateUsed(response, "main_page/index.html")
 
     def test_main_view_context(self):
+        """Проверяет сценарий 'main view context'."""
         response = self.client.get(reverse("store:base"))
         self.assertIn("categories", response.context)
         self.assertIn("popular_products", response.context)
@@ -139,7 +169,10 @@ class MainViewTest(TestCase):
 
 
 class ProductListViewTest(TestCase):
+    """Тесты для ProductListViewTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
         self.category = Category.objects.create(name="Футболки")
 
@@ -155,27 +188,34 @@ class ProductListViewTest(TestCase):
             )
 
     def test_product_list_view_status_code(self):
+        """Проверяет сценарий 'product list view status code'."""
         response = self.client.get(reverse("store:product_list"))
         self.assertEqual(response.status_code, 200)
 
     def test_product_list_view_template(self):
+        """Проверяет сценарий 'product list view template'."""
         response = self.client.get(reverse("store:product_list"))
         self.assertTemplateUsed(response, "main_page/product_list.html")
 
     def test_product_list_view_context(self):
+        """Проверяет сценарий 'product list view context'."""
         response = self.client.get(reverse("store:product_list"))
         self.assertIn("products", response.context)
         self.assertIn("categories", response.context)
         self.assertEqual(len(response.context["products"]), 12)  # paginate_by = 12
 
     def test_product_list_pagination(self):
+        """Проверяет сценарий 'product list pagination'."""
         response = self.client.get(reverse("store:product_list") + "?page=2")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["products"]), 3)
 
 
 class ProductDetailsViewTest(TestCase):
+    """Тесты для ProductDetailsViewTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(
@@ -189,14 +229,17 @@ class ProductDetailsViewTest(TestCase):
         )
 
     def test_product_detail_view_status_code(self):
+        """Проверяет сценарий 'product detail view status code'."""
         response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_product_detail_view_template(self):
+        """Проверяет сценарий 'product detail view template'."""
         response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
         self.assertTemplateUsed(response, "main_page/product_details.html")
 
     def test_product_detail_view_context(self):
+        """Проверяет сценарий 'product detail view context'."""
         response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
         self.assertIn("product", response.context)
         self.assertIn("product_images", response.context)
@@ -204,12 +247,16 @@ class ProductDetailsViewTest(TestCase):
         self.assertEqual(response.context["product"], self.product)
 
     def test_product_detail_view_404(self):
+        """Проверяет сценарий 'product detail view 404'."""
         response = self.client.get(reverse("store:product_detail", kwargs={"pk": 99999}))
         self.assertEqual(response.status_code, 404)
 
 
 class ProductUpdateViewTest(TestCase):
+    """Тесты для ProductUpdateViewTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
         self.user = User.objects.create_user(email="testuser@example.com", password="testpass123")
         self.staff_user = User.objects.create_user(
@@ -217,6 +264,7 @@ class ProductUpdateViewTest(TestCase):
         )
         # Создаем группу "Модераторы" и добавляем staff пользователя
         from django.contrib.auth.models import Group
+
         moderator_group, created = Group.objects.get_or_create(name="Модераторы")
         self.staff_user.groups.add(moderator_group)
         self.category = Category.objects.create(name="Футболки")
@@ -225,25 +273,30 @@ class ProductUpdateViewTest(TestCase):
         )
 
     def test_product_update_view_requires_staff(self):
+        """Проверяет сценарий 'product update view requires staff'."""
         response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 302)  # Redirect to login
 
     def test_product_update_view_denied_for_regular_user(self):
+        """Проверяет сценарий 'product update view denied for regular user'."""
         self.client.login(email="testuser@example.com", password="testpass123")
         response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 403)
 
     def test_product_update_view_allowed_for_staff(self):
+        """Проверяет сценарий 'product update view allowed for staff'."""
         self.client.login(email="staffuser@example.com", password="staffpass123")
         response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_product_update_view_template(self):
+        """Проверяет сценарий 'product update view template'."""
         self.client.login(email="staffuser@example.com", password="staffpass123")
         response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
         self.assertTemplateUsed(response, "main_page/product_update.html")
 
     def test_product_update_form_submission(self):
+        """Проверяет сценарий 'product update form submission'."""
         self.client.login(email="staffuser@example.com", password="staffpass123")
         response = self.client.post(
             reverse("store:product_edit", kwargs={"pk": self.product.pk}),
@@ -255,7 +308,10 @@ class ProductUpdateViewTest(TestCase):
 
 
 class ProductDeleteViewTest(TestCase):
+    """Тесты для ProductDeleteViewTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
         self.user = User.objects.create_user(email="testuser@example.com", password="testpass123")
         self.staff_user = User.objects.create_user(
@@ -263,6 +319,7 @@ class ProductDeleteViewTest(TestCase):
         )
         # Создаем группу "Модераторы" и добавляем staff пользователя
         from django.contrib.auth.models import Group
+
         moderator_group, created = Group.objects.get_or_create(name="Модераторы")
         self.staff_user.groups.add(moderator_group)
         self.category = Category.objects.create(name="Футболки")
@@ -271,25 +328,30 @@ class ProductDeleteViewTest(TestCase):
         )
 
     def test_product_delete_view_requires_staff(self):
+        """Проверяет сценарий 'product delete view requires staff'."""
         response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 302)  # Redirect to login
 
     def test_product_delete_view_denied_for_regular_user(self):
+        """Проверяет сценарий 'product delete view denied for regular user'."""
         self.client.login(email="testuser@example.com", password="testpass123")
         response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 403)
 
     def test_product_delete_view_allowed_for_staff(self):
+        """Проверяет сценарий 'product delete view allowed for staff'."""
         self.client.login(email="staffuser@example.com", password="staffpass123")
         response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(response.status_code, 200)
 
     def test_product_delete_view_template(self):
+        """Проверяет сценарий 'product delete view template'."""
         self.client.login(email="staffuser@example.com", password="staffpass123")
         response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertTemplateUsed(response, "main_page/product_delete.html")
 
     def test_product_delete_confirmation(self):
+        """Проверяет сценарий 'product delete confirmation'."""
         self.client.login(email="staffuser@example.com", password="staffpass123")
         initial_count = Product.objects.count()
         response = self.client.post(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
@@ -298,17 +360,26 @@ class ProductDeleteViewTest(TestCase):
 
 
 class RemoveFromCartViewTest(TestCase):
+    """Тесты для RemoveFromCartViewTest."""
+
     def setUp(self):
+        """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
         self.category = Category.objects.create(name="Аксессуары")
         self.product = Product.objects.create(name="Тестовый шарф", category=self.category)
         test_image = SimpleUploadedFile("test_image.jpg", b"fake_image_data", content_type="image/jpeg")
         self.image = ProductImage.objects.create(product=self.product, image=test_image, is_primary=True)
         self.variant = ProductVariant.objects.create(
-            product=self.product, size="One Size", color="Красный", price=Decimal("1999.99"), quantity=10, image=self.image
+            product=self.product,
+            size="One Size",
+            color="Красный",
+            price=Decimal("1999.99"),
+            quantity=10,
+            image=self.image,
         )
 
     def test_remove_from_cart_deletes_item_and_returns_summary(self):
+        """Проверяет сценарий 'remove from cart deletes item and returns summary'."""
         session = self.client.session
         session.save()
         cart = Cart.objects.create(session_key=session.session_key)
@@ -329,6 +400,7 @@ class RemoveFromCartViewTest(TestCase):
         )
 
     def test_remove_from_cart_returns_404_when_item_is_missing(self):
+        """Проверяет сценарий 'remove from cart returns 404 when item is missing'."""
         response = self.client.post(reverse("main_page:remove_from_cart"), {"variant_id": self.variant.id})
 
         self.assertEqual(response.status_code, 404)

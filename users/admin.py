@@ -10,12 +10,15 @@ from users.models import User
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для User."""
+
     list_display = ("id", "email", "first_name", "last_name", "is_staff", "is_active", "is_moderator")
     list_filter = ("is_staff", "is_active", "is_superuser", "groups")
     search_fields = ("email", "first_name", "last_name")
     ordering = ("email",)
 
     def is_moderator(self, obj):
+        """Проверяет, состоит ли пользователь в группе модераторов."""
         return obj.groups.filter(name="Модераторы").exists()
 
     is_moderator.boolean = True
@@ -25,6 +28,7 @@ class UserAdmin(admin.ModelAdmin):
 # Добавляем кастомные действия для управления модераторами
 @admin.action(description="Удалить из группы модераторов")
 def remove_from_moderators(modeladmin, request, queryset):
+    """Удаляет объект в сценарии 'from moderators'."""
     moderator_group = Group.objects.filter(name="Модераторы").first()
     if moderator_group:
         count = 0
@@ -39,6 +43,7 @@ def remove_from_moderators(modeladmin, request, queryset):
 
 @admin.action(description="Добавить в группу модераторов")
 def add_to_moderators(modeladmin, request, queryset):
+    """Выполняет логику 'add_to_moderators'."""
     moderator_group = Group.objects.filter(name="Модераторы").first()
     if moderator_group:
         count = 0
@@ -64,18 +69,22 @@ class ModeratorGroupAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         # Показываем только группу модераторов
+        """Возвращает queryset для текущего представления."""
         return super().get_queryset(request).filter(name="Модераторы")
 
     def has_add_permission(self, request):
         # Запрещаем добавление новых групп
+        """Проверяет право на добавление объектов."""
         return False
 
     def has_delete_permission(self, request, obj=None):
         # Запрещаем удаление группы
+        """Проверяет право на удаление объектов."""
         return False
 
     def changelist_view(self, request, extra_context=None):
         # Перенаправляем на кастомную страницу управления модераторами
+        """Отображает страницу списка объектов в админке."""
         moderator_group = Group.objects.filter(name="Модераторы").first()
         if not moderator_group:
             messages.error(
@@ -101,7 +110,9 @@ class ModeratorGroupAdmin(admin.ModelAdmin):
         return render(request, "templates_moderator/moderator_group_management.html", context)
 
     def response_add(self, request, obj, post_url_continue=None):
+        """Формирует ответ после добавления объекта в админке."""
         return HttpResponseRedirect(reverse("admin:users_user_changelist"))
 
     def response_change(self, request, obj):
+        """Формирует ответ после изменения объекта в админке."""
         return HttpResponseRedirect(reverse("admin:users_user_changelist"))

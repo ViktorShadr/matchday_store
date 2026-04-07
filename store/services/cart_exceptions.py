@@ -15,6 +15,7 @@ class InsufficientStockError(CartException):
     http_status = 400
 
     def __init__(self, message: str, available_quantity: int = 0):
+        """Инициализирует экземпляр класса."""
         self.message = message
         self.available_quantity = available_quantity
         super().__init__(message)

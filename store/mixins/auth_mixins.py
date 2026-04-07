@@ -18,6 +18,7 @@ class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     """
 
     def test_func(self):
+        """Проверяет доступ пользователя к представлению."""
         return self.request.user.is_staff
 
 
@@ -39,5 +40,6 @@ class ModeratorRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     """
 
     def test_func(self):
+        """Проверяет доступ пользователя к представлению."""
         user = self.request.user
         return user.is_staff and user.groups.filter(name="Модераторы").exists()

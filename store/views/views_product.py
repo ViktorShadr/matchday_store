@@ -21,6 +21,7 @@ class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, T
     template_name = "main_page/index.html"
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["popular_products"] = enrich_products(self.get_catalog_queryset().order_by("-created_at")[:6])
         return context
@@ -49,6 +50,7 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
     paginate_by = 12
 
     def get_queryset(self):
+        """Возвращает queryset для текущего представления."""
         queryset = self.get_catalog_queryset().order_by("-created_at")
         category_id = self.request.GET.get("category_id")
         if category_id:
@@ -56,6 +58,7 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
         return queryset
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context[self.context_object_name] = enrich_products(context[self.context_object_name])
 
@@ -89,9 +92,11 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
     context_object_name = "product"
 
     def get_queryset(self):
+        """Возвращает queryset для текущего представления."""
         return self.get_catalog_queryset()
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         product = enrich_product(self.object)
 
@@ -122,9 +127,11 @@ class ProductUpdateView(ModeratorRequiredMixin, UpdateView):
     context_object_name = "product"
 
     def get_success_url(self):
+        """Возвращает URL для перенаправления после успешного действия."""
         return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
@@ -149,9 +156,11 @@ class ProductCreateView(ModeratorRequiredMixin, CreateView):
     context_object_name = "product"
 
     def get_success_url(self):
+        """Возвращает URL для перенаправления после успешного действия."""
         return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
@@ -173,6 +182,7 @@ class ProductDeleteView(ModeratorRequiredMixin, DeleteView):
     success_url = reverse_lazy("store:product_list")
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
