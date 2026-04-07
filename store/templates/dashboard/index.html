@@ -1,0 +1,87 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Дашборд модератора{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">Дашборд модератора</h1>
+                <a class="btn btn-primary" href="{% url 'store:warehouse_dashboard' %}">Открыть склад</a>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="text-muted small mb-1">Товаров</div>
+                        <div class="fs-2 fw-bold">{{ product_count }}</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="text-muted small mb-1">Категорий</div>
+                        <div class="fs-2 fw-bold">{{ category_count }}</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="text-muted small mb-1">Вариантов</div>
+                        <div class="fs-2 fw-bold">{{ variant_count }}</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="text-muted small mb-1">Всего единиц на складе</div>
+                        <div class="fs-2 fw-bold">{{ total_stock }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-7">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h4 mb-0">Последние товары</h2>
+                            <a class="sf-link" href="{% url 'store:warehouse_product_create' %}">Добавить товар</a>
+                        </div>
+                        {% for product in recent_products %}
+                            <div class="border rounded-4 px-3 py-2 mb-2">
+                                <div class="fw-semibold">{{ product.name }}</div>
+                                <div class="small text-muted">
+                                    {{ product.category.name|default:'Без категории' }}
+                                </div>
+                                <a class="sf-link small" href="{% url 'store:warehouse_product_manage' product.pk %}">
+                                    Управлять товаром
+                                </a>
+                            </div>
+                        {% empty %}
+                            <div class="text-muted">Товары ещё не добавлены.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-5">
+                    <div class="sf-surface p-4 h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h4 mb-0">Категории</h2>
+                            <a class="sf-link" href="{% url 'store:warehouse_category_create' %}">Создать</a>
+                        </div>
+                        {% for category in largest_categories %}
+                            <div class="d-flex justify-content-between align-items-center border rounded-4 px-3 py-2 mb-2">
+                                <div>
+                                    <div class="fw-semibold">{{ category.name }}</div>
+                                    <div class="small text-muted">Товаров: {{ category.product_count }}</div>
+                                </div>
+                                <a class="sf-link small" href="{% url 'store:warehouse_category_edit' category.pk %}">Изменить</a>
+                            </div>
+                        {% empty %}
+                            <div class="text-muted">Категорий пока нет.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

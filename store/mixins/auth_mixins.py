@@ -1,6 +1,15 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 
 
+def is_moderator_user(user):
+    """Проверяет, может ли пользователь работать с модераторским дашбордом."""
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return user.groups.filter(name__in=["moderators", "Модераторы"]).exists()
+
+
 class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     """
     Миксин для ограничения доступа только для персонала.
@@ -41,5 +50,4 @@ class ModeratorRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
 
     def test_func(self):
         """Проверяет доступ пользователя к представлению."""
-        user = self.request.user
-        return user.is_staff and user.groups.filter(name="Модераторы").exists()
+        return is_moderator_user(self.request.user)

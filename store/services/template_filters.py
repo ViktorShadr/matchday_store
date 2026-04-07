@@ -6,6 +6,8 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
+from store.mixins import is_moderator_user
+
 
 class PermissionService:
     """Сервис для проверки прав доступа в шаблонах"""
@@ -21,9 +23,7 @@ class PermissionService:
         Returns:
             bool: True если пользователь модератор, False иначе
         """
-        if not user.is_authenticated:
-            return False
-        return user.is_staff and user.groups.filter(name="Модераторы").exists()
+        return is_moderator_user(user)
 
     @staticmethod
     def is_staff(user) -> bool:

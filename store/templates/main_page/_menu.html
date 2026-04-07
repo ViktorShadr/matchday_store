@@ -35,6 +35,13 @@
                        href="{% url 'store:product_list' %}">Все товары</a>
                 </li>
 
+                {% if navigation_permissions.is_moderator %}
+                    <li class="nav-item mt-2 mt-lg-0">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard_home' or request.resolver_match.url_name == 'warehouse_dashboard' %}active{% endif %}"
+                           href="{% url 'store:dashboard_home' %}">Дашборд</a>
+                    </li>
+                {% endif %}
+
                 {% if user.is_authenticated and user.is_staff %}
                     <li class="nav-item mt-2 mt-lg-0">
                         <a class="nav-link" href="/admin/">Админ-панель</a>

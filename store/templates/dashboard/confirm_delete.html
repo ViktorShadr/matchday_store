@@ -1,0 +1,25 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-7">
+                    <div class="sf-surface p-4">
+                        <h1 class="sf-section-title mb-3">{{ page_title }}</h1>
+                        <p class="text-muted">{{ warning_text }}</p>
+                        <p>Подтвердите удаление объекта: <strong>{{ object }}</strong>.</p>
+
+                        <form method="post">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger">Удалить</button>
+                            <a class="btn btn-outline-primary" href="{{ cancel_url }}">Отмена</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
