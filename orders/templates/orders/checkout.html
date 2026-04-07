@@ -1,0 +1,102 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Оформление заказа{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">Оформление заказа</h1>
+                <a class="sf-link" href="{% url 'main_page:cart' %}">Вернуться в корзину</a>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-7">
+                    <div class="sf-surface p-4">
+                        <form method="post" novalidate>
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                <div class="alert alert-danger">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <h5 class="mb-3">Контакты</h5>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label" for="{{ form.recipient_name.id_for_label }}">{{ form.recipient_name.label }}</label>
+                                    {{ form.recipient_name }}
+                                    {% if form.recipient_name.errors %}<div class="text-danger small mt-1">{{ form.recipient_name.errors|join:', ' }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+                                    {{ form.email }}
+                                    {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|join:', ' }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="{{ form.phone.id_for_label }}">{{ form.phone.label }}</label>
+                                    {{ form.phone }}
+                                    {% if form.phone.errors %}<div class="text-danger small mt-1">{{ form.phone.errors|join:', ' }}</div>{% endif %}
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="{{ form.customer_comment.id_for_label }}">{{ form.customer_comment.label }}</label>
+                                    {{ form.customer_comment }}
+                                    {% if form.customer_comment.errors %}<div class="text-danger small mt-1">{{ form.customer_comment.errors|join:', ' }}</div>{% endif %}
+                                </div>
+                            </div>
+
+                            <h5 class="mt-4 mb-3">Самовывоз</h5>
+                            <div class="border rounded-3 p-3 bg-light">
+                                <div class="fw-bold">{{ pickup_location.name }}</div>
+                                <div>{{ pickup_location.address }}</div>
+                                <div class="text-muted">Часы работы: {{ pickup_location.hours }}</div>
+                                <div class="text-muted">Телефон: {{ pickup_location.phone }}</div>
+                            </div>
+
+                            <h5 class="mt-4 mb-3">Оплата</h5>
+                            <div class="border rounded-3 p-3 bg-light">
+                                Оплата при получении товара в магазине.
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-lg mt-4 w-100">Подтвердить заказ</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-5">
+                    <div class="sf-surface p-4">
+                        <h5 class="mb-3">Ваш заказ</h5>
+                        <div class="d-flex flex-column gap-3">
+                            {% for item in items %}
+                                <div class="d-flex justify-content-between gap-3">
+                                    <div>
+                                        <div class="fw-bold">{{ item.product_name }}</div>
+                                        <div class="small text-muted">{{ item.size }} / {{ item.color }}</div>
+                                        <div class="small text-muted">{{ item.quantity }} шт.</div>
+                                    </div>
+                                    <div class="fw-bold">{{ item.total_price_formatted }}</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <span>Товары</span>
+                            <span>{{ total_items }} шт.</span>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2">
+                            <span>Доставка</span>
+                            <span>0 ₽</span>
+                        </div>
+                        <div class="d-flex justify-content-between fs-5 fw-bold mt-3">
+                            <span>Итого</span>
+                            <span>{{ total_price }} ₽</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

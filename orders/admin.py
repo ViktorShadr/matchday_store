@@ -40,6 +40,7 @@ class OrderAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "number",
+        "recipient_name",
         "user",
         "email",
         "phone",
@@ -59,7 +60,7 @@ class OrderAdmin(admin.ModelAdmin):
         "currency",
         "created_at",
     )
-    search_fields = ("number", "email", "phone", "user__email", "pickup_point_code")
+    search_fields = ("number", "recipient_name", "email", "phone", "user__email", "pickup_point_code")
     ordering = ("-created_at",)
     readonly_fields = ("created_at", "updated_at", "confirmed_at", "paid_at", "cancelled_at")
 

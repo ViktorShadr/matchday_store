@@ -1,3 +1,87 @@
-from django.shortcuts import render
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib import messages
+from django.conf import settings
+from django.http import Http404
+from django.shortcuts import redirect
+from django.urls import reverse
+from django.views.generic import FormView, TemplateView
 
-# Create your views here.
+from orders.forms import CheckoutForm
+from orders.models import Order
+from orders.services import CheckoutError, CheckoutService
+from store.mixins.cart_mixins import CartContextMixin
+from store.services.cart_service import CartService
+
+
+class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
+    """Страница оформления заказа для MVP-сценария самовывоза."""
+
+    template_name = "orders/checkout.html"
+    form_class = CheckoutForm
+
+    def dispatch(self, request, *args, **kwargs):
+        """Не допускать оформление с пустой корзиной."""
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
+        cart_summary = CartService.get_cart_summary(request)
+        if not cart_summary["items"]:
+            messages.warning(request, "Корзина пуста. Добавьте товары перед оформлением заказа.")
+            return redirect("main_page:cart")
+        self.cart_summary = cart_summary
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_initial(self):
+        """Подставить данные пользователя в форму."""
+        user = self.request.user
+        return {
+            "recipient_name": f"{user.first_name} {user.last_name}".strip() or user.email,
+            "email": user.email,
+            "phone": user.phone or "",
+        }
+
+    def get_context_data(self, **kwargs):
+        """Сформировать контекст страницы оформления."""
+        context = super().get_context_data(**kwargs)
+        context.update(self.cart_summary)
+        context["pickup_location"] = {
+            "code": settings.STORE_PICKUP_LOCATION_CODE,
+            "name": settings.STORE_PICKUP_LOCATION_NAME,
+            "address": settings.STORE_PICKUP_ADDRESS,
+            "hours": settings.STORE_PICKUP_HOURS,
+            "phone": settings.STORE_PICKUP_PHONE,
+        }
+        return context
+
+    def form_valid(self, form):
+        """Создать заказ из корзины."""
+        try:
+            order = CheckoutService.create_order_from_cart(self.request, form.cleaned_data)
+        except CheckoutError as exc:
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
+
+        return redirect(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+
+
+class CheckoutSuccessView(LoginRequiredMixin, CartContextMixin, TemplateView):
+    """Подтверждение успешно оформленного заказа."""
+
+    template_name = "orders/checkout_success.html"
+
+    def get_context_data(self, **kwargs):
+        """Вернуть оформленный заказ текущего пользователя."""
+        context = super().get_context_data(**kwargs)
+        try:
+            order = Order.objects.get(pk=self.kwargs["pk"], user=self.request.user)
+        except Order.DoesNotExist as exc:
+            raise Http404 from exc
+
+        context["order"] = order
+        context["pickup_location"] = {
+            "name": settings.STORE_PICKUP_LOCATION_NAME,
+            "address": settings.STORE_PICKUP_ADDRESS,
+            "hours": settings.STORE_PICKUP_HOURS,
+            "phone": settings.STORE_PICKUP_PHONE,
+        }
+        return context

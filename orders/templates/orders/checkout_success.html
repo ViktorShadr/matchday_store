@@ -1,0 +1,35 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Заказ оформлен{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-surface p-5">
+                <h1 class="sf-section-title mb-3">Заказ оформлен</h1>
+                <p class="mb-4">Номер заказа: <strong>{{ order.number }}</strong></p>
+
+                <div class="row g-4">
+                    <div class="col-12 col-lg-6">
+                        <h5>Самовывоз</h5>
+                        <div class="fw-bold">{{ pickup_location.name }}</div>
+                        <div>{{ pickup_location.address }}</div>
+                        <div class="text-muted">Часы работы: {{ pickup_location.hours }}</div>
+                        <div class="text-muted">Телефон: {{ pickup_location.phone }}</div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                        <h5>Оплата</h5>
+                        <p class="mb-2">Оплата производится при получении товара в магазине.</p>
+                        <p class="mb-0 text-muted">Сумма к оплате: {{ order.total_amount }} {{ order.currency }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex gap-2 flex-wrap">
+                    <a href="{% url 'main_page:product_list' %}" class="btn btn-primary">Продолжить покупки</a>
+                    <a href="{% url 'main_page:base' %}" class="btn btn-outline-secondary">На главную</a>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

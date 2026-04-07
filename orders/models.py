@@ -129,6 +129,7 @@ class Order(models.Model):
 
     number = models.CharField(max_length=32, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders")
+    recipient_name = models.CharField(max_length=255, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=32)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
@@ -145,12 +146,14 @@ class Order(models.Model):
     delivery_method = models.CharField(
         max_length=32,
         choices=DeliveryMethod.choices,
-        default=DeliveryMethod.COURIER,
+        default=DeliveryMethod.PICKUP,
     )
     delivery_address = models.ForeignKey(
         "orders.Address",
         on_delete=models.PROTECT,
         related_name="orders",
+        null=True,
+        blank=True,
     )
     pickup_point_code = models.CharField(max_length=100, blank=True)
     subtotal_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)

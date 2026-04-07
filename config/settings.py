@@ -106,6 +106,7 @@ AUTH_USER_MODEL = "users.User"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+LOGIN_URL = "/users/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 
@@ -122,3 +123,9 @@ EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@matchday-store.com")
+
+STORE_PICKUP_LOCATION_CODE = os.getenv("STORE_PICKUP_LOCATION_CODE", "main-store")
+STORE_PICKUP_LOCATION_NAME = os.getenv("STORE_PICKUP_LOCATION_NAME", "Фирменный магазин ФК «Шинник»")
+STORE_PICKUP_ADDRESS = os.getenv("STORE_PICKUP_ADDRESS", "г. Ярославль, ул. Победы, 12")
+STORE_PICKUP_HOURS = os.getenv("STORE_PICKUP_HOURS", "Ежедневно с 10:00 до 20:00")
+STORE_PICKUP_PHONE = os.getenv("STORE_PICKUP_PHONE", "+7 (4852) 00-00-00")
