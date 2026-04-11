@@ -9,8 +9,14 @@ from django.views.generic import FormView, TemplateView
 from orders.forms import CheckoutForm
 from orders.models import Order
 from orders.services import CheckoutError, CheckoutService
+
+# Глобальный экземпляр для обратной совместимости
+checkout_service = CheckoutService()
 from store.mixins.cart_mixins import CartContextMixin
 from store.services.cart_service import CartService
+
+# Глобальный экземпляр для обратной совместимости
+cart_service = CartService()
 
 
 class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
@@ -24,7 +30,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
-        cart_summary = CartService.get_cart_summary(request)
+        cart_summary = cart_service.get_cart_summary(request)
         if not cart_summary["items"]:
             messages.warning(request, "Корзина пуста. Добавьте товары перед оформлением заказа.")
             return redirect("main_page:cart")
@@ -56,7 +62,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
     def form_valid(self, form):
         """Создать заказ из корзины."""
         try:
-            order = CheckoutService.create_order_from_cart(self.request, form.cleaned_data)
+            order = checkout_service.create_order_from_cart(self.request, form.cleaned_data)
         except CheckoutError as exc:
             form.add_error(None, str(exc))
             return self.form_invalid(form)

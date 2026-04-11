@@ -3,6 +3,9 @@ from django.dispatch import receiver
 
 from store.services.cart_service import CartService
 
+# Глобальный экземпляр для обратной совместимости
+cart_service = CartService()
+
 
 @receiver(user_logged_in)
 def merge_carts_on_login(sender, request, user, **kwargs):
@@ -26,4 +29,4 @@ def merge_carts_on_login(sender, request, user, **kwargs):
             del request.session["_pre_login_session_key"]
             request.session.modified = True
 
-        CartService.merge_carts_on_login(user, session_key)
+        cart_service.merge_carts_on_login(user, session_key)

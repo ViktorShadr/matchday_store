@@ -1,5 +1,6 @@
 from decimal import Decimal
 from uuid import uuid4
+from typing import Optional, List
 
 from django.conf import settings
 from django.db import transaction
@@ -8,26 +9,58 @@ from django.utils import timezone
 from orders.models import Order, OrderItem
 from payments.models import Payment
 from store.models import ProductVariant
+from store.repositories import ICartRepository, IProductVariantRepository
+from store.repositories import CartRepository, ProductVariantRepository
+from orders.repositories import IOrderRepository, IPaymentRepository
+from orders.repositories import OrderRepository, PaymentRepository
 from store.services.cart_service import CartService
+from store.services.interfaces import ICheckoutService
+
+# Глобальный экземпляр для обратной совместимости
+cart_service = CartService()
 
 
 class CheckoutError(Exception):
     """Бизнес-ошибка оформления заказа."""
 
 
-class CheckoutService:
-    """Сервис оформления заказа из корзины."""
+class CheckoutService(ICheckoutService):
+    """
+    Сервис оформления заказа из корзины.
+    
+    Реализует DIP через dependency injection репозиториев.
+    """
+
+    def __init__(
+        self,
+        cart_service: Optional[CartService] = None,
+        product_variant_repository: Optional[IProductVariantRepository] = None,
+        order_repository: Optional[IOrderRepository] = None,
+        payment_repository: Optional[IPaymentRepository] = None,
+    ):
+        """
+        Инициализация сервиса с возможностью DI.
+
+        Args:
+            cart_service: Сервис корзины (по умолчанию глобальный экземпляр)
+            product_variant_repository: Репозиторий вариантов товаров
+            order_repository: Репозиторий заказов
+            payment_repository: Репозиторий платежей
+        """
+        self.cart_service = cart_service or CartService()
+        self.product_variant_repository = product_variant_repository or ProductVariantRepository()
+        self.order_repository = order_repository or OrderRepository()
+        self.payment_repository = payment_repository or PaymentRepository()
 
     @staticmethod
     def build_order_number() -> str:
         """Собрать компактный номер заказа."""
         return f"ORD-{timezone.now():%Y%m%d%H%M%S}-{uuid4().hex[:6].upper()}"
 
-    @classmethod
     @transaction.atomic
-    def create_order_from_cart(cls, request, cleaned_data):
+    def create_order_from_cart(self, request, cleaned_data):
         """Создать заказ, списать остатки и очистить корзину."""
-        cart = CartService.get_or_create_cart(request)
+        cart = self.cart_service.get_or_create_cart(request)
         cart_items = list(
             cart.items.select_related("product_variant__product").select_for_update().order_by("pk")
         )
@@ -38,9 +71,7 @@ class CheckoutService:
         locked_variant_ids = [item.product_variant_id for item in cart_items]
         locked_variants = {
             variant.id: variant
-            for variant in ProductVariant.objects.select_for_update().filter(id__in=locked_variant_ids).select_related(
-                "product"
-            )
+            for variant in self.product_variant_repository.get_variants_for_update(locked_variant_ids)
         }
 
         subtotal_amount = Decimal("0.00")
@@ -72,8 +103,8 @@ class CheckoutService:
                 )
             )
 
-        order = Order.objects.create(
-            number=cls.build_order_number(),
+        order = self.order_repository.create_order(
+            number=self.build_order_number(),
             user=request.user,
             recipient_name=cleaned_data["recipient_name"],
             email=cleaned_data["email"],
@@ -95,9 +126,9 @@ class CheckoutService:
 
         for item in order_items:
             item.order = order
-        OrderItem.objects.bulk_create(order_items)
+        self.order_repository.bulk_create_order_items(order_items)
 
-        Payment.objects.create(
+        self.payment_repository.create_payment(
             order=order,
             provider=Payment.Provider.MANUAL,
             idempotency_key=uuid4().hex,
