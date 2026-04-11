@@ -4,9 +4,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
+from django.utils import timezone
 
 from orders.models import Order, OrderItem
-from orders.services import CheckoutService
+from orders.services import CheckoutService, OrderCancellationError, OrderCancellationService
 from payments.models import Payment
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from users.models import User
@@ -171,3 +172,133 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(first_order.pk, second_order.pk)
         self.assertEqual(Order.objects.filter(user=self.user).count(), 1)
         self.assertEqual(Payment.objects.filter(order=first_order).count(), 1)
+
+
+class OrderCancellationServiceTest(TestCase):
+    """Тесты доменной отмены заказа."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="cancel-buyer@example.com",
+            password="testpass123",
+            first_name="Петр",
+            last_name="Петров",
+            phone="+79995554433",
+            is_active=True,
+        )
+        self.category = Category.objects.create(name="Футболки")
+        self.product = Product.objects.create(name="Футболка ФК Локомотив", category=self.category)
+        self.image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("tshirt.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        # quantity=3 имитирует уже списанный остаток для заказа на 2 шт.
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="L",
+            color="Красный",
+            price=Decimal("2490.00"),
+            quantity=3,
+            image=self.image,
+        )
+        self.service = OrderCancellationService()
+
+    def _create_order_with_item(self, **order_overrides):
+        order_defaults = {
+            "number": f"ORD-CANCEL-{Order.objects.count() + 1}",
+            "user": self.user,
+            "recipient_name": "Петр Петров",
+            "email": self.user.email,
+            "phone": self.user.phone,
+            "status": Order.Status.PLACED,
+            "payment_status": Order.PaymentStatus.PENDING,
+            "fulfillment_status": Order.FulfillmentStatus.NEW,
+            "delivery_method": Order.DeliveryMethod.PICKUP,
+            "pickup_point_code": "main-store",
+            "subtotal_amount": Decimal("4980.00"),
+            "delivery_amount": Decimal("0.00"),
+            "discount_amount": Decimal("0.00"),
+            "total_amount": Decimal("4980.00"),
+            "confirmed_at": timezone.now(),
+        }
+        order_defaults.update(order_overrides)
+        order = Order.objects.create(**order_defaults)
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=2,
+            line_total=Decimal("4980.00"),
+        )
+        return order
+
+    def test_cancel_order_returns_stock_and_updates_statuses(self):
+        order = self._create_order_with_item()
+        second_variant = ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Белый",
+            price=Decimal("2490.00"),
+            quantity=4,
+            image=self.image,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=second_variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(second_variant.id),
+            size_snapshot=second_variant.size,
+            color_snapshot=second_variant.color,
+            unit_price=second_variant.price,
+            quantity=1,
+            line_total=Decimal("2490.00"),
+        )
+
+        self.service.cancel_order(order_id=order.id, user_id=self.user.id)
+
+        self.variant.refresh_from_db()
+        second_variant.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(second_variant.quantity, 5)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertIsNotNone(order.cancelled_at)
+
+    def test_repeated_cancellation_does_not_duplicate_stock_return(self):
+        order = self._create_order_with_item()
+
+        self.service.cancel_order(order_id=order.id, user_id=self.user.id)
+        self.service.cancel_order(order_id=order.id, user_id=self.user.id)
+
+        self.variant.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.items.count(), 1)
+
+    def test_cannot_cancel_order_in_non_cancellable_status(self):
+        order = self._create_order_with_item(
+            status=Order.Status.SHIPPED,
+            fulfillment_status=Order.FulfillmentStatus.SHIPPED,
+        )
+
+        with self.assertRaises(OrderCancellationError):
+            self.service.cancel_order(order_id=order.id, user_id=self.user.id)
+
+        self.variant.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(order.status, Order.Status.SHIPPED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.SHIPPED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+        self.assertIsNone(order.cancelled_at)

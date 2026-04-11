@@ -23,6 +23,10 @@ class CheckoutError(Exception):
     """Бизнес-ошибка оформления заказа."""
 
 
+class OrderCancellationError(Exception):
+    """Бизнес-ошибка отмены заказа."""
+
+
 class CheckoutService(ICheckoutService):
     """
     Сервис оформления заказа из корзины.
@@ -177,3 +181,99 @@ class CheckoutService(ICheckoutService):
                 if existing_payment and existing_payment.order.user_id == request.user.id:
                     return existing_payment.order
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
+
+
+class OrderCancellationService:
+    """Сервис безопасной отмены заказа с возвратом остатков."""
+
+    CANCELLABLE_ORDER_STATUSES = frozenset(
+        {
+            Order.Status.PLACED,
+            Order.Status.AWAITING_PAYMENT,
+        }
+    )
+    CANCELLABLE_FULFILLMENT_STATUSES = frozenset(
+        {
+            Order.FulfillmentStatus.NEW,
+            Order.FulfillmentStatus.RESERVED,
+        }
+    )
+    NON_CANCELLABLE_PAYMENT_STATUSES = frozenset(
+        {
+            Order.PaymentStatus.SUCCEEDED,
+            Order.PaymentStatus.REFUNDED,
+        }
+    )
+
+    def __init__(self, product_variant_repository: Optional[IProductVariantRepository] = None):
+        self.product_variant_repository = product_variant_repository or ProductVariantRepository()
+
+    @classmethod
+    def _ensure_order_can_be_cancelled(cls, order: Order) -> None:
+        if order.status not in cls.CANCELLABLE_ORDER_STATUSES:
+            raise OrderCancellationError(
+                f'Заказ в статусе "{order.get_status_display()}" нельзя отменить.'
+            )
+
+        if order.fulfillment_status not in cls.CANCELLABLE_FULFILLMENT_STATUSES:
+            raise OrderCancellationError(
+                f'Заказ в статусе исполнения "{order.get_fulfillment_status_display()}" нельзя отменить.'
+            )
+
+        if order.payment_status in cls.NON_CANCELLABLE_PAYMENT_STATUSES:
+            raise OrderCancellationError(
+                f'Заказ в статусе оплаты "{order.get_payment_status_display()}" нельзя отменить.'
+            )
+
+    def cancel_order(self, order_id: int, user_id: Optional[int] = None) -> Order:
+        """
+        Отменить заказ и вернуть остатки на склад.
+
+        Повторный вызов для уже отмененного заказа безопасен (идемпотентный no-op).
+        """
+        with transaction.atomic():
+            try:
+                order = Order.objects.select_for_update().get(pk=order_id)
+            except Order.DoesNotExist as exc:
+                raise OrderCancellationError("Заказ не найден.") from exc
+
+            if user_id is not None and order.user_id != user_id:
+                raise OrderCancellationError("Недостаточно прав для отмены этого заказа.")
+
+            if order.status == Order.Status.CANCELLED:
+                return order
+
+            self._ensure_order_can_be_cancelled(order)
+
+            order_items = list(order.items.select_related("product_variant").order_by("pk"))
+            variant_ids = sorted({item.product_variant_id for item in order_items if item.product_variant_id})
+            locked_variants = {
+                variant.id: variant for variant in self.product_variant_repository.get_variants_for_update(variant_ids)
+            }
+
+            for order_item in order_items:
+                if not order_item.product_variant_id:
+                    continue
+
+                variant = locked_variants.get(order_item.product_variant_id)
+                if variant is None:
+                    continue
+
+                variant.quantity += order_item.quantity
+                variant.save(update_fields=["quantity", "updated_at"])
+
+            order.status = Order.Status.CANCELLED
+            order.fulfillment_status = Order.FulfillmentStatus.CANCELLED
+            order.payment_status = Order.PaymentStatus.CANCELLED
+            order.cancelled_at = timezone.now()
+            order.save(
+                update_fields=[
+                    "status",
+                    "fulfillment_status",
+                    "payment_status",
+                    "cancelled_at",
+                    "updated_at",
+                ]
+            )
+
+            return order
