@@ -124,6 +124,7 @@ EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@matchday-store.com")
+SITE_URL = os.getenv("SITE_URL", "http://localhost:8000")
 
 STORE_PICKUP_LOCATION_CODE = os.getenv("STORE_PICKUP_LOCATION_CODE", "main-store")
 STORE_PICKUP_LOCATION_NAME = os.getenv("STORE_PICKUP_LOCATION_NAME", "Фирменный магазин ФК «Шинник»")

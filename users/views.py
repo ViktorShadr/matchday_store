@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
@@ -5,14 +6,16 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView
+from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 
 from config.celery import send_welcome_email
 from orders.models import Order
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
+from users.tasks import send_confirmation_email
 
 
 class CustomLoginView(CartContextMixin, LoginView):
@@ -64,9 +67,8 @@ class CustomRegistrationView(CartContextMixin, CreateView):
     """
     Представление регистрации нового пользователя.
 
-    Создает новый профиль пользователя, выполняет автоматический вход
-    и отправляет приветственное письмо. Также объединяет корзину анонимного
-    пользователя с корзиной нового пользователя.
+    Создает новый профиль пользователя, генерирует токен подтверждения email
+    и отправляет письмо с подтверждением. Пользователь не активен до подтверждения email.
     """
 
     template_name = "registration.html"
@@ -77,8 +79,8 @@ class CustomRegistrationView(CartContextMixin, CreateView):
         """
         Обрабатывает валидную форму регистрации.
 
-        Сохраняет пользователя, выполняет вход, отправляет письмо,
-        объединяет корзины.
+        Сохраняет пользователя, генерирует токен подтверждения,
+        отправляет письмо с подтверждением.
 
         Args:
             form: Форма регистрации
@@ -89,23 +91,23 @@ class CustomRegistrationView(CartContextMixin, CreateView):
         user = form.save()
         self.object = user
 
-        # Сохраняем старый session_key перед авторизацией
-        old_session_key = self.request.session.session_key
-        if old_session_key:
-            self.request.session["_pre_login_session_key"] = old_session_key
-            self.request.session.modified = True
+        # Генерируем токен подтверждения email
+        confirmation_token = user.generate_email_token()
 
-        login(self.request, user)
-
-        # Отправка приветственного письма через Celery с обработкой ошибок
+        # Отправка письма с подтверждением через Celery с обработкой ошибок
         try:
-            send_welcome_email.delay(user.email)
+            send_confirmation_email.delay(user.email, confirmation_token)
         except Exception as e:
             # Логируем ошибку, но не прерываем регистрацию
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
+            logger.error(f"Ошибка при отправке письма с подтверждением пользователю {user.email}: {e}")
+
+        messages.success(
+            self.request,
+            "Регистрация успешна! На ваш email отправлено письмо с ссылкой для подтверждения аккаунта."
+        )
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -267,3 +269,31 @@ class UserOrderListView(LoginRequiredMixin, CartContextMixin, ListView):
             .annotate(total_items=Coalesce(Sum("items__quantity"), 0))
             .order_by("-created_at")
         )
+
+
+class EmailConfirmationView(View):
+    """
+    Представление для подтверждения email пользователя.
+
+    Проверяет токен подтверждения и активирует аккаунт пользователя.
+    """
+
+    def get(self, request, token):
+        """
+        Обрабатывает GET запрос с токеном подтверждения.
+
+        Args:
+            request: HTTP запрос
+            token (str): Токен подтверждения email
+
+        Returns:
+            HttpResponse: Редирект на страницу входа с сообщением об успехе или ошибке
+        """
+        try:
+            user = User.objects.get(email_token=token)
+            user.confirm_email()
+            messages.success(request, "Ваш email успешно подтвержден! Теперь вы можете войти в аккаунт.")
+            return redirect("users:login")
+        except User.DoesNotExist:
+            messages.error(request, "Недействительная ссылка подтверждения или срок действия ссылки истек.")
+            return redirect("users:login")

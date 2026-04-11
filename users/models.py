@@ -1,3 +1,4 @@
+import secrets
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
@@ -71,9 +72,11 @@ class User(AbstractUser):
     phone = models.CharField(max_length=15, blank=True, null=True)
     city = models.CharField(max_length=100, blank=True, null=True)
     avatar = models.ImageField(upload_to="avatars", blank=True, null=True)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
+    is_email_confirmed = models.BooleanField(default=False)
+    email_token = models.CharField(max_length=64, blank=True, null=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -83,6 +86,19 @@ class User(AbstractUser):
     def __str__(self):
         """Возвращает строковое представление объекта."""
         return self.email
+
+    def generate_email_token(self):
+        """Генерирует токен для подтверждения email."""
+        self.email_token = secrets.token_urlsafe(32)
+        self.save()
+        return self.email_token
+
+    def confirm_email(self):
+        """Подтверждает email пользователя."""
+        self.is_email_confirmed = True
+        self.is_active = True
+        self.email_token = None
+        self.save()
 
     class Meta:
         """Мета-настройки класса."""
