@@ -42,13 +42,7 @@ class ProductVariantForm(forms.ModelForm):
         self.fields["image"].queryset = ProductImage.objects.none()
         if self.product:
             self.fields["image"].queryset = self.product.images.order_by("-is_primary", "-created_at")
-        self.fields["image"].empty_label = "Выберите изображение товара"
-
-    def clean(self):
-        cleaned_data = super().clean()
-        if self.product and not self.fields["image"].queryset.exists():
-            raise forms.ValidationError("Сначала добавьте хотя бы одно изображение товара.")
-        return cleaned_data
+        self.fields["image"].empty_label = "Без изображения"
 
 
 class ProductImageForm(forms.ModelForm):

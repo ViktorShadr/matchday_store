@@ -27,6 +27,25 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
     template_name = "orders/checkout.html"
     form_class = CheckoutForm
     checkout_token_session_key = "_checkout_token"
+    checkout_processed_session_key = "_checkout_processed"
+
+    def _get_processed_order_for_token(self, request, submitted_token: str):
+        """Вернуть уже созданный заказ для повторного submit с тем же токеном."""
+        if not submitted_token:
+            return None
+
+        processed_checkout = request.session.get(self.checkout_processed_session_key) or {}
+        if processed_checkout.get("token") != submitted_token:
+            return None
+
+        order_id = processed_checkout.get("order_id")
+        if not order_id:
+            return None
+
+        try:
+            return Order.objects.get(pk=order_id, user=request.user)
+        except Order.DoesNotExist:
+            return None
 
     def dispatch(self, request, *args, **kwargs):
         """Не допускать оформление с пустой корзиной."""
@@ -35,6 +54,12 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
 
         cart_summary = cart_service.get_cart_summary(request)
         if not cart_summary["items"]:
+            if request.method == "POST":
+                submitted_token = (request.POST.get("checkout_token") or "").strip()
+                processed_order = self._get_processed_order_for_token(request, submitted_token)
+                if processed_order:
+                    return redirect(reverse("orders:checkout_success", kwargs={"pk": processed_order.pk}))
+
             messages.warning(request, "Корзина пуста. Добавьте товары перед оформлением заказа.")
             return redirect("main_page:cart")
         self.cart_summary = cart_summary
@@ -76,6 +101,10 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
         session_token = self._get_or_create_checkout_token()
         submitted_token = (self.request.POST.get("checkout_token") or session_token).strip()
 
+        processed_order = self._get_processed_order_for_token(self.request, submitted_token)
+        if processed_order:
+            return redirect(reverse("orders:checkout_success", kwargs={"pk": processed_order.pk}))
+
         if submitted_token != session_token:
             form.add_error(None, "Сессия оформления устарела. Обновите страницу и попробуйте снова.")
             return self.form_invalid(form)
@@ -88,6 +117,10 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 
+        self.request.session[self.checkout_processed_session_key] = {
+            "token": submitted_token,
+            "order_id": order.pk,
+        }
         self.request.session.pop(self.checkout_token_session_key, None)
         self.request.session.modified = True
         return redirect(reverse("orders:checkout_success", kwargs={"pk": order.pk}))

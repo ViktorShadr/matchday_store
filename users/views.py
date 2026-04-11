@@ -1,5 +1,6 @@
+import logging
+
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
@@ -16,6 +17,8 @@ from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, Pr
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
 from users.tasks import send_confirmation_email
+
+logger = logging.getLogger(__name__)
 
 
 class CustomLoginView(CartContextMixin, LoginView):
@@ -67,8 +70,8 @@ class CustomRegistrationView(CartContextMixin, CreateView):
     """
     Представление регистрации нового пользователя.
 
-    Создает новый профиль пользователя, генерирует токен подтверждения email
-    и отправляет письмо с подтверждением. Пользователь не активен до подтверждения email.
+    Создает нового пользователя, генерирует токен подтверждения email
+    и отправляет письмо с подтверждением.
     """
 
     template_name = "registration.html"
@@ -79,8 +82,8 @@ class CustomRegistrationView(CartContextMixin, CreateView):
         """
         Обрабатывает валидную форму регистрации.
 
-        Сохраняет пользователя, генерирует токен подтверждения,
-        отправляет письмо с подтверждением.
+        Сохраняет пользователя, генерирует токен подтверждения
+        и отправляет письмо с подтверждением.
 
         Args:
             form: Форма регистрации
@@ -98,10 +101,6 @@ class CustomRegistrationView(CartContextMixin, CreateView):
         try:
             send_confirmation_email.delay(user.email, confirmation_token)
         except Exception as e:
-            # Логируем ошибку, но не прерываем регистрацию
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.error(f"Ошибка при отправке письма с подтверждением пользователю {user.email}: {e}")
 
         messages.success(
@@ -292,6 +291,10 @@ class EmailConfirmationView(View):
         try:
             user = User.objects.get(email_token=token)
             user.confirm_email()
+            try:
+                send_welcome_email.delay(user.email)
+            except Exception as e:
+                logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
             messages.success(request, "Ваш email успешно подтвержден! Теперь вы можете войти в аккаунт.")
             return redirect("users:login")
         except User.DoesNotExist:

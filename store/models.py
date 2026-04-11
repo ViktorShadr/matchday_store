@@ -91,7 +91,7 @@ class ProductVariant(models.Model):
         color (str): Цвет варианта
         price (Decimal): Цена варианта
         quantity (int): Количество на складе
-        image (ProductImage): Основное изображение варианта
+        image (ProductImage): Основное изображение варианта (необязательно)
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
     """
@@ -111,8 +111,10 @@ class ProductVariant(models.Model):
     quantity = models.PositiveIntegerField(default=0)
     image = models.ForeignKey(
         "ProductImage",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="images",
+        null=True,
+        blank=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

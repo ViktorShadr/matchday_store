@@ -24,6 +24,7 @@ class CheckoutFlowTest(TestCase):
             first_name="Иван",
             last_name="Иванов",
             phone="+79990001122",
+            is_active=True,
         )
         self.category = Category.objects.create(name="Шарфы")
         self.product = Product.objects.create(name="Шарф ФК Шинник", category=self.category)
@@ -97,6 +98,38 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(payment.provider, Payment.Provider.MANUAL)
         self.assertEqual(payment.status, Payment.Status.PENDING)
         self.assertEqual(payment.amount, Decimal("3980.00"))
+
+    def test_checkout_repeat_submit_with_same_token_redirects_to_existing_order(self):
+        """Повторный POST с тем же checkout_token не должен создавать новый заказ."""
+        self.client.login(email="buyer@example.com", password="testpass123")
+        checkout_url = reverse("orders:checkout")
+
+        page_response = self.client.get(checkout_url)
+        self.assertEqual(page_response.status_code, 200)
+        checkout_token = self.client.session.get("_checkout_token")
+        self.assertTrue(checkout_token)
+
+        payload = {
+            "recipient_name": "Иван Иванов",
+            "email": "buyer@example.com",
+            "phone": "+79990001122",
+            "customer_comment": "",
+            "checkout_token": checkout_token,
+        }
+
+        first_response = self.client.post(checkout_url, data=payload)
+        order = Order.objects.get(user=self.user)
+        success_url = reverse("orders:checkout_success", kwargs={"pk": order.pk})
+        self.assertRedirects(first_response, success_url)
+
+        second_response = self.client.post(checkout_url, data=payload)
+        self.assertRedirects(second_response, success_url)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(Order.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(Payment.objects.filter(order=order).count(), 1)
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.cart.items.count(), 0)
 
     def test_checkout_fails_when_stock_is_insufficient(self):
         """Если товара не хватает, заказ не должен создаваться."""

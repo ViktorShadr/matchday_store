@@ -81,6 +81,14 @@ class CheckoutService(ICheckoutService):
                 )
 
                 if not cart_items:
+                    if checkout_token:
+                        # Повторно проверяем idempotency после захвата блокировок:
+                        # в параллельном submit первый запрос мог уже создать заказ и очистить корзину.
+                        existing_payment = self.payment_repository.get_payment_by_idempotency_key(
+                            payment_idempotency_key
+                        )
+                        if existing_payment and existing_payment.order.user_id == request.user.id:
+                            return existing_payment.order
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
                 locked_variant_ids = [item.product_variant_id for item in cart_items]

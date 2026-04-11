@@ -279,9 +279,9 @@ class ProductUpdateViewTest(TestCase):
     def setUp(self):
         """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
-        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123")
+        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123", is_active=True)
         self.staff_user = User.objects.create_user(
-            email="staffuser@example.com", password="staffpass123", is_staff=True
+            email="staffuser@example.com", password="staffpass123", is_staff=True, is_active=True
         )
         # Создаем группу "Модераторы" и добавляем staff пользователя
         from django.contrib.auth.models import Group
@@ -333,9 +333,9 @@ class ModeratorDashboardAccessTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user(email="user@example.com", password="testpass123")
+        self.user = User.objects.create_user(email="user@example.com", password="testpass123", is_active=True)
         self.superuser = User.objects.create_superuser(email="root@example.com", password="rootpass123")
-        self.moderator = User.objects.create_user(email="mod@example.com", password="modpass123")
+        self.moderator = User.objects.create_user(email="mod@example.com", password="modpass123", is_active=True)
         self.moderator.groups.add(Group.objects.create(name="moderators"))
 
     def test_dashboard_requires_login(self):
@@ -371,7 +371,7 @@ class WarehouseStockManagementTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.moderator = User.objects.create_user(email="mod2@example.com", password="modpass123")
+        self.moderator = User.objects.create_user(email="mod2@example.com", password="modpass123", is_active=True)
         self.moderator.groups.add(Group.objects.create(name="Модераторы"))
         self.category = Category.objects.create(name="Шарфы")
         self.product = Product.objects.create(name="Шарф ФК Шинник", category=self.category)
@@ -417,9 +417,9 @@ class ProductDeleteViewTest(TestCase):
     def setUp(self):
         """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
-        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123")
+        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123", is_active=True)
         self.staff_user = User.objects.create_user(
-            email="staffuser@example.com", password="staffpass123", is_staff=True
+            email="staffuser@example.com", password="staffpass123", is_staff=True, is_active=True
         )
         # Создаем группу "Модераторы" и добавляем staff пользователя
         from django.contrib.auth.models import Group
@@ -511,12 +511,12 @@ class RemoveFromCartViewTest(TestCase):
         self.assertJSONEqual(response.content, {"success": False, "error": "Товар не найден в корзине"})
 
 
-class WarehouseImageDeleteProtectionTest(TestCase):
-    """Тесты защиты от удаления изображения, привязанного к варианту."""
+class WarehouseImageDeleteDetachVariantTest(TestCase):
+    """Тесты безопасного удаления изображения, привязанного к варианту."""
 
     def setUp(self):
         self.client = Client()
-        self.moderator = User.objects.create_user(email="mod-image@example.com", password="modpass123")
+        self.moderator = User.objects.create_user(email="mod-image@example.com", password="modpass123", is_active=True)
         self.moderator.groups.add(Group.objects.create(name="Модераторы"))
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(name="Тестовая футболка", category=self.category)
@@ -534,11 +534,13 @@ class WarehouseImageDeleteProtectionTest(TestCase):
             image=self.image,
         )
 
-    def test_cannot_delete_image_used_by_variant(self):
+    def test_delete_image_sets_variant_image_to_null(self):
         self.client.login(email="mod-image@example.com", password="modpass123")
 
         response = self.client.post(reverse("store:warehouse_image_delete", kwargs={"pk": self.image.pk}))
 
         self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
-        self.assertTrue(ProductImage.objects.filter(pk=self.image.pk).exists())
+        self.assertFalse(ProductImage.objects.filter(pk=self.image.pk).exists())
+        self.variant.refresh_from_db()
+        self.assertIsNone(self.variant.image)
         self.assertTrue(ProductVariant.objects.filter(pk=self.variant.pk).exists())

@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import patch, ANY
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
@@ -125,8 +125,13 @@ class UserViewsTest(TestCase):
     def setUp(self):
         """Подготавливает тестовые данные перед выполнением тестов."""
         self.client = Client()
-        self.user = User.objects.create_user(email="user@example.com", password="userpass123")
-        self.staff_user = User.objects.create_user(email="staff@example.com", password="staffpass123", is_staff=True)
+        self.user = User.objects.create_user(email="user@example.com", password="userpass123", is_active=True)
+        self.staff_user = User.objects.create_user(
+            email="staff@example.com",
+            password="staffpass123",
+            is_staff=True,
+            is_active=True,
+        )
         self.category = Category.objects.create(name="Атрибутика")
         self.product = Product.objects.create(name="Шарф", category=self.category)
         self.image = ProductImage.objects.create(product=self.product, image="product_images/test.jpg")
@@ -140,7 +145,8 @@ class UserViewsTest(TestCase):
         )
 
     @patch("users.views.send_welcome_email")
-    def test_registration_view_success(self, mock_email):
+    @patch("users.views.send_confirmation_email")
+    def test_registration_view_success(self, mock_confirmation_email, mock_welcome_email):
         """Проверяет сценарий 'registration view success'."""
         form_data = {"email": "newuser@example.com", "password1": "complexpass123", "password2": "complexpass123"}
         response = self.client.post(reverse("users:registration"), data=form_data)
@@ -148,8 +154,11 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, reverse("users:login"))
 
-        self.assertTrue(User.objects.filter(email="newuser@example.com").exists())
-        mock_email.delay.assert_called_once_with("newuser@example.com")
+        new_user = User.objects.get(email="newuser@example.com")
+        self.assertFalse(new_user.is_active)
+        self.assertIsNotNone(new_user.email_token)
+        mock_confirmation_email.delay.assert_called_once_with("newuser@example.com", ANY)
+        mock_welcome_email.delay.assert_not_called()
 
     def test_registration_view_failure(self):
         """Проверяет сценарий 'registration view failure'."""
@@ -327,25 +336,40 @@ class UserIntegrationTest(TestCase):
         self.client = Client()
 
     @patch("users.views.send_welcome_email")
-    def test_full_user_flow(self, mock_email):
+    @patch("users.views.send_confirmation_email")
+    def test_full_user_flow(self, mock_confirmation_email, mock_welcome_email):
         # 1. Register new user
         """Проверяет сценарий 'full user flow'."""
         form_data = {"email": "flowtest@example.com", "password1": "complexpass123", "password2": "complexpass123"}
         response = self.client.post(reverse("users:registration"), data=form_data)
         self.assertEqual(response.status_code, 302)
 
-        # 2. Login
+        user = User.objects.get(email="flowtest@example.com")
+        self.assertFalse(user.is_active)
+        self.assertIsNotNone(user.email_token)
+        mock_confirmation_email.delay.assert_called_once_with("flowtest@example.com", ANY)
+        mock_welcome_email.delay.assert_not_called()
+
+        # 2. Confirm email
+        response = self.client.get(reverse("users:confirm_email", kwargs={"token": user.email_token}))
+        self.assertEqual(response.status_code, 302)
+        mock_welcome_email.delay.assert_called_once_with("flowtest@example.com")
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        self.assertTrue(user.is_email_confirmed)
+
+        # 3. Login
         response = self.client.post(
             reverse("users:login"), {"username": "flowtest@example.com", "password": "complexpass123"}
         )
         self.assertEqual(response.status_code, 302)
 
-        # 3. View profile
-        user = User.objects.get(email="flowtest@example.com")
+        # 4. View profile
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": user.pk}))
         self.assertEqual(response.status_code, 200)
 
-        # 4. Update profile
+        # 5. Update profile
         form_data = {"first_name": "Flow", "last_name": "Test"}
         response = self.client.post(reverse("users:profile_edit"), data=form_data)
         self.assertEqual(response.status_code, 302)
@@ -354,7 +378,7 @@ class UserIntegrationTest(TestCase):
         self.assertEqual(user.first_name, "Flow")
         self.assertEqual(user.last_name, "Test")
 
-        # 5. Logout
+        # 6. Logout
         response = self.client.post(reverse("users:logout"))
         self.assertEqual(response.status_code, 302)
 
