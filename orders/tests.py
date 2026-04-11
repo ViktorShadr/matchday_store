@@ -1,10 +1,12 @@
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 
 from orders.models import Order, OrderItem
+from orders.services import CheckoutService
 from payments.models import Payment
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from users.models import User
@@ -15,6 +17,7 @@ class CheckoutFlowTest(TestCase):
 
     def setUp(self):
         """Подготовить пользователя, товар и корзину."""
+        self.factory = RequestFactory()
         self.user = User.objects.create_user(
             email="buyer@example.com",
             password="testpass123",
@@ -39,6 +42,14 @@ class CheckoutFlowTest(TestCase):
         )
         self.cart = Cart.objects.create(user=self.user)
         self.cart_item = CartItem.objects.create(cart=self.cart, product_variant=self.variant, quantity=2)
+
+    def _build_service_request(self):
+        request = self.factory.post(reverse("orders:checkout"))
+        request.user = self.user
+        session_middleware = SessionMiddleware(lambda req: None)
+        session_middleware.process_request(request)
+        request.session.save()
+        return request
 
     def test_checkout_requires_authentication(self):
         """Гость должен быть перенаправлен на логин."""
@@ -109,3 +120,21 @@ class CheckoutFlowTest(TestCase):
         self.assertFalse(Order.objects.filter(user=self.user).exists())
         self.assertEqual(self.variant.quantity, 1)
         self.assertEqual(self.cart.items.count(), 1)
+
+    def test_checkout_service_is_idempotent_with_same_token(self):
+        """Повторный checkout с тем же токеном должен вернуть уже созданный заказ."""
+        service = CheckoutService()
+        request = self._build_service_request()
+        cleaned_data = {
+            "recipient_name": "Иван Иванов",
+            "email": "buyer@example.com",
+            "phone": "+79990001122",
+            "customer_comment": "",
+        }
+
+        first_order = service.create_order_from_cart(request, cleaned_data, checkout_token="same-token")
+        second_order = service.create_order_from_cart(request, cleaned_data, checkout_token="same-token")
+
+        self.assertEqual(first_order.pk, second_order.pk)
+        self.assertEqual(Order.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(Payment.objects.filter(order=first_order).count(), 1)

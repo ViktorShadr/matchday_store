@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
@@ -261,8 +262,15 @@ class WarehouseImageDeleteView(ModeratorRequiredMixin, DeleteView):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Удалить изображение"
         context["cancel_url"] = reverse("store:warehouse_product_manage", kwargs={"pk": self.object.product.pk})
-        context["warning_text"] = "Если изображение используется в вариантах товара, удаление может затронуть их."
+        context["warning_text"] = "Изображение нельзя удалить, пока оно используется в вариантах товара."
         return context
 
     def get_success_url(self):
         return reverse("store:warehouse_product_manage", kwargs={"pk": self.object.product.pk})
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if ProductVariant.objects.filter(image=self.object).exists():
+            messages.error(request, "Нельзя удалить изображение: оно используется в вариантах товара.")
+            return HttpResponseRedirect(self.get_success_url())
+        return super().post(request, *args, **kwargs)

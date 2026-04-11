@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.conf import settings
@@ -24,6 +26,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
 
     template_name = "orders/checkout.html"
     form_class = CheckoutForm
+    checkout_token_session_key = "_checkout_token"
 
     def dispatch(self, request, *args, **kwargs):
         """Не допускать оформление с пустой корзиной."""
@@ -50,6 +53,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
         """Сформировать контекст страницы оформления."""
         context = super().get_context_data(**kwargs)
         context.update(self.cart_summary)
+        context["checkout_token"] = self._get_or_create_checkout_token()
         context["pickup_location"] = {
             "code": settings.STORE_PICKUP_LOCATION_CODE,
             "name": settings.STORE_PICKUP_LOCATION_NAME,
@@ -59,14 +63,33 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
         }
         return context
 
+    def _get_or_create_checkout_token(self):
+        token = self.request.session.get(self.checkout_token_session_key)
+        if not token:
+            token = uuid4().hex
+            self.request.session[self.checkout_token_session_key] = token
+            self.request.session.modified = True
+        return token
+
     def form_valid(self, form):
         """Создать заказ из корзины."""
+        session_token = self._get_or_create_checkout_token()
+        submitted_token = (self.request.POST.get("checkout_token") or session_token).strip()
+
+        if submitted_token != session_token:
+            form.add_error(None, "Сессия оформления устарела. Обновите страницу и попробуйте снова.")
+            return self.form_invalid(form)
+
         try:
-            order = checkout_service.create_order_from_cart(self.request, form.cleaned_data)
+            order = checkout_service.create_order_from_cart(
+                self.request, form.cleaned_data, checkout_token=submitted_token
+            )
         except CheckoutError as exc:
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 
+        self.request.session.pop(self.checkout_token_session_key, None)
+        self.request.session.modified = True
         return redirect(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
 
 

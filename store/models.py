@@ -111,7 +111,7 @@ class ProductVariant(models.Model):
     quantity = models.PositiveIntegerField(default=0)
     image = models.ForeignKey(
         "ProductImage",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="images",
     )
     created_at = models.DateTimeField(auto_now_add=True)

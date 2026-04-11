@@ -509,3 +509,36 @@ class RemoveFromCartViewTest(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertJSONEqual(response.content, {"success": False, "error": "Товар не найден в корзине"})
+
+
+class WarehouseImageDeleteProtectionTest(TestCase):
+    """Тесты защиты от удаления изображения, привязанного к варианту."""
+
+    def setUp(self):
+        self.client = Client()
+        self.moderator = User.objects.create_user(email="mod-image@example.com", password="modpass123")
+        self.moderator.groups.add(Group.objects.create(name="Модераторы"))
+        self.category = Category.objects.create(name="Футболки")
+        self.product = Product.objects.create(name="Тестовая футболка", category=self.category)
+        self.image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("image.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="L",
+            color="Красный",
+            price=Decimal("2999.99"),
+            quantity=5,
+            image=self.image,
+        )
+
+    def test_cannot_delete_image_used_by_variant(self):
+        self.client.login(email="mod-image@example.com", password="modpass123")
+
+        response = self.client.post(reverse("store:warehouse_image_delete", kwargs={"pk": self.image.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.assertTrue(ProductImage.objects.filter(pk=self.image.pk).exists())
+        self.assertTrue(ProductVariant.objects.filter(pk=self.variant.pk).exists())

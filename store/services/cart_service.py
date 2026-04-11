@@ -89,13 +89,23 @@ class CartService:
                 return
 
             # Переносим товары из сессионной корзины
-            for item in session_cart.items.all():
+            for item in session_cart.items.select_related("product_variant").all():
+                available_quantity = item.product_variant.quantity
+                if available_quantity < 1:
+                    continue
+
                 cart_item, created = self.cart_repository.get_or_create_cart_item(
                     user_cart, item.product_variant, {"quantity": item.quantity}
                 )
-                if not created:
-                    cart_item.quantity += item.quantity
+
+                if created and cart_item.quantity > available_quantity:
+                    cart_item.quantity = available_quantity
                     cart_item.save()
+                elif not created:
+                    new_quantity = min(cart_item.quantity + item.quantity, available_quantity)
+                    if cart_item.quantity != new_quantity:
+                        cart_item.quantity = new_quantity
+                        cart_item.save()
                     logger.info(
                         f"Merged cart item: user={user_cart.user.id}, "
                         f"variant={item.product_variant.id}, qty={cart_item.quantity}"
@@ -352,13 +362,22 @@ class CartService:
             user_cart = self.cart_repository.get_or_create_cart_by_user(user)
 
             # Переносим товары из сессионной корзины в корзину пользователя
-            for item in session_cart.items.all():
+            for item in session_cart.items.select_related("product_variant").all():
+                available_quantity = item.product_variant.quantity
+                if available_quantity < 1:
+                    continue
+
                 cart_item, created = self.cart_repository.get_or_create_cart_item(
                     user_cart, item.product_variant, {"quantity": item.quantity}
                 )
-                if not created:
-                    cart_item.quantity += item.quantity
+                if created and cart_item.quantity > available_quantity:
+                    cart_item.quantity = available_quantity
                     cart_item.save()
+                elif not created:
+                    new_quantity = min(cart_item.quantity + item.quantity, available_quantity)
+                    if cart_item.quantity != new_quantity:
+                        cart_item.quantity = new_quantity
+                        cart_item.save()
 
             # Удаляем сессионную корзину
             self.cart_repository.delete_cart(session_cart)
