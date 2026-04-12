@@ -225,6 +225,18 @@ class OrderCancellationService:
                 f'Заказ в статусе оплаты "{order.get_payment_status_display()}" нельзя отменить.'
             )
 
+    @classmethod
+    def can_be_cancelled(cls, order: Order) -> bool:
+        """Проверить, можно ли отменить заказ согласно доменным правилам."""
+        if order.status == Order.Status.CANCELLED:
+            return False
+
+        try:
+            cls._ensure_order_can_be_cancelled(order)
+        except OrderCancellationError:
+            return False
+        return True
+
     def cancel_order(self, order_id: int, user_id: Optional[int] = None) -> Order:
         """
         Отменить заказ и вернуть остатки на склад.

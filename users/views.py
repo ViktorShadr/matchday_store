@@ -13,6 +13,7 @@ from django.views.generic import CreateView, DetailView, FormView, ListView, Upd
 
 from config.celery import send_welcome_email
 from orders.models import Order
+from orders.services import OrderCancellationService, OrderCancellationError
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
@@ -115,7 +116,8 @@ class ProfileDetailView(LoginRequiredMixin, DetailView):
     Представление детальной страницы профиля пользователя.
 
     Показывает полную информацию о профиле пользователя.
-    Пользователь может видеть только свой профиль, если он не администратор.
+    Пользователь может видеть только свой профиль.
+    Полный доступ к чужим профилям есть только у суперпользователя.
     """
 
     model = User
@@ -136,16 +138,16 @@ class ProfileDetailView(LoginRequiredMixin, DetailView):
             PermissionDenied: Если пользователь пытается посмотреть чужой профиль
         """
         obj = super().get_object(queryset)
-        if obj.pk != self.request.user.pk and not self.request.user.is_staff:
+        if obj.pk != self.request.user.pk and not self.request.user.is_superuser:
             raise PermissionDenied("Можно просматривать только свой профиль")
         return obj
 
 
 class ProfileList(LoginRequiredMixin, UserPassesTestMixin, ListView):
     """
-    Представление списка всех пользователей (только для персонала).
+    Представление списка всех пользователей (только для суперпользователя).
 
-    Отображает полный список пользователей. Доступно только сотрудникам.
+    Отображает полный список пользователей.
     """
 
     model = User
@@ -158,9 +160,9 @@ class ProfileList(LoginRequiredMixin, UserPassesTestMixin, ListView):
         Проверяет доступ пользователя к представлению.
 
         Returns:
-            bool: True если пользователь - сотрудник, False иначе
+            bool: True если пользователь - суперпользователь, False иначе
         """
-        return self.request.user.is_staff
+        return self.request.user.is_superuser
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):
@@ -216,6 +218,7 @@ class ProfileDeleteView(LoginRequiredMixin, FormView):
     Представление удаления профиля пользователя.
 
     Требует подтверждение пароля для удаления аккаунта.
+    Удаление запрещено, если у пользователя уже есть заказы.
     """
 
     form_class = ProfileDeleteConfirmForm
@@ -239,6 +242,10 @@ class ProfileDeleteView(LoginRequiredMixin, FormView):
 
         if not user.check_password(password):
             form.add_error("password", "Неверный пароль")
+            return self.form_invalid(form)
+
+        if user.orders.exists():
+            form.add_error(None, "Нельзя удалить профиль: у вас есть оформленные заказы.")
             return self.form_invalid(form)
 
         user.delete()
@@ -268,6 +275,28 @@ class UserOrderListView(LoginRequiredMixin, CartContextMixin, ListView):
             .annotate(total_items=Coalesce(Sum("items__quantity"), 0))
             .order_by("-created_at")
         )
+
+    def get_context_data(self, **kwargs):
+        """Добавить признак доступности отмены заказа в список."""
+        context = super().get_context_data(**kwargs)
+        for order in context["orders"]:
+            order.can_cancel = OrderCancellationService.can_be_cancelled(order)
+        return context
+
+
+class UserOrderCancelView(LoginRequiredMixin, View):
+    """Отмена заказа текущего пользователя через доменный сервис."""
+
+    cancellation_service = OrderCancellationService()
+
+    def post(self, request, pk):
+        try:
+            self.cancellation_service.cancel_order(order_id=pk, user_id=request.user.id)
+        except OrderCancellationError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Заказ успешно отменен.")
+        return redirect("users:order_list")
 
 #TODO: Добавить детализацию заказа
 class UserOrderDetailView(LoginRequiredMixin, CartContextMixin, DetailView):

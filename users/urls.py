@@ -9,6 +9,7 @@ from users.views import (
     ProfileDeleteView,
     ProfileList,
     UserOrderListView,
+    UserOrderCancelView,
     EmailConfirmationView,
 )
 
@@ -23,5 +24,6 @@ urlpatterns = [
     path("profile/edit/", ProfileUpdateView.as_view(), name="profile_edit"),
     path("profile/delete/", ProfileDeleteView.as_view(), name="profile_delete"),
     path("orders/", UserOrderListView.as_view(), name="order_list"),
+    path("orders/<int:pk>/cancel/", UserOrderCancelView.as_view(), name="order_cancel"),
     path("profile_list/", ProfileList.as_view(), name="profile_list"),
 ]

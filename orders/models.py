@@ -128,7 +128,7 @@ class Order(models.Model):
         PVZ = "pvz", "Пункт выдачи"
 
     number = models.CharField(max_length=32, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders")
     recipient_name = models.CharField(max_length=255, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=32)

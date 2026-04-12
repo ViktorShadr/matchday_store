@@ -600,3 +600,50 @@ class WarehouseImageDeleteDetachVariantTest(TestCase):
         self.variant.refresh_from_db()
         self.assertIsNone(self.variant.image)
         self.assertTrue(ProductVariant.objects.filter(pk=self.variant.pk).exists())
+
+
+class CartMergeOnLoginSignalTest(TestCase):
+    """Тесты объединения корзин через login signal."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            email="merge-user@example.com",
+            password="mergepass123",
+            is_active=True,
+        )
+        category = Category.objects.create(name="Мерч")
+        product = Product.objects.create(name="Шарф тестовый", category=category)
+        image = ProductImage.objects.create(
+            product=product,
+            image=SimpleUploadedFile("merge.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("1200.00"),
+            quantity=5,
+            image=image,
+        )
+
+    def test_login_signal_merges_session_cart_into_user_cart(self):
+        """При логине сессионная корзина должна сливаться в корзину пользователя."""
+        session = self.client.session
+        session.save()
+        session_cart = Cart.objects.create(session_key=session.session_key)
+        CartItem.objects.create(cart=session_cart, product_variant=self.variant, quantity=4)
+
+        user_cart = Cart.objects.create(user=self.user)
+        CartItem.objects.create(cart=user_cart, product_variant=self.variant, quantity=2)
+
+        response = self.client.post(
+            reverse("users:login"),
+            data={"username": "merge-user@example.com", "password": "mergepass123"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Cart.objects.filter(pk=session_cart.pk).exists())
+        merged_item = CartItem.objects.get(cart=user_cart, product_variant=self.variant)
+        self.assertEqual(merged_item.quantity, 5)

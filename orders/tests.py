@@ -1,8 +1,10 @@
 from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.db import close_old_connections
 from django.urls import reverse
 from django.utils import timezone
 
@@ -347,3 +349,141 @@ class OrderCancellationServiceTest(TestCase):
         self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.SHIPPED)
         self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
         self.assertIsNone(order.cancelled_at)
+
+
+class OrderConcurrencyTest(TransactionTestCase):
+    """Тесты конкурентных сценариев checkout/cancel."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(
+            email="parallel@example.com",
+            password="testpass123",
+            first_name="Иван",
+            last_name="Параллельный",
+            phone="+79990000001",
+            is_active=True,
+        )
+        category = Category.objects.create(name="Параллельные тесты")
+        product = Product.objects.create(name="Параллельный товар", category=category)
+        image = ProductImage.objects.create(
+            product=product,
+            image=SimpleUploadedFile("parallel.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=product,
+            size="L",
+            color="Синий",
+            price=Decimal("2500.00"),
+            quantity=5,
+            image=image,
+        )
+        cart = Cart.objects.create(user=self.user)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=2)
+
+        self.cleaned_data = {
+            "recipient_name": "Иван Параллельный",
+            "email": self.user.email,
+            "phone": "+79990000001",
+            "customer_comment": "",
+        }
+
+    def _build_checkout_request(self):
+        request = self.factory.post(reverse("orders:checkout"))
+        request.user = self.user
+        session_middleware = SessionMiddleware(lambda req: None)
+        session_middleware.process_request(request)
+        request.session.save()
+        return request
+
+    def _run_checkout_once(self, checkout_token: str):
+        close_old_connections()
+        try:
+            service = CheckoutService()
+            request = self._build_checkout_request()
+            order = service.create_order_from_cart(request, self.cleaned_data, checkout_token=checkout_token)
+            return ("ok", order.pk)
+        except Exception as exc:
+            return ("error", str(exc))
+        finally:
+            close_old_connections()
+
+    def _create_cancellable_order(self):
+        order = Order.objects.create(
+            number=f"ORD-CONC-{Order.objects.count() + 1}",
+            user=self.user,
+            recipient_name="Иван Параллельный",
+            email=self.user.email,
+            phone="+79990000001",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("5000.00"),
+            total_amount=Decimal("5000.00"),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.variant.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=2,
+            line_total=Decimal("5000.00"),
+        )
+        return order
+
+    def _run_cancel_once(self, order_id: int):
+        close_old_connections()
+        try:
+            service = OrderCancellationService()
+            service.cancel_order(order_id=order_id, user_id=self.user.id)
+            return "ok"
+        except Exception as exc:
+            return f"error:{exc}"
+        finally:
+            close_old_connections()
+
+    def test_parallel_checkout_with_same_token_creates_single_order(self):
+        """Два параллельных checkout с одним токеном должны вернуть один заказ."""
+        token = "parallel-checkout-token"
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _: self._run_checkout_once(token), range(2)))
+
+        statuses = [status for status, _ in results]
+        self.assertEqual(statuses.count("error"), 0, results)
+
+        order_ids = {order_id for status, order_id in results if status == "ok"}
+        self.assertEqual(len(order_ids), 1)
+        order = Order.objects.get(pk=order_ids.pop())
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(Order.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(Payment.objects.filter(order=order).count(), 1)
+        self.assertEqual(CartItem.objects.filter(cart__user=self.user).count(), 0)
+
+    def test_parallel_cancellation_returns_stock_only_once(self):
+        """Параллельная отмена одного заказа должна быть идемпотентной."""
+        # Имитируем заказ, который уже списал 2 единицы товара.
+        self.variant.quantity = 3
+        self.variant.save(update_fields=["quantity"])
+        order = self._create_cancellable_order()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _: self._run_cancel_once(order.id), range(2)))
+
+        self.assertTrue(all(result == "ok" for result in results), results)
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(self.variant.quantity, 5)

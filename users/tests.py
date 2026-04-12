@@ -1,6 +1,7 @@
 from unittest.mock import patch, ANY
 
 from django.contrib.auth import get_user_model
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase, Client
 from django.urls import reverse
 
@@ -132,6 +133,10 @@ class UserViewsTest(TestCase):
             is_staff=True,
             is_active=True,
         )
+        self.superuser = User.objects.create_superuser(
+            email="admin@example.com",
+            password="adminpass123",
+        )
         self.category = Category.objects.create(name="Атрибутика")
         self.product = Product.objects.create(name="Шарф", category=self.category)
         self.image = ProductImage.objects.create(product=self.product, image="product_images/test.jpg")
@@ -206,10 +211,18 @@ class UserViewsTest(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_profile_detail_view_staff_can_see_all(self):
-        """Проверяет сценарий 'profile detail view staff can see all'."""
+    def test_profile_detail_view_staff_cannot_see_other_profile(self):
+        """Обычный staff не должен видеть чужой профиль."""
         other_user = User.objects.create_user(email="other@example.com", password="otherpass123")
         self.client.login(email="staff@example.com", password="staffpass123")
+        response = self.client.get(reverse("users:profile_detail", kwargs={"pk": other_user.pk}))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_profile_detail_view_superuser_can_see_other_profile(self):
+        """Суперпользователь может просматривать чужие профили."""
+        other_user = User.objects.create_user(email="other2@example.com", password="otherpass123")
+        self.client.login(email="admin@example.com", password="adminpass123")
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": other_user.pk}))
 
         self.assertEqual(response.status_code, 200)
@@ -244,6 +257,43 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, reverse("store:base"))
         self.assertFalse(User.objects.filter(email="user@example.com").exists())
+
+    def test_profile_delete_view_blocks_user_with_orders(self):
+        """Профиль с оформленными заказами удалять нельзя."""
+        Order.objects.create(
+            number="ORD-DELETE-BLOCK",
+            user=self.user,
+            recipient_name="Покупатель",
+            email=self.user.email,
+            phone="+79990001122",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount="1000.00",
+        )
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.post(reverse("users:profile_delete"), data={"password": "userpass123"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(User.objects.filter(email="user@example.com").exists())
+        self.assertContains(response, "Нельзя удалить профиль")
+
+    def test_user_delete_is_protected_when_orders_exist(self):
+        """На уровне БД удаление пользователя с заказами должно быть запрещено."""
+        Order.objects.create(
+            number="ORD-PROTECT-1",
+            user=self.user,
+            recipient_name="Покупатель",
+            email=self.user.email,
+            phone="+79990001122",
+            status=Order.Status.PLACED,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount="1000.00",
+        )
+
+        with self.assertRaises(ProtectedError):
+            self.user.delete()
 
     def test_profile_delete_view_wrong_password(self):
         """Проверяет сценарий 'profile delete view wrong password'."""
@@ -304,11 +354,80 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "2")
         self.assertContains(response, "3000,00")
         self.assertContains(response, "Оформлен")
+        self.assertContains(response, "Отменить заказ")
         self.assertNotContains(response, "ORD-OTHER-1")
 
-    def test_profile_list_view_staff(self):
-        """Проверяет сценарий 'profile list view staff'."""
+    def test_user_can_cancel_own_order_from_orders_page(self):
+        """Отмена из UI должна проходить через доменный сервис и возвращать остатки."""
+        self.variant.quantity = 8
+        self.variant.save(update_fields=["quantity"])
+        order = Order.objects.create(
+            number="ORD-CANCEL-UI-1",
+            user=self.user,
+            recipient_name="Покупатель",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount="3000.00",
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot="Шарф",
+            unit_price="1500.00",
+            quantity=2,
+            line_total="3000.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.post(reverse("users:order_cancel", kwargs={"pk": order.pk}), follow=True)
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(self.variant.quantity, 10)
+        self.assertContains(response, "Заказ успешно отменен")
+
+    def test_user_cannot_cancel_another_users_order(self):
+        """Пользователь не может отменить чужой заказ."""
+        other_user = User.objects.create_user(email="other-cancel@example.com", password="otherpass123", is_active=True)
+        order = Order.objects.create(
+            number="ORD-CANCEL-UI-2",
+            user=other_user,
+            recipient_name="Другой",
+            email=other_user.email,
+            phone="+79991111111",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.post(reverse("users:order_cancel", kwargs={"pk": order.pk}), follow=True)
+
+        order.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(order.status, Order.Status.PLACED)
+        self.assertContains(response, "Недостаточно прав")
+
+    def test_profile_list_view_staff_denied(self):
+        """Обычному staff список профилей недоступен."""
         self.client.login(email="staff@example.com", password="staffpass123")
+        response = self.client.get(reverse("users:profile_list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_profile_list_view_superuser(self):
+        """Суперпользователь может видеть список профилей."""
+        self.client.login(email="admin@example.com", password="adminpass123")
         response = self.client.get(reverse("users:profile_list"))
 
         self.assertEqual(response.status_code, 200)
