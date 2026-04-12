@@ -1,16 +1,61 @@
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 from django.utils import timezone
 
+from orders.forms import CheckoutForm
 from orders.models import Order, OrderItem
 from orders.services import CheckoutService, OrderCancellationError, OrderCancellationService
 from payments.models import Payment
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from users.models import User
+
+
+class CheckoutFormValidationTest(SimpleTestCase):
+    """Тесты нормализации и базовой валидации checkout-формы."""
+
+    def test_normalizes_recipient_name_and_phone(self):
+        form = CheckoutForm(
+            data={
+                "recipient_name": "   Иван     Иванов   ",
+                "email": "  buyer@example.com   ",
+                "phone": " +7 (999)   000-11-22 ",
+                "customer_comment": "  Подготовьте    к  вечеру  ",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["recipient_name"], "Иван Иванов")
+        self.assertEqual(form.cleaned_data["phone"], "+79990001122")
+
+    def test_rejects_obvious_garbage_recipient_name(self):
+        form = CheckoutForm(
+            data={
+                "recipient_name": "!!!!!",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("recipient_name", form.errors)
+
+    def test_rejects_invalid_phone(self):
+        form = CheckoutForm(
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "телефон не указан",
+                "customer_comment": "",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("phone", form.errors)
 
 
 class CheckoutFlowTest(TestCase):

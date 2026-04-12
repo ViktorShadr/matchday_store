@@ -1,4 +1,9 @@
+import re
+
 from django import forms
+
+
+PHONE_ALLOWED_CHARS_RE = re.compile(r"^[\d\s()+-]+$")
 
 
 class CheckoutForm(forms.Form):
@@ -44,3 +49,53 @@ class CheckoutForm(forms.Form):
             }
         ),
     )
+
+    @staticmethod
+    def _normalize_whitespace(value: str) -> str:
+        """Убрать лишние пробелы и привести строку к компактному виду."""
+        return " ".join(value.split())
+
+    @staticmethod
+    def _looks_like_garbage(value: str) -> bool:
+        """Отфильтровать явно мусорные значения."""
+        compact_value = value.replace(" ", "")
+        if not compact_value:
+            return True
+        if len(compact_value) >= 4 and len(set(compact_value)) == 1:
+            return True
+        return not any(char.isalnum() for char in compact_value)
+
+    def clean_recipient_name(self):
+        recipient_name = self._normalize_whitespace(self.cleaned_data["recipient_name"])
+
+        if self._looks_like_garbage(recipient_name):
+            raise forms.ValidationError("Введите корректное имя получателя.")
+
+        if sum(char.isalpha() for char in recipient_name) < 2:
+            raise forms.ValidationError("Введите корректное имя получателя.")
+
+        return recipient_name
+
+    def clean_email(self):
+        return self._normalize_whitespace(self.cleaned_data["email"])
+
+    def clean_phone(self):
+        phone = self._normalize_whitespace(self.cleaned_data["phone"])
+
+        if not PHONE_ALLOWED_CHARS_RE.fullmatch(phone):
+            raise forms.ValidationError("Введите корректный номер телефона.")
+
+        if phone.count("+") > 1 or ("+" in phone and not phone.startswith("+")):
+            raise forms.ValidationError("Введите корректный номер телефона.")
+
+        digits = re.sub(r"\D", "", phone)
+        if not 10 <= len(digits) <= 15:
+            raise forms.ValidationError("Введите корректный номер телефона.")
+
+        if len(set(digits)) < 2:
+            raise forms.ValidationError("Введите корректный номер телефона.")
+
+        return f"+{digits}"
+
+    def clean_customer_comment(self):
+        return self._normalize_whitespace(self.cleaned_data.get("customer_comment", ""))

@@ -269,6 +269,10 @@ class UserOrderListView(LoginRequiredMixin, CartContextMixin, ListView):
             .order_by("-created_at")
         )
 
+#TODO: Добавить детализацию заказа
+class UserOrderDetailView(LoginRequiredMixin, CartContextMixin, DetailView):
+    pass
+
 
 class EmailConfirmationView(View):
     """
