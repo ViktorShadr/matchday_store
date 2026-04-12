@@ -298,9 +298,20 @@ class UserOrderCancelView(LoginRequiredMixin, View):
             messages.success(request, "Заказ успешно отменен.")
         return redirect("users:order_list")
 
-#TODO: Добавить детализацию заказа
 class UserOrderDetailView(LoginRequiredMixin, CartContextMixin, DetailView):
-    pass
+    """Детальная страница заказа текущего пользователя."""
+
+    model = Order
+    template_name = "user_order_detail.html"
+    context_object_name = "order"
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user).prefetch_related("items")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_cancel"] = OrderCancellationService.can_be_cancelled(self.object)
+        return context
 
 
 class EmailConfirmationView(View):

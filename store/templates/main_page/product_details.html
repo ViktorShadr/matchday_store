@@ -1,8 +1,39 @@
 {% extends 'main_page/base.html' %}
 {% load static %}
 {% block title %}{{ product.name }}{% endblock %}
+{% block meta_description %}{{ product.description|truncatewords:30|default:"Купите "|add:product.name|add:" в официальном магазине ФК «Шинник». Доставка по России." }}{% endblock %}
+{% block og_title %}{{ product.name }}{% endblock %}
+{% block og_description %}{{ product.description|truncatewords:30|default:"Купите "|add:product.name|add:" в официальном магазине ФК «Шинник»." }}{% endblock %}
+{% block og_type %}product{% endblock %}
+{% block og_image %}{% if product.display_image %}{{ request.scheme }}://{{ request.get_host }}{{ product.display_image.url }}{% else %}{{ block.super }}{% endif %}{% endblock %}
+
+{% block breadcrumbs %}
+{% include 'main_page/_breadcrumbs.html' with breadcrumbs=breadcrumbs %}
+{% endblock %}
 
 {% block content %}
+    <!-- Schema.org Product JSON-LD -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "{{ product.name|escapejs }}",
+        "description": "{{ product.description|truncatewords:50|escapejs|default:product.name }}",
+        "image": {% if product.display_image %}"{{ request.scheme }}://{{ request.get_host }}{{ product.display_image.url }}"{% else %}null{% endif %},
+        "brand": {
+            "@type": "Brand",
+            "name": "ФК «Шинник»"
+        },
+        "offers": {
+            "@type": "AggregateOffer",
+            "lowPrice": "{{ min_price }}",
+            "highPrice": "{{ max_price }}",
+            "priceCurrency": "RUB",
+            "availability": "{% if product.in_stock %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}"
+        }
+    }
+    </script>
+
     <section class="sf-section">
         <div class="container">
             <div class="sf-section-head">
@@ -37,9 +68,29 @@
                     <div class="sf-surface p-4 h-100">
                         <div class="small text-muted mb-2">{{ product.category.name|default:'Без категории' }}</div>
                         <div class="fs-4 fw-bold mb-3">{{ product.display_price|default:'—' }} ₽</div>
-                        {% if not product.in_stock %}
+                        {% if product.in_stock %}
+                            {% if low_stock %}
+                                <div class="text-warning fw-semibold mb-3">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                    </svg>
+                                    Осталось мало: {{ total_stock }} шт.
+                                </div>
+                            {% endif %}
+                        {% else %}
                             <div class="text-danger fw-semibold mb-3">Нет в наличии</div>
                         {% endif %}
+                        <div class="small text-muted mb-3">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+                                <rect x="1" y="3" width="15" height="13"></rect>
+                                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                                <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                                <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                            </svg>
+                            Доставка по России от 300 ₽, 3-7 рабочих дней
+                        </div>
                         <p>{{ product.description|default:'Описание пока не добавлено.' }}</p>
 
                         <div class="mt-4">
@@ -79,100 +130,50 @@
         </div>
     </section>
 
+{% endblock %}
+
+{% block extra_scripts %}
     <script>
-    console.log('Cart script loaded');
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded');
         const addToCartButtons = document.querySelectorAll('.add-to-cart-btn');
-        console.log('Buttons found:', addToCartButtons.length);
-        
+
         addToCartButtons.forEach(button => {
             button.addEventListener('click', function() {
                 const variantId = this.dataset.variantId;
-                const productName = this.dataset.productName;
                 const quantityInput = document.getElementById(`quantity-${variantId}`);
                 const quantity = parseInt(quantityInput.value);
-                
-                // Отключаем кнопку на время запроса
+
                 this.disabled = true;
                 this.textContent = 'Добавление...';
-                
+
                 fetch('{% url "main_page:add_to_cart" %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken')
+                        'X-CSRFToken': getCsrfToken()
                     },
                     body: `variant_id=${variantId}&quantity=${quantity}`
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // Показываем уведомление об успехе
                         showNotification(data.message, 'success');
-                        
-                        // Обновляем счетчик корзины в шапке (если он есть)
                         updateCartCounter(data.cart_total);
-                        
-                        // Восстанавливаем кнопку
                         this.disabled = false;
                         this.textContent = 'В корзину';
                     } else {
-                        // Показываем ошибку
                         showNotification(data.error, 'error');
                         this.disabled = false;
                         this.textContent = 'В корзину';
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
                     showNotification('Произошла ошибка при добавлении товара', 'error');
                     this.disabled = false;
                     this.textContent = 'В корзину';
                 });
             });
         });
-        
-        // Функция для показа уведомлений
-        function showNotification(message, type) {
-            // Создаем элемент уведомления
-            const notification = document.createElement('div');
-            notification.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed top-0 start-50 translate-middle-x mt-3`;
-            notification.style.zIndex = '9999';
-            notification.style.minWidth = '300px';
-            notification.textContent = message;
-            
-            document.body.appendChild(notification);
-            
-            // Автоматически удаляем через 3 секунды
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
-        }
-        
-        // Функция для получения CSRF токена
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
-        }
-        
-        // Функция для обновления счетчика корзины
-        function updateCartCounter(count) {
-            const cartCounter = document.querySelector('.cart-counter');
-            if (cartCounter) {
-                cartCounter.textContent = count;
-            }
-        }
     });
     </script>
 {% endblock %}

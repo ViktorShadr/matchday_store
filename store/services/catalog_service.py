@@ -56,6 +56,11 @@ def enrich_product(product):
     )
     product.display_price = first_variant.price if first_variant else None
     product.in_stock = any(variant.quantity > 0 for variant in variants)
+
+    # ID первого доступного варианта для кнопки быстрого добавления
+    first_available_variant = next((v for v in variants if v.quantity > 0), None)
+    product.first_available_variant_id = first_available_variant.id if first_available_variant else None
+
     return product
 
 

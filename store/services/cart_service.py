@@ -340,6 +340,46 @@ class CartService:
 
         return {"total_items": cart.total_items, "total_price": cart.total_price, "items": items}
 
+    def get_cart_items_with_details(self, cart):
+        """
+        Получить товары корзины с детальной информацией для отображения.
+
+        Args:
+            cart: Объект корзины
+
+        Returns:
+            list: Список словарей с информацией о товарах
+        """
+        items = []
+        for item in cart.items.select_related(
+            'product_variant',
+            'product_variant__product'
+        ).prefetch_related('product_variant__product__images').all():
+            variant = item.product_variant
+            product = variant.product
+
+            # Get product image
+            image_url = None
+            product_images = list(product.images.all())
+            primary_image = next((img for img in product_images if img.is_primary), None)
+            first_image = primary_image or (product_images[0] if product_images else None)
+            if first_image:
+                image_url = first_image.image.url if first_image.image else None
+
+            items.append({
+                'variant_id': variant.id,
+                'product_name': product.name,
+                'size': variant.size,
+                'color': variant.color,
+                'quantity': item.quantity,
+                'price': variant.price,
+                'total_price': item.total_price,
+                'total_price_formatted': f"{item.total_price:,}".replace(",", " "),
+                'image': image_url,
+                'max_quantity': variant.quantity,
+            })
+        return items
+
     @transaction.atomic
     def merge_carts_on_login(self, user, session_key):
         """

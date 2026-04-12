@@ -62,15 +62,25 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
         context = super().get_context_data(**kwargs)
         context[self.context_object_name] = enrich_products(context[self.context_object_name])
 
+        # Breadcrumbs
+        breadcrumbs = [
+            {"title": "Главная", "url": reverse_lazy("main_page:base")},
+        ]
+
         category_id = self.request.GET.get("category_id")
         if category_id:
             try:
                 from store.models import Category
 
-                context["selected_category"] = Category.objects.get(id=category_id)
+                category = Category.objects.get(id=category_id)
+                context["selected_category"] = category
+                breadcrumbs.append({"title": category.name, "url": None})
             except:
-                pass
+                breadcrumbs.append({"title": "Каталог", "url": None})
+        else:
+            breadcrumbs.append({"title": "Каталог", "url": None})
 
+        context["breadcrumbs"] = breadcrumbs
         return context
 
 
@@ -100,11 +110,43 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
         context = super().get_context_data(**kwargs)
         product = enrich_product(self.object)
 
+        # Breadcrumbs
+        breadcrumbs = [
+            {"title": "Главная", "url": reverse_lazy("main_page:base")},
+            {"title": "Каталог", "url": reverse_lazy("main_page:product_list")},
+        ]
+        if product.category:
+            breadcrumbs.append({
+                "title": product.category.name,
+                "url": reverse_lazy("main_page:product_list") + f"?category_id={product.category.id}"
+            })
+        breadcrumbs.append({"title": product.name, "url": None})
+        context["breadcrumbs"] = breadcrumbs
+
+        # Variants data
+        variants = list(product.variants.all())
+        variant_prices = [v.price for v in variants if v.price]
+        variant_quantities = [v.quantity for v in variants if v.quantity > 0]
+
         context["product"] = product
         context["product_details"] = ProductDisplayService.prepare_product_details(product)
         context["product_images"] = product.images.all()
-        context["variants"] = product.variants.all()
+        context["variants"] = variants
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
+
+        # Price range for Schema.org
+        if variant_prices:
+            context["min_price"] = min(variant_prices)
+            context["max_price"] = max(variant_prices)
+        else:
+            context["min_price"] = product.display_price or 0
+            context["max_price"] = product.display_price or 0
+
+        # Stock info
+        total_stock = sum(variant_quantities)
+        context["total_stock"] = total_stock
+        context["low_stock"] = 0 < total_stock <= 5
+
         return context
 
 

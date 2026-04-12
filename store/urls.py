@@ -17,6 +17,14 @@ from store.views.views_category import (
 )
 from store.views.views_cart import AddToCartView, UpdateCartView, RemoveFromCartView
 from store.views.views_cart_page import CartView
+from store.views.views_legal import (
+    PrivacyPolicyView,
+    TermsOfServiceView,
+    ReturnPolicyView,
+    OfferView,
+    Error404View,
+    Error500View,
+)
 from store.views.views_dashboard import (
     DashboardHomeView,
     WarehouseDashboardView,
@@ -117,4 +125,12 @@ urlpatterns = [
     path("cart/add/", AddToCartView.as_view(), name="add_to_cart"),
     path("cart/update/", UpdateCartView.as_view(), name="update_cart"),
     path("cart/remove/", RemoveFromCartView.as_view(), name="remove_from_cart"),
+    # Юридические страницы
+    path("privacy-policy/", PrivacyPolicyView.as_view(), name="privacy_policy"),
+    path("terms-of-service/", TermsOfServiceView.as_view(), name="terms_of_service"),
+    path("return-policy/", ReturnPolicyView.as_view(), name="return_policy"),
+    path("offer/", OfferView.as_view(), name="offer"),
+    # Страницы ошибок (для тестирования)
+    path("404/", Error404View.as_view(), name="error_404"),
+    path("500/", Error500View.as_view(), name="error_500"),
 ]

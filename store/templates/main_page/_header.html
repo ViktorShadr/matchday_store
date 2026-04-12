@@ -23,17 +23,65 @@
                     </form>
                 </div>
 
-                <a href="{% url 'main_page:cart' %}" class="sf-icon-btn" aria-label="Корзина" title="Корзина">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M6 6h15l-1.5 9h-12z"></path>
-                        <path d="M6 6l-2 0"></path>
-                        <circle cx="9" cy="20" r="1"></circle>
-                        <circle cx="18" cy="20" r="1"></circle>
-                    </svg>
-                    <span class="d-none d-lg-inline fw-bold">Корзина</span>
-                    <span class="sf-badge cart-counter">{{ cart_count|default:0 }}</span>
-                </a>
+                <div class="position-relative">
+                    <a href="{% url 'main_page:cart' %}" class="sf-icon-btn" id="miniCartToggle" aria-label="Корзина" title="Корзина" data-mini-cart-toggle>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M6 6h15l-1.5 9h-12z"></path>
+                            <path d="M6 6l-2 0"></path>
+                            <circle cx="9" cy="20" r="1"></circle>
+                            <circle cx="18" cy="20" r="1"></circle>
+                        </svg>
+                        <span class="d-none d-lg-inline fw-bold">Корзина</span>
+                        <span class="sf-badge cart-counter">{{ cart_count|default:0 }}</span>
+                    </a>
+                    <!-- Mini Cart Dropdown -->
+                    <div class="sf-mini-cart" id="miniCart">
+                        {% if cart_items %}
+                            <div class="sf-mini-cart-items">
+                                {% for item in cart_items|slice:":5" %}
+                                <div class="sf-mini-cart-item">
+                                    {% if item.image %}
+                                        <img src="{{ item.image }}" alt="{{ item.product_name }}">
+                                    {% else %}
+                                        <div class="bg-light rounded d-flex align-items-center justify-content-center" style="width:50px;height:50px;">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted">
+                                                <path d="M6 6h15l-1.5 9h-12z"></path>
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                    <div class="sf-mini-cart-item-info">
+                                        <div class="sf-mini-cart-item-name">{{ item.product_name|truncatechars:25 }}</div>
+                                        <div class="sf-mini-cart-item-details">{{ item.size }} / {{ item.color }} × {{ item.quantity }}</div>
+                                    </div>
+                                    <div class="sf-mini-cart-item-price">{{ item.total_price_formatted }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% if cart_items|length > 5 %}
+                                <div class="text-center text-muted small py-2 border-top">
+                                    и ещё {{ cart_items|length|add:"-5" }} товаров
+                                </div>
+                            {% endif %}
+                            <div class="sf-mini-cart-footer">
+                                <div class="sf-mini-cart-total">
+                                    <span>Итого:</span>
+                                    <span>{{ cart_total|default:"0" }} ₽</span>
+                                </div>
+                                <a href="{% url 'main_page:cart' %}" class="btn btn-primary w-100">Перейти в корзину</a>
+                            </div>
+                        {% else %}
+                            <div class="sf-mini-cart-empty">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-2">
+                                    <path d="M6 6h15l-1.5 9h-12z"></path>
+                                    <circle cx="9" cy="20" r="1"></circle>
+                                    <circle cx="18" cy="20" r="1"></circle>
+                                </svg>
+                                <p class="mb-0">Корзина пуста</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
 
                 {% if user.is_authenticated %}
                     <div class="dropdown">

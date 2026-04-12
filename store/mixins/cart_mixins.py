@@ -13,6 +13,8 @@ class CartContextMixin:
 
     Context:
         cart_count (int): Количество товаров в корзине
+        cart_items (list): Список товаров в корзине для мини-корзины
+        cart_total (Decimal): Общая сумма корзины
     """
 
     def get_context_data(self, **kwargs):
@@ -27,5 +29,10 @@ class CartContextMixin:
         # Получаем корзину для текущего запроса (авторизованного или анонимного)
         cart = cart_service.get_or_create_cart(self.request)
         context["cart_count"] = cart.total_items
+        context["cart_total"] = cart.total_price
+
+        # Получаем детальную информацию о товарах в корзине для мини-корзины
+        cart_items = cart_service.get_cart_items_with_details(cart)
+        context["cart_items"] = cart_items
 
         return context

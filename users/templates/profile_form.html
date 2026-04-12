@@ -19,7 +19,11 @@
         <div class="mb-3">
             {% for field in form %}
                 <div class="mb-3">
+                    <label for="{{ field.id_for_label }}" class="form-label fw-bold">{{ field.label }}</label>
                     {{ field }}
+                    {% if field.help_text %}
+                        <div class="form-text small">{{ field.help_text }}</div>
+                    {% endif %}
                     {% if field.errors %}
                         <div class="text-danger small mt-1">
                             {{ field.errors }}

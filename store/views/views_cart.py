@@ -136,6 +136,7 @@ class UpdateCartView(View):
                     "success": True,
                     "message": "Количество товара обновлено",
                     "item_total": float(cart_item.total_price),
+                    "item_quantity": cart_item.quantity,
                     "cart_total": float(cart.total_price),
                     "cart_items": cart.total_items,
                 }

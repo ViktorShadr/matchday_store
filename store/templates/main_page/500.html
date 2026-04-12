@@ -1,0 +1,42 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+{% block title %}Ошибка сервера (500) — ФК «Шинник»{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="sf-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6 text-center">
+                <div class="sf-surface p-5">
+                    <div class="mb-4">
+                        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-danger">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                    </div>
+                    <h1 class="display-4 fw-bold mb-3">500</h1>
+                    <h2 class="h4 mb-3">Ошибка сервера</h2>
+                    <p class="text-muted mb-4">
+                        Произошла внутренняя ошибка сервера. Мы уже работаем над её устранением.
+                        Пожалуйста, попробуйте обновить страницу позже.
+                    </p>
+                    <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                        <button onclick="location.reload()" class="btn btn-primary btn-lg">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-2">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                            Обновить страницу
+                        </button>
+                        <a href="{% url 'main_page:base' %}" class="btn btn-outline-secondary btn-lg">
+                            На главную
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

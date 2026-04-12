@@ -9,6 +9,54 @@
                 <h1 class="sf-section-title mb-3">Заказ оформлен</h1>
                 <p class="mb-4">Номер заказа: <strong>{{ order.number }}</strong></p>
 
+                <h5 class="mb-3">Состав заказа</h5>
+                <div class="table-responsive mb-4">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Товар</th>
+                                <th>Вариант</th>
+                                <th class="text-center">Кол-во</th>
+                                <th class="text-end">Цена</th>
+                                <th class="text-end">Сумма</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in order.items.all %}
+                            <tr>
+                                <td class="fw-bold">{{ item.product_name_snapshot }}</td>
+                                <td class="text-muted">
+                                    {% if item.size_snapshot %}{{ item.size_snapshot }}{% endif %}
+                                    {% if item.size_snapshot and item.color_snapshot %} / {% endif %}
+                                    {% if item.color_snapshot %}{{ item.color_snapshot }}{% endif %}
+                                </td>
+                                <td class="text-center">{{ item.quantity }}</td>
+                                <td class="text-end">{{ item.unit_price }} ₽</td>
+                                <td class="text-end fw-bold">{{ item.line_total }} ₽</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="row justify-content-end mb-4">
+                    <div class="col-md-5">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>Товары:</span>
+                            <span>{{ order.subtotal_amount }} ₽</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>Доставка:</span>
+                            <span>{{ order.delivery_amount|default:"0" }} ₽</span>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between fs-5 fw-bold">
+                            <span>Итого:</span>
+                            <span>{{ order.total_amount }} ₽</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="row g-4">
                     <div class="col-12 col-lg-6">
                         <h5>Самовывоз</h5>
@@ -26,6 +74,7 @@
                 </div>
 
                 <div class="mt-4 d-flex gap-2 flex-wrap">
+                    <a href="{% url 'users:order_detail' order.pk %}" class="btn btn-outline-primary">Подробнее о заказе</a>
                     <a href="{% url 'main_page:product_list' %}" class="btn btn-primary">Продолжить покупки</a>
                     <a href="{% url 'main_page:base' %}" class="btn btn-outline-secondary">На главную</a>
                 </div>

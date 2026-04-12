@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="ru">
 {% include 'main_page/_head.html' %}
@@ -7,12 +8,32 @@
         {% block menu %}{% include 'main_page/_menu.html' %}{% endblock %}
     </div>
 
+    {% block breadcrumbs %}{% endblock %}
+
     <main class="container-fluid px-0">
         {% block content %}{% endblock %}
     </main>
 
     {% block footer %}{% include 'main_page/_footer.html' %}{% endblock %}
+
+    <!-- Cookie Consent Banner -->
+    <div id="cookie-banner" class="sf-cookie-banner hidden">
+        <div class="container">
+            <div class="sf-cookie-content">
+                <p class="sf-cookie-text">
+                    Мы используем cookies для улучшения работы сайта и персонализации контента.
+                    Продолжая использовать сайт, вы соглашаетесь с <a href="{% url 'main_page:privacy_policy' %}">Политикой конфиденциальности</a>.
+                </p>
+                <div class="sf-cookie-actions">
+                    <button id="cookie-accept" class="btn btn-primary btn-sm">Принять</button>
+                    <button id="cookie-decline" class="btn btn-outline-secondary btn-sm">Отклонить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% include 'main_page/_scripts.html' %}
+    <script src="{% static 'js/main.js' %}?v=3"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

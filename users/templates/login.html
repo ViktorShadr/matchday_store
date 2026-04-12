@@ -1,20 +1,53 @@
 <!-- login.html -->
 {% extends 'main_page/base.html' %}
+{% load static %}
 {% block title %}Вход в Shinnik Fan Shop{% endblock %}
 {% block content %}
-<div class="container mt-5 mb-5">
-    <h2 class="mb-4">Вход</h2>
+<section class="sf-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-5 col-md-7 col-sm-10">
+                <div class="sf-surface p-4">
+                    <h2 class="mb-4 text-center">Вход</h2>
 
-    <form method="post" class="border rounded p-4 shadow-sm bg-white">
-        {% csrf_token %}
-        {{ form.as_p }}
+                    <form method="post" novalidate>
+                        {% csrf_token %}
 
-        <button type="submit" class="btn btn-primary w-100 mb-3">Войти</button>
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
 
-        <a href="{% url 'users:registration' %}"
-           class="btn btn-outline-secondary w-100">
-            Зарегистрироваться
-        </a>
-    </form>
-</div>
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+                            {{ form.username }}
+                            {% if form.username.errors %}
+                                <div class="text-danger small mt-1">{{ form.username.errors|join:', ' }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+                            {{ form.password }}
+                            {% if form.password.errors %}
+                                <div class="text-danger small mt-1">{{ form.password.errors|join:', ' }}</div>
+                            {% endif %}
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 mb-3">Войти</button>
+
+                        <div class="text-center">
+                            <a href="{% url 'users:registration' %}" class="btn btn-outline-secondary w-100">
+                                Зарегистрироваться
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
 {% endblock %}
