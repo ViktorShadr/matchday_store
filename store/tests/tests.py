@@ -540,7 +540,7 @@ class RemoveFromCartViewTest(TestCase):
         cart = Cart.objects.create(session_key=session.session_key)
         CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=2)
 
-        response = self.client.post(reverse("main_page:remove_from_cart"), {"variant_id": self.variant.id})
+        response = self.client.post(reverse("store:remove_from_cart"), {"variant_id": self.variant.id})
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CartItem.objects.filter(cart=cart, product_variant=self.variant).exists())
@@ -556,7 +556,7 @@ class RemoveFromCartViewTest(TestCase):
 
     def test_remove_from_cart_returns_404_when_item_is_missing(self):
         """Проверяет сценарий 'remove from cart returns 404 when item is missing'."""
-        response = self.client.post(reverse("main_page:remove_from_cart"), {"variant_id": self.variant.id})
+        response = self.client.post(reverse("store:remove_from_cart"), {"variant_id": self.variant.id})
 
         self.assertEqual(response.status_code, 404)
         self.assertJSONEqual(response.content, {"success": False, "error": "Товар не найден в корзине"})

@@ -64,7 +64,7 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
 
         # Breadcrumbs
         breadcrumbs = [
-            {"title": "Главная", "url": reverse_lazy("main_page:base")},
+            {"title": "Главная", "url": reverse_lazy("store:base")},
         ]
 
         category_id = self.request.GET.get("category_id")
@@ -112,13 +112,13 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
 
         # Breadcrumbs
         breadcrumbs = [
-            {"title": "Главная", "url": reverse_lazy("main_page:base")},
-            {"title": "Каталог", "url": reverse_lazy("main_page:product_list")},
+            {"title": "Главная", "url": reverse_lazy("store:base")},
+            {"title": "Каталог", "url": reverse_lazy("store:product_list")},
         ]
         if product.category:
             breadcrumbs.append({
                 "title": product.category.name,
-                "url": reverse_lazy("main_page:product_list") + f"?category_id={product.category.id}"
+                "url": reverse_lazy("store:product_list") + f"?category_id={product.category.id}"
             })
         breadcrumbs.append({"title": product.name, "url": None})
         context["breadcrumbs"] = breadcrumbs

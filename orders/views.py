@@ -61,7 +61,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
                     return redirect(reverse("orders:checkout_success", kwargs={"pk": processed_order.pk}))
 
             messages.warning(request, "Корзина пуста. Добавьте товары перед оформлением заказа.")
-            return redirect("main_page:cart")
+            return redirect("store:cart")
         self.cart_summary = cart_summary
         return super().dispatch(request, *args, **kwargs)
 

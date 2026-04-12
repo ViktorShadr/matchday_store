@@ -168,14 +168,15 @@ function debounce(func, wait) {
                 e.stopPropagation();
 
                 const variantId = this.dataset.variantId;
-                if (!variantId) return;
+                const addUrl = this.dataset.addUrl;
+                if (!variantId || !addUrl) return;
 
                 // Disable button during request
                 this.disabled = true;
                 const originalContent = this.innerHTML;
                 this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
-                fetch('/cart/add/', {
+                fetch(addUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',

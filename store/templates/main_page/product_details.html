@@ -38,7 +38,7 @@
         <div class="container">
             <div class="sf-section-head">
                 <h1 class="sf-section-title">{{ product.name }}</h1>
-                <a class="sf-link" href="{% url 'main_page:product_list' %}">К каталогу</a>
+                <a class="sf-link" href="{% url 'store:product_list' %}">К каталогу</a>
             </div>
 
             <div class="row g-4">
@@ -146,7 +146,7 @@
                 this.disabled = true;
                 this.textContent = 'Добавление...';
 
-                fetch('{% url "main_page:add_to_cart" %}', {
+                fetch('{% url "store:add_to_cart" %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',

@@ -142,6 +142,15 @@ class ProfileDetailView(LoginRequiredMixin, DetailView):
             raise PermissionDenied("Можно просматривать только свой профиль")
         return obj
 
+    def get_context_data(self, **kwargs):
+        """Add breadcrumbs to context."""
+        context = super().get_context_data(**kwargs)
+        context["breadcrumbs"] = [
+            {"title": "Главная", "url": reverse_lazy("store:base")},
+            {"title": "Профиль", "url": None},
+        ]
+        return context
+
 
 class ProfileList(LoginRequiredMixin, UserPassesTestMixin, ListView):
     """
@@ -163,6 +172,15 @@ class ProfileList(LoginRequiredMixin, UserPassesTestMixin, ListView):
             bool: True если пользователь - суперпользователь, False иначе
         """
         return self.request.user.is_superuser
+
+    def get_context_data(self, **kwargs):
+        """Add breadcrumbs to context."""
+        context = super().get_context_data(**kwargs)
+        context["breadcrumbs"] = [
+            {"title": "Главная", "url": reverse_lazy("store:base")},
+            {"title": "Пользователи", "url": None},
+        ]
+        return context
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):
@@ -195,6 +213,16 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         """
         return reverse_lazy("users:profile_detail", kwargs={"pk": self.request.user.pk})
 
+    def get_context_data(self, **kwargs):
+        """Add breadcrumbs to context."""
+        context = super().get_context_data(**kwargs)
+        context["breadcrumbs"] = [
+            {"title": "Главная", "url": reverse_lazy("store:base")},
+            {"title": "Профиль", "url": reverse_lazy("users:profile_detail", kwargs={"pk": self.request.user.pk})},
+            {"title": "Редактирование", "url": None},
+        ]
+        return context
+
     def form_valid(self, form):
         """
         Обрабатывает валидную форму редактирования.
@@ -224,6 +252,16 @@ class ProfileDeleteView(LoginRequiredMixin, FormView):
     form_class = ProfileDeleteConfirmForm
     template_name = "profile_confirm_delete.html"
     success_url = reverse_lazy("store:base")
+
+    def get_context_data(self, **kwargs):
+        """Add breadcrumbs to context."""
+        context = super().get_context_data(**kwargs)
+        context["breadcrumbs"] = [
+            {"title": "Главная", "url": reverse_lazy("store:base")},
+            {"title": "Профиль", "url": reverse_lazy("users:profile_detail", kwargs={"pk": self.request.user.pk})},
+            {"title": "Удаление", "url": None},
+        ]
+        return context
 
     def form_valid(self, form):
         """

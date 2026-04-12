@@ -3,7 +3,7 @@
 <header class="sf-header">
     <div class="container">
         <div class="sf-header-row">
-            <a class="sf-logo d-flex align-items-center gap-2" href="{% url 'main_page:base' %}">
+            <a class="sf-logo d-flex align-items-center gap-2" href="{% url 'store:base' %}">
                 <img src="{% static 'img/favicon.ico' %}" alt="Шинник" loading="lazy">
                 <div class="d-flex flex-column lh-1">
                     <span class="sf-logo-title">ФК «Шинник»</span>
@@ -13,7 +13,7 @@
 
             <div class="sf-actions">
                 <div class="sf-search">
-                    <form class="sf-search-wrap" action="{% url 'main_page:product_list' %}" method="get" role="search">
+                    <form class="sf-search-wrap" action="{% url 'store:product_list' %}" method="get" role="search">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <circle cx="11" cy="11" r="7"></circle>
@@ -24,7 +24,7 @@
                 </div>
 
                 <div class="position-relative">
-                    <a href="{% url 'main_page:cart' %}" class="sf-icon-btn" id="miniCartToggle" aria-label="Корзина" title="Корзина" data-mini-cart-toggle>
+                    <a href="{% url 'store:cart' %}" class="sf-icon-btn" id="miniCartToggle" aria-label="Корзина" title="Корзина" data-mini-cart-toggle>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M6 6h15l-1.5 9h-12z"></path>
@@ -68,7 +68,7 @@
                                     <span>Итого:</span>
                                     <span>{{ cart_total|default:"0" }} ₽</span>
                                 </div>
-                                <a href="{% url 'main_page:cart' %}" class="btn btn-primary w-100">Перейти в корзину</a>
+                                <a href="{% url 'store:cart' %}" class="btn btn-primary w-100">Перейти в корзину</a>
                             </div>
                         {% else %}
                             <div class="sf-mini-cart-empty">

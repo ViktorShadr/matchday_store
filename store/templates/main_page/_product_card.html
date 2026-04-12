@@ -49,6 +49,7 @@ Expected product fields (возможны разные имена — шабло
             {% if p.first_available_variant_id %}
                 <button class="btn btn-primary quick-add-btn"
                         data-variant-id="{{ p.first_available_variant_id }}"
+                        data-add-url="{% url 'store:add_to_cart' %}"
                         title="Быстро добавить в корзину">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M6 6h15l-1.5 9h-12z"></path>

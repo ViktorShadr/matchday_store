@@ -9,7 +9,7 @@
         <div class="container">
             <div class="sf-section-head">
                 <h1 class="sf-section-title">Корзина</h1>
-                <a class="sf-link" href="{% url 'main_page:product_list' %}">К каталогу</a>
+                <a class="sf-link" href="{% url 'store:product_list' %}">К каталогу</a>
             </div>
 
             {% if items %}
@@ -108,7 +108,7 @@
                                     </div>
                                 {% endif %}
 
-                                <a href="{% url 'main_page:product_list' %}" class="btn btn-outline-secondary">Продолжить
+                                <a href="{% url 'store:product_list' %}" class="btn btn-outline-secondary">Продолжить
                                     покупки</a>
                             </div>
                         </div>
@@ -127,7 +127,7 @@
                     </div>
                     <h4 class="mb-3">Корзина пуста</h4>
                     <p class="text-muted mb-4">Добавьте товары из каталога, чтобы сделать заказ</p>
-                    <a href="{% url 'main_page:product_list' %}" class="btn btn-primary">Перейти в каталог</a>
+                    <a href="{% url 'store:product_list' %}" class="btn btn-primary">Перейти в каталог</a>
                 </div>
             {% endif %}
         </div>
@@ -175,7 +175,7 @@
             });
 
             function updateQuantity(variantId, quantity) {
-                fetch('{% url "main_page:update_cart" %}', {
+                fetch('{% url "store:update_cart" %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -200,7 +200,7 @@
             }
 
             function removeFromCart(variantId) {
-                fetch('{% url "main_page:remove_from_cart" %}', {
+                fetch('{% url "store:remove_from_cart" %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',

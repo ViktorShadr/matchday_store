@@ -7,7 +7,7 @@ from store.views.views_legal import Error404View, Error500View
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("store.urls", namespace="main_page")),
+    path("", include("store.urls", namespace="store")),
     path("", include("orders.urls", namespace="orders")),
     path("users/", include("users.urls", namespace="users")),
 ]

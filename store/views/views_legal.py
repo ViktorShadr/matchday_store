@@ -8,7 +8,7 @@ class LegalPageMixin:
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["breadcrumbs"] = [
-            {"title": "Главная", "url": reverse_lazy("main_page:base")},
+            {"title": "Главная", "url": reverse_lazy("store:base")},
             {"title": self.page_title, "url": None},
         ]
         return context
@@ -41,7 +41,7 @@ class Error404View(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["breadcrumbs"] = [
-            {"title": "Главная", "url": reverse_lazy("main_page:base")},
+            {"title": "Главная", "url": reverse_lazy("store:base")},
             {"title": "Страница не найдена", "url": None},
         ]
         return context
@@ -54,7 +54,7 @@ class Error500View(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["breadcrumbs"] = [
-            {"title": "Главная", "url": reverse_lazy("main_page:base")},
+            {"title": "Главная", "url": reverse_lazy("store:base")},
             {"title": "Ошибка сервера", "url": None},
         ]
         return context
