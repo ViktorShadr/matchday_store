@@ -334,9 +334,24 @@ class ModeratorDashboardAccessTest(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(email="user@example.com", password="testpass123", is_active=True)
+        self.staff_without_group = User.objects.create_user(
+            email="staff-no-group@example.com",
+            password="testpass123",
+            is_staff=True,
+            is_active=True,
+        )
         self.superuser = User.objects.create_superuser(email="root@example.com", password="rootpass123")
-        self.moderator = User.objects.create_user(email="mod@example.com", password="modpass123", is_active=True)
-        self.moderator.groups.add(Group.objects.create(name="moderators"))
+        self.moderator = User.objects.create_user(
+            email="mod@example.com", password="modpass123", is_staff=True, is_active=True
+        )
+        self.group_only_user = User.objects.create_user(
+            email="group-only@example.com",
+            password="modpass123",
+            is_active=True,
+        )
+        moderator_group = Group.objects.create(name="Модераторы")
+        self.moderator.groups.add(moderator_group)
+        self.group_only_user.groups.add(moderator_group)
 
     def test_dashboard_requires_login(self):
         response = self.client.get(reverse("store:dashboard_home"))
@@ -358,6 +373,20 @@ class ModeratorDashboardAccessTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Дашборд модератора")
 
+    def test_dashboard_forbidden_for_staff_without_moderator_group(self):
+        self.client.login(email="staff-no-group@example.com", password="testpass123")
+
+        response = self.client.get(reverse("store:dashboard_home"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_dashboard_forbidden_for_group_user_without_staff(self):
+        self.client.login(email="group-only@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_home"))
+
+        self.assertEqual(response.status_code, 403)
+
     def test_dashboard_available_for_superuser(self):
         self.client.login(email="root@example.com", password="rootpass123")
 
@@ -371,8 +400,18 @@ class WarehouseStockManagementTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.moderator = User.objects.create_user(email="mod2@example.com", password="modpass123", is_active=True)
+        self.moderator = User.objects.create_user(
+            email="mod2@example.com",
+            password="modpass123",
+            is_staff=True,
+            is_active=True,
+        )
         self.moderator.groups.add(Group.objects.create(name="Модераторы"))
+        self.regular_user = User.objects.create_user(
+            email="regular@example.com",
+            password="regularpass123",
+            is_active=True,
+        )
         self.category = Category.objects.create(name="Шарфы")
         self.product = Product.objects.create(name="Шарф ФК Шинник", category=self.category)
         self.image = ProductImage.objects.create(
@@ -400,6 +439,18 @@ class WarehouseStockManagementTest(TestCase):
         self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.quantity, 12)
+
+    def test_stock_update_forbidden_for_regular_user(self):
+        self.client.login(email="regular@example.com", password="regularpass123")
+
+        response = self.client.post(
+            reverse("store:warehouse_variant_stock_update", kwargs={"pk": self.variant.pk}),
+            data={"quantity": 12},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
 
     def test_warehouse_page_shows_stock_summary(self):
         self.client.login(email="mod2@example.com", password="modpass123")
@@ -516,7 +567,12 @@ class WarehouseImageDeleteDetachVariantTest(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.moderator = User.objects.create_user(email="mod-image@example.com", password="modpass123", is_active=True)
+        self.moderator = User.objects.create_user(
+            email="mod-image@example.com",
+            password="modpass123",
+            is_staff=True,
+            is_active=True,
+        )
         self.moderator.groups.add(Group.objects.create(name="Модераторы"))
         self.category = Category.objects.create(name="Футболки")
         self.product = Product.objects.create(name="Тестовая футболка", category=self.category)

@@ -1,13 +1,18 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 
 
+MODERATOR_GROUP_NAMES = ("Модераторы", "moderators")
+
+
 def is_moderator_user(user):
     """Проверяет, может ли пользователь работать с модераторским дашбордом."""
     if not user.is_authenticated:
         return False
     if user.is_superuser:
         return True
-    return user.groups.filter(name__in=["moderators", "Модераторы"]).exists()
+    if not user.is_staff:
+        return False
+    return user.groups.filter(name__in=MODERATOR_GROUP_NAMES).exists()
 
 
 class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
