@@ -5,6 +5,9 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 
 from store.services.cart_service import CartService
+
+# Глобальный экземпляр для обратной совместимости
+cart_service = CartService()
 from store.services.cart_validator import CartValidator
 from store.services.cart_exceptions import (
     CartException,
@@ -55,9 +58,11 @@ class AddToCartView(View):
 
     @method_decorator(require_http_methods(["POST"]))
     def dispatch(self, *args, **kwargs):
+        """Обрабатывает входящий HTTP-запрос и выбирает нужный метод."""
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Обрабатывает POST-запрос."""
         try:
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
@@ -66,8 +71,8 @@ class AddToCartView(View):
             variant_id, quantity = CartValidator.validate_add_to_cart_input(variant_id, quantity_str)
 
             # Добавляем товар в корзину
-            cart_item = CartService.add_item(request, variant_id, quantity)
-            cart = CartService.get_or_create_cart(request)
+            cart_item = cart_service.add_item(request, variant_id, quantity)
+            cart = cart_service.get_or_create_cart(request)
 
             return JsonResponse(
                 {
@@ -110,9 +115,11 @@ class UpdateCartView(View):
 
     @method_decorator(require_http_methods(["POST"]))
     def dispatch(self, *args, **kwargs):
+        """Обрабатывает входящий HTTP-запрос и выбирает нужный метод."""
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Обрабатывает POST-запрос."""
         try:
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
@@ -121,14 +128,15 @@ class UpdateCartView(View):
             variant_id, quantity = CartValidator.validate_update_quantity_input(variant_id, quantity_str)
 
             # Обновляем товар в корзине
-            cart_item = CartService.update_item_quantity(request, variant_id, quantity)
-            cart = CartService.get_or_create_cart(request)
+            cart_item = cart_service.update_item_quantity(request, variant_id, quantity)
+            cart = cart_service.get_or_create_cart(request)
 
             return JsonResponse(
                 {
                     "success": True,
                     "message": "Количество товара обновлено",
                     "item_total": float(cart_item.total_price),
+                    "item_quantity": cart_item.quantity,
                     "cart_total": float(cart.total_price),
                     "cart_items": cart.total_items,
                 }
@@ -165,19 +173,21 @@ class RemoveFromCartView(View):
 
     @method_decorator(require_http_methods(["POST"]))
     def dispatch(self, *args, **kwargs):
+        """Обрабатывает входящий HTTP-запрос и выбирает нужный метод."""
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Обрабатывает POST-запрос."""
         try:
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
             variant_id = CartValidator.validate_remove_item_input(variant_id)
 
             # Удаляем товар из корзины
-            success = CartService.remove_item(request, variant_id)
+            success = cart_service.remove_item(request, variant_id)
 
             if success:
-                cart = CartService.get_or_create_cart(request)
+                cart = cart_service.get_or_create_cart(request)
                 return JsonResponse(
                     {
                         "success": True,

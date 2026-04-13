@@ -1,6 +1,10 @@
 import logging
 from django.db import transaction
+from typing import Optional
+
 from ..models import Cart, CartItem, ProductVariant
+from ..repositories import ICartRepository, IProductVariantRepository
+from ..repositories import CartRepository, ProductVariantRepository
 from .cart_exceptions import (
     InsufficientStockError,
     ProductVariantNotFoundError,
@@ -20,10 +24,25 @@ class CartService:
     - select_for_update() для блокировки записей в БД
     - Правильная обработка исключений
     - Логирование операций
+    - Dependency Injection для репозиториев (DIP)
     """
 
-    @staticmethod
-    def get_or_create_cart(request):
+    def __init__(
+        self,
+        cart_repository: Optional[ICartRepository] = None,
+        product_variant_repository: Optional[IProductVariantRepository] = None,
+    ):
+        """
+        Инициализация сервиса с возможностью DI.
+
+        Args:
+            cart_repository: Репозиторий корзины (по умолчанию CartRepository)
+            product_variant_repository: Репозиторий вариантов товаров (по умолчанию ProductVariantRepository)
+        """
+        self.cart_repository = cart_repository or CartRepository()
+        self.product_variant_repository = product_variant_repository or ProductVariantRepository()
+
+    def get_or_create_cart(self, request):
         """
         Получить или создать корзину для пользователя или сессии.
 
@@ -37,11 +56,11 @@ class CartService:
             Cart: Объект корзины
         """
         if request.user.is_authenticated:
-            cart, created = Cart.objects.get_or_create(user=request.user, defaults={"session_key": None})
+            cart = self.cart_repository.get_or_create_cart_by_user(request.user)
             # Если пользователь авторизовался и у него была корзина по сессии,
             # переносим товары в корзину пользователя
             if request.session.session_key:
-                CartService._merge_session_cart_with_user_cart(cart, request.session.session_key)
+                self._merge_session_cart_with_user_cart(cart, request.session.session_key)
         else:
             # Для анонимных пользователей используем сессию
             if not request.session.session_key:
@@ -49,15 +68,12 @@ class CartService:
                 request.session.modified = True
 
             session_key = request.session.session_key
-            cart, created = Cart.objects.get_or_create(
-                session_key=session_key, user__isnull=True, defaults={"session_key": session_key}
-            )
+            cart = self.cart_repository.get_or_create_cart_by_session(session_key)
 
         return cart
 
-    @staticmethod
     @transaction.atomic
-    def _merge_session_cart_with_user_cart(user_cart, session_key):
+    def _merge_session_cart_with_user_cart(self, user_cart, session_key):
         """
         Объединить сессионную корзину с корзиной пользователя.
 
@@ -68,35 +84,43 @@ class CartService:
             session_key: Ключ сессии для поиска сессионной корзины
         """
         try:
-            session_cart = Cart.objects.get(session_key=session_key, user__isnull=True)
+            session_cart = self.cart_repository.get_cart_by_session_key(session_key)
+            if not session_cart:
+                return
 
             # Переносим товары из сессионной корзины
-            for item in session_cart.items.all():
-                cart_item, created = CartItem.objects.get_or_create(
-                    cart=user_cart, product_variant=item.product_variant, defaults={"quantity": item.quantity}
+            for item in session_cart.items.select_related("product_variant").all():
+                available_quantity = item.product_variant.quantity
+                if available_quantity < 1:
+                    continue
+
+                cart_item, created = self.cart_repository.get_or_create_cart_item(
+                    user_cart, item.product_variant, {"quantity": item.quantity}
                 )
-                if not created:
-                    cart_item.quantity += item.quantity
+
+                if created and cart_item.quantity > available_quantity:
+                    cart_item.quantity = available_quantity
                     cart_item.save()
+                elif not created:
+                    new_quantity = min(cart_item.quantity + item.quantity, available_quantity)
+                    if cart_item.quantity != new_quantity:
+                        cart_item.quantity = new_quantity
+                        cart_item.save()
                     logger.info(
                         f"Merged cart item: user={user_cart.user.id}, "
                         f"variant={item.product_variant.id}, qty={cart_item.quantity}"
                     )
 
             # Удаляем сессионную корзину
-            session_cart.delete()
+            self.cart_repository.delete_cart(session_cart)
             logger.info(f"Session cart {session_key[:8]}... merged and deleted")
 
-        except Cart.DoesNotExist:
-            # Сессионной корзины нет, это нормально
-            pass
         except Exception as e:
             logger.error(f"Error merging carts: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при объединении корзин: {str(e)}")
 
-    @staticmethod
     @transaction.atomic
-    def add_item(request, product_variant_id, quantity=1):
+    def add_item(self, request, product_variant_id, quantity=1):
         """
         Добавить товар в корзину с защитой от race conditions.
 
@@ -119,7 +143,7 @@ class CartService:
         try:
             # Получаем вариант товара с блокировкой (select_for_update)
             # Это предотвращает race conditions при одновременных запросах
-            product_variant = ProductVariant.objects.select_for_update().get(id=product_variant_id)
+            product_variant = self.product_variant_repository.get_variant_for_update(product_variant_id)
 
             logger.info(
                 f"User {request.user.id if request.user.is_authenticated else 'anonymous'} "
@@ -137,10 +161,10 @@ class CartService:
                     available_quantity=product_variant.quantity,
                 )
 
-            cart = CartService.get_or_create_cart(request)
+            cart = self.get_or_create_cart(request)
 
-            cart_item, created = CartItem.objects.get_or_create(
-                cart=cart, product_variant=product_variant, defaults={"quantity": quantity}
+            cart_item, created = self.cart_repository.get_or_create_cart_item(
+                cart, product_variant, {"quantity": quantity}
             )
 
             if not created:
@@ -175,9 +199,8 @@ class CartService:
             logger.error(f"Error adding item to cart: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при добавлении товара в корзину: {str(e)}")
 
-    @staticmethod
     @transaction.atomic
-    def update_item_quantity(request, product_variant_id, quantity):
+    def update_item_quantity(self, request, product_variant_id, quantity):
         """
         Обновить количество товара в корзине с защитой от race conditions.
 
@@ -196,7 +219,7 @@ class CartService:
         """
         try:
             # Получаем вариант товара с блокировкой
-            product_variant = ProductVariant.objects.select_for_update().get(id=product_variant_id)
+            product_variant = self.product_variant_repository.get_variant_for_update(product_variant_id)
 
             logger.info(
                 f"User {request.user.id if request.user.is_authenticated else 'anonymous'} "
@@ -216,10 +239,10 @@ class CartService:
                     available_quantity=product_variant.quantity,
                 )
 
-            cart = CartService.get_or_create_cart(request)
+            cart = self.get_or_create_cart(request)
 
-            cart_item, created = CartItem.objects.update_or_create(
-                cart=cart, product_variant=product_variant, defaults={"quantity": quantity}
+            cart_item, created = self.cart_repository.update_or_create_cart_item(
+                cart, product_variant, {"quantity": quantity}
             )
 
             logger.info(f"Cart item {'created' if created else 'updated'}: {cart_item.id}, qty={quantity}")
@@ -235,9 +258,8 @@ class CartService:
             logger.error(f"Error updating cart item: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при обновлении товара в корзине: {str(e)}")
 
-    @staticmethod
     @transaction.atomic
-    def remove_item(request, product_variant_id):
+    def remove_item(self, request, product_variant_id):
         """
         Удалить товар из корзины.
 
@@ -249,26 +271,23 @@ class CartService:
             bool: True если товар удалён, False если товара не было в корзине
         """
         try:
-            cart = CartService.get_or_create_cart(request)
+            cart = self.get_or_create_cart(request)
 
-            try:
-                cart_item = CartItem.objects.get(cart=cart, product_variant_id=product_variant_id)
-                cart_item.delete()
+            success = self.cart_repository.delete_cart_item(cart, product_variant_id)
+            if success:
                 logger.info(
                     f"Cart item removed: {product_variant_id} from user "
                     f"{request.user.id if request.user.is_authenticated else 'anonymous'}"
                 )
-                return True
-            except CartItem.DoesNotExist:
+            else:
                 logger.warning(f"Cart item not found: {product_variant_id} in cart {cart.id}")
-                return False
+            return success
         except Exception as e:
             logger.error(f"Error removing item from cart: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при удалении товара из корзины: {str(e)}")
 
-    @staticmethod
     @transaction.atomic
-    def clear_cart(request):
+    def clear_cart(self, request):
         """
         Очистить корзину.
 
@@ -279,9 +298,8 @@ class CartService:
             Cart: Объект корзины
         """
         try:
-            cart = CartService.get_or_create_cart(request)
-            items_count = cart.items.count()
-            cart.items.all().delete()
+            cart = self.get_or_create_cart(request)
+            items_count = self.cart_repository.delete_cart_items(cart)
             logger.info(
                 f"Cart cleared: removed {items_count} items from user "
                 f"{request.user.id if request.user.is_authenticated else 'anonymous'}"
@@ -291,8 +309,7 @@ class CartService:
             logger.error(f"Error clearing cart: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при очистке корзины: {str(e)}")
 
-    @staticmethod
-    def get_cart_items(request):
+    def get_cart_items(self, request):
         """
         Получить все товары из корзины.
 
@@ -302,11 +319,10 @@ class CartService:
         Returns:
             QuerySet: Список элементов корзины
         """
-        cart = CartService.get_or_create_cart(request)
-        return cart.items.select_related("product_variant__product").all()
+        cart = self.get_or_create_cart(request)
+        return self.cart_repository.get_cart_items(cart)
 
-    @staticmethod
-    def get_cart_summary(request):
+    def get_cart_summary(self, request):
         """
         Получить сводку по корзине.
 
@@ -319,14 +335,53 @@ class CartService:
         Returns:
             dict: Сводка с общей суммой, количеством товаров и списком элементов
         """
-        cart = CartService.get_or_create_cart(request)
-        items = cart.items.select_related("product_variant__product").all()
+        cart = self.get_or_create_cart(request)
+        items = self.cart_repository.get_cart_items(cart)
 
         return {"total_items": cart.total_items, "total_price": cart.total_price, "items": items}
 
-    @staticmethod
+    def get_cart_items_with_details(self, cart):
+        """
+        Получить товары корзины с детальной информацией для отображения.
+
+        Args:
+            cart: Объект корзины
+
+        Returns:
+            list: Список словарей с информацией о товарах
+        """
+        items = []
+        for item in cart.items.select_related(
+            'product_variant',
+            'product_variant__product'
+        ).prefetch_related('product_variant__product__images').all():
+            variant = item.product_variant
+            product = variant.product
+
+            # Get product image
+            image_url = None
+            product_images = list(product.images.all())
+            primary_image = next((img for img in product_images if img.is_primary), None)
+            first_image = primary_image or (product_images[0] if product_images else None)
+            if first_image:
+                image_url = first_image.image.url if first_image.image else None
+
+            items.append({
+                'variant_id': variant.id,
+                'product_name': product.name,
+                'size': variant.size,
+                'color': variant.color,
+                'quantity': item.quantity,
+                'price': variant.price,
+                'total_price': item.total_price,
+                'total_price_formatted': f"{item.total_price:,}".replace(",", " "),
+                'image': image_url,
+                'max_quantity': variant.quantity,
+            })
+        return items
+
     @transaction.atomic
-    def merge_carts_on_login(user, session_key):
+    def merge_carts_on_login(self, user, session_key):
         """
         Объединить корзины при авторизации пользователя.
 
@@ -340,24 +395,33 @@ class CartService:
             return
 
         try:
-            session_cart = Cart.objects.get(session_key=session_key, user__isnull=True)
+            session_cart = self.cart_repository.get_cart_by_session_key(session_key)
+            if not session_cart:
+                return
 
-            user_cart, created = Cart.objects.get_or_create(user=user, defaults={"session_key": None})
+            user_cart = self.cart_repository.get_or_create_cart_by_user(user)
 
             # Переносим товары из сессионной корзины в корзину пользователя
-            for item in session_cart.items.all():
-                cart_item, created = CartItem.objects.get_or_create(
-                    cart=user_cart, product_variant=item.product_variant, defaults={"quantity": item.quantity}
+            for item in session_cart.items.select_related("product_variant").all():
+                available_quantity = item.product_variant.quantity
+                if available_quantity < 1:
+                    continue
+
+                cart_item, created = self.cart_repository.get_or_create_cart_item(
+                    user_cart, item.product_variant, {"quantity": item.quantity}
                 )
-                if not created:
-                    cart_item.quantity += item.quantity
+                if created and cart_item.quantity > available_quantity:
+                    cart_item.quantity = available_quantity
                     cart_item.save()
+                elif not created:
+                    new_quantity = min(cart_item.quantity + item.quantity, available_quantity)
+                    if cart_item.quantity != new_quantity:
+                        cart_item.quantity = new_quantity
+                        cart_item.save()
 
             # Удаляем сессионную корзину
-            session_cart.delete()
+            self.cart_repository.delete_cart(session_cart)
             logger.info(f"Session cart {session_key[:8]}... merged on login for user {user.id}")
 
-        except Cart.DoesNotExist:
-            pass
         except Exception as e:
             logger.error(f"Error merging carts on login: {e}", exc_info=True)

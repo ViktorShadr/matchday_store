@@ -1,0 +1,98 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <div>
+                    <h1 class="sf-section-title">{{ product.name }}</h1>
+                    <div class="text-muted">{{ product.category.name|default:'Без категории' }}</div>
+                </div>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-outline-primary" href="{% url 'store:warehouse_product_edit' product.pk %}">Редактировать</a>
+                    <a class="btn btn-outline-danger" href="{% url 'store:warehouse_product_delete' product.pk %}">Удалить</a>
+                </div>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-7">
+                    <div class="sf-surface p-4 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h4 mb-0">Варианты и остатки</h2>
+                            <a class="btn btn-primary btn-sm" href="{% url 'store:warehouse_variant_create' product.pk %}">Добавить вариант</a>
+                        </div>
+
+                        {% for variant in variants %}
+                            <div class="border rounded-4 p-3 mb-3">
+                                <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                    <div>
+                                        <div class="fw-semibold">{{ variant.size }} / {{ variant.color }}</div>
+                                        <div class="small text-muted">{{ variant.price }} ₽</div>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <a class="sf-link small" href="{% url 'store:warehouse_variant_edit' variant.pk %}">Изменить</a>
+                                        <a class="text-danger small text-decoration-none" href="{% url 'store:warehouse_variant_delete' variant.pk %}">Удалить</a>
+                                    </div>
+                                </div>
+                                <form method="post" action="{% url 'store:warehouse_variant_stock_update' variant.pk %}" class="row g-2 align-items-end">
+                                    {% csrf_token %}
+                                    <div class="col-12 col-md-5">
+                                        <label class="form-label mb-1">Количество на складе</label>
+                                        {{ variant.stock_form.quantity }}
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <button type="submit" class="btn btn-primary w-100">Обновить</button>
+                                    </div>
+                                </form>
+                            </div>
+                        {% empty %}
+                            <div class="text-muted">
+                                Варианты ещё не созданы. Сначала добавьте изображение товара, затем заведите вариант с ценой и количеством.
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="sf-surface p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h4 mb-0">Изображения</h2>
+                            <a class="btn btn-outline-primary btn-sm" href="{% url 'store:warehouse_image_create' product.pk %}">Добавить изображение</a>
+                        </div>
+                        <div class="row g-3">
+                            {% for image in images %}
+                                <div class="col-12 col-md-6">
+                                    <div class="border rounded-4 p-3 h-100">
+                                        {% if image.image %}
+                                            <img class="img-fluid rounded-4 mb-3" src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}">
+                                        {% endif %}
+                                        <div class="small text-muted mb-2">{{ image.alt_text|default:'Без описания' }}</div>
+                                        {% if image.is_primary %}
+                                            <div class="badge text-bg-primary mb-2">Основное</div>
+                                        {% endif %}
+                                        <div>
+                                            <a class="text-danger small text-decoration-none" href="{% url 'store:warehouse_image_delete' image.pk %}">Удалить</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="col-12">
+                                    <div class="text-muted">Изображения ещё не загружены.</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-5">
+                    <div class="sf-surface p-4">
+                        <h2 class="h4 mb-3">Описание товара</h2>
+                        <p class="mb-0">{{ product.description|default:'Описание пока не заполнено.' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

@@ -1,59 +1,65 @@
 {% extends 'main_page/base.html' %}
 {% load static %}
-{% block title %}Список пользователей — Shinnik Fan Shop{% endblock %}
-{% block content %}
-<div class="container mt-5 mb-5">
-    <h2 class="text-center mb-4">Список пользователей</h2>
 
-    <div class="row">
-        {% for listed_user in users %}
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <div class="d-flex align-items-center mb-3">
-                        {% if listed_user.avatar %}
-                            <img src="{{ listed_user.avatar.url }}"
-                                 alt="avatar"
-                                 class="rounded-circle me-3"
-                                 style="width: 60px; height: 60px; object-fit: cover;">
-                        {% else %}
-                            <img src="{% static 'img/default_avatar.png' %}"
-                                 alt="avatar"
-                                 class="rounded-circle me-3"
-                                 style="width: 60px; height: 60px; object-fit: cover;">
-                        {% endif %}
-                        <div>
-                            <h5 class="card-title mb-1">{{ listed_user.email }}</h5>
-                            {% if listed_user.first_name or listed_user.last_name %}
-                                <small class="text-muted">{{ listed_user.first_name }} {{ listed_user.last_name }}</small>
+{% block title %}Пользователи{% endblock %}
+
+{% block breadcrumbs %}
+    {% include 'main_page/_breadcrumbs.html' with breadcrumbs=breadcrumbs only %}
+{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">Пользователи</h1>
+            </div>
+
+            <div class="row g-4">
+                {% for listed_user in users %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="sf-surface p-3 h-100">
+                        <div class="d-flex align-items-center mb-3">
+                            {% if listed_user.avatar %}
+                                <img src="{{ listed_user.avatar.url }}"
+                                     alt="avatar"
+                                     class="rounded-circle me-3"
+                                     style="width: 50px; height: 50px; object-fit: cover;">
+                            {% else %}
+                                <img src="{% static 'img/default_avatar.png' %}"
+                                     alt="avatar"
+                                     class="rounded-circle me-3"
+                                     style="width: 50px; height: 50px; object-fit: cover;">
+                            {% endif %}
+                            <div>
+                                <div class="fw-bold">{{ listed_user.email }}</div>
+                                {% if listed_user.first_name or listed_user.last_name %}
+                                    <small class="text-muted">{{ listed_user.first_name }} {{ listed_user.last_name }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="small mb-3">
+                            {% if listed_user.phone %}
+                                <div class="text-muted">{{ listed_user.phone }}</div>
+                            {% endif %}
+                            {% if listed_user.is_staff %}
+                                <span class="badge bg-primary">Администратор</span>
                             {% endif %}
                         </div>
+
+                        <a href="{% url 'users:profile_detail' listed_user.pk %}" class="btn btn-outline-primary btn-sm w-100">
+                            Просмотреть профиль
+                        </a>
                     </div>
-
-                    <ul class="list-unstyled mb-3">
-                        {% if listed_user.phone %}
-                            <li><strong>Телефон:</strong> {{ listed_user.phone }}</li>
-                        {% endif %}
-                        {% if listed_user.is_staff %}
-                            <li><span class="badge bg-primary">Администратор</span></li>
-                        {% endif %}
-                    </ul>
-
-                    <a href="{% url 'users:profile_detail' listed_user.pk %}" class="btn btn-outline-primary btn-sm">
-                        Просмотреть профиль
-                    </a>
                 </div>
+                {% empty %}
+                <div class="col-12 text-center">
+                    <div class="sf-surface p-5">
+                        <p class="text-muted mb-0">Нет пользователей для отображения.</p>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
-        {% empty %}
-        <div class="col-12 text-center">
-            <p class="text-muted">Нет пользователей для отображения.</p>
-        </div>
-        {% endfor %}
-    </div>
-
-    <div class="text-center mt-4">
-        <a href="{% url 'store:base' %}" class="btn btn-secondary">Назад</a>
-    </div>
-</div>
+    </section>
 {% endblock %}

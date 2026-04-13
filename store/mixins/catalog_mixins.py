@@ -30,6 +30,7 @@ class CategoriesContextMixin:
         return Category.objects.order_by("name")
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context[self.categories_context_key] = self.get_categories()
         return context

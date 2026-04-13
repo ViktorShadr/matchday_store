@@ -38,11 +38,27 @@ Expected product fields (возможны разные имена — шабло
         <div class="sf-product-price">
             {{ p.display_price|default:"—" }} ₽
         </div>
+        {% if not p.in_stock %}
+            <div class="small text-danger mt-1">Нет в наличии</div>
+        {% endif %}
 
-        <div class="sf-product-actions mt-2">
-            <a href="{% url 'store:product_detail' p.pk %}" class="btn btn-primary w-100">
+        <div class="sf-product-actions mt-2 d-flex gap-2">
+            <a href="{% url 'store:product_detail' p.pk %}" class="btn btn-outline-primary flex-grow-1">
                 Подробнее
             </a>
+            {% if p.first_available_variant_id %}
+                <button class="btn btn-primary quick-add-btn"
+                        data-variant-id="{{ p.first_available_variant_id }}"
+                        data-add-url="{% url 'store:add_to_cart' %}"
+                        title="Быстро добавить в корзину">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 6h15l-1.5 9h-12z"></path>
+                        <path d="M6 6l-2 0"></path>
+                        <circle cx="9" cy="20" r="1"></circle>
+                        <circle cx="18" cy="20" r="1"></circle>
+                    </svg>
+                </button>
+            {% endif %}
         </div>
     </div>
 </div>

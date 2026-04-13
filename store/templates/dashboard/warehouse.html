@@ -1,0 +1,79 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Склад{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">Склад</h1>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-outline-primary" href="{% url 'store:warehouse_category_create' %}">Создать категорию</a>
+                    <a class="btn btn-primary" href="{% url 'store:warehouse_product_create' %}">Добавить товар</a>
+                </div>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-8">
+                    <div class="sf-surface p-4">
+                        <h2 class="h4 mb-3">Товары на складе</h2>
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                <tr>
+                                    <th>Товар</th>
+                                    <th>Категория</th>
+                                    <th>Варианты</th>
+                                    <th>Остаток</th>
+                                    <th></th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for product in products %}
+                                    <tr>
+                                        <td class="fw-semibold">{{ product.name }}</td>
+                                        <td>{{ product.category.name|default:'Без категории' }}</td>
+                                        <td>{{ product.variant_count }}</td>
+                                        <td>{{ product.stock_total }}</td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary" href="{% url 'store:warehouse_product_manage' product.pk %}">Управлять</a>
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">На складе пока нет товаров.</td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-4">
+                    <div class="sf-surface p-4">
+                        <h2 class="h4 mb-3">Категории</h2>
+                        {% for category in categories %}
+                            <div class="border rounded-4 px-3 py-3 mb-2">
+                                <div class="d-flex justify-content-between align-items-start gap-3">
+                                    <div>
+                                        <div class="fw-semibold">{{ category.name }}</div>
+                                        <div class="small text-muted">Товаров: {{ category.product_count }}</div>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <a class="sf-link small" href="{% url 'store:warehouse_category_edit' category.pk %}">Изменить</a>
+                                        <a class="text-danger small text-decoration-none" href="{% url 'store:warehouse_category_delete' category.pk %}">Удалить</a>
+                                    </div>
+                                </div>
+                            </div>
+                        {% empty %}
+                            <div class="text-muted">Категории ещё не заведены.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

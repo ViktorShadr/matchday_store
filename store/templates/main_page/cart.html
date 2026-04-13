@@ -2,14 +2,14 @@
 {% load static %}
 {% block title %}Корзина{% endblock %}
 
+{% block meta_robots %}noindex, follow{% endblock %}
+
 {% block content %}
-    {% csrf_token %}
-    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
     <section class="sf-section">
         <div class="container">
             <div class="sf-section-head">
                 <h1 class="sf-section-title">Корзина</h1>
-                <a class="sf-link" href="{% url 'main_page:product_list' %}">К каталогу</a>
+                <a class="sf-link" href="{% url 'store:product_list' %}">К каталогу</a>
             </div>
 
             {% if items %}
@@ -50,19 +50,16 @@
                                                 <div class="d-flex align-items-center">
                                                     <button class="btn btn-sm btn-outline-secondary update-quantity-btn"
                                                             data-variant-id="{{ item.variant_id }}"
-                                                            data-action="decrease">-
-                                                    </button>
-                                                    <input type="number"
-                                                           class="form-control form-control-sm mx-2 quantity-input"
-                                                           style="width: 60px;"
-                                                           value="{{ item.quantity }}"
-                                                           min="1"
-                                                           max="{{ item.max_quantity }}"
-                                                           data-variant-id="{{ item.variant_id }}">
+                                                            data-action="decrease"
+                                                            {% if item.quantity <= 1 %}disabled{% endif %}>-</button>
+                                                    <span class="quantity-display mx-3 fw-bold"
+                                                          data-variant-id="{{ item.variant_id }}"
+                                                          style="min-width: 24px; text-align: center;">{{ item.quantity }}</span>
                                                     <button class="btn btn-sm btn-outline-secondary update-quantity-btn"
                                                             data-variant-id="{{ item.variant_id }}"
-                                                            data-action="increase">+
-                                                    </button>
+                                                            data-action="increase"
+                                                            {% if item.quantity >= item.max_quantity %}disabled{% endif %}>+</button>
+                                                    <small class="text-muted ms-2" style="font-size: 11px;">из {{ item.max_quantity }} шт.</small>
                                                 </div>
                                             </td>
                                             <td class="fw-bold item-total" data-variant-id="{{ item.variant_id }}">
@@ -102,7 +99,7 @@
 
                             <div class="d-grid gap-2">
                                 {% if user.is_authenticated %}
-                                    <a href="#" class="btn btn-primary btn-lg">Оформить заказ</a>
+                                    <a href="{% url 'orders:checkout' %}" class="btn btn-primary btn-lg">Оформить заказ</a>
                                 {% else %}
                                     <a href="{% url 'users:login' %}" class="btn btn-primary btn-lg">Войдите для
                                         оформления заказа</a>
@@ -111,7 +108,7 @@
                                     </div>
                                 {% endif %}
 
-                                <a href="{% url 'main_page:product_list' %}" class="btn btn-outline-secondary">Продолжить
+                                <a href="{% url 'store:product_list' %}" class="btn btn-outline-secondary">Продолжить
                                     покупки</a>
                             </div>
                         </div>
@@ -130,7 +127,7 @@
                     </div>
                     <h4 class="mb-3">Корзина пуста</h4>
                     <p class="text-muted mb-4">Добавьте товары из каталога, чтобы сделать заказ</p>
-                    <a href="{% url 'main_page:product_list' %}" class="btn btn-primary">Перейти в каталог</a>
+                    <a href="{% url 'store:product_list' %}" class="btn btn-primary">Перейти в каталог</a>
                 </div>
             {% endif %}
         </div>
@@ -142,37 +139,22 @@
         document.addEventListener('DOMContentLoaded', function () {
             // Обновление количества товара
             const updateQuantityButtons = document.querySelectorAll('.update-quantity-btn');
-            const quantityInputs = document.querySelectorAll('.quantity-input');
 
             updateQuantityButtons.forEach(button => {
                 button.addEventListener('click', function () {
                     const variantId = this.dataset.variantId;
                     const action = this.dataset.action;
-                    const input = document.querySelector(`.quantity-input[data-variant-id="${variantId}"]`);
-                    let currentQuantity = parseInt(input.value);
+                    const display = document.querySelector(`.quantity-display[data-variant-id="${variantId}"]`);
+                    const maxQuantity = parseInt(this.closest('td').querySelector('small').textContent.match(/\d+/)[0]);
+                    let currentQuantity = parseInt(display.textContent);
 
-                    if (action === 'increase') {
+                    if (action === 'increase' && currentQuantity < maxQuantity) {
                         currentQuantity++;
                     } else if (action === 'decrease' && currentQuantity > 1) {
                         currentQuantity--;
                     }
 
-                    if (currentQuantity <= parseInt(input.max)) {
-                        updateQuantity(variantId, currentQuantity);
-                    }
-                });
-            });
-
-            quantityInputs.forEach(input => {
-                input.addEventListener('change', function () {
-                    const variantId = this.dataset.variantId;
-                    const quantity = parseInt(this.value);
-
-                    if (quantity >= 1 && quantity <= parseInt(this.max)) {
-                        updateQuantity(variantId, quantity);
-                    } else {
-                        this.value = this.defaultValue;
-                    }
+                    updateQuantity(variantId, currentQuantity);
                 });
             });
 
@@ -181,15 +163,19 @@
             removeButtons.forEach(button => {
                 button.addEventListener('click', function () {
                     const variantId = this.dataset.variantId;
+                    const row = this.closest('[data-cart-row]');
+                    const productName = row ? row.querySelector('.fw-bold').textContent : 'Товар';
 
-                    if (confirm('Удалить товар из корзины?')) {
-                        removeFromCart(variantId);
-                    }
+                    // Показываем toast с подтверждением
+                    showConfirmToast(
+                        `Удалить "${productName}" из корзины?`,
+                        () => removeFromCart(variantId)
+                    );
                 });
             });
 
             function updateQuantity(variantId, quantity) {
-                fetch('{% url "main_page:update_cart" %}', {
+                fetch('{% url "store:update_cart" %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -214,7 +200,7 @@
             }
 
             function removeFromCart(variantId) {
-                fetch('{% url "main_page:remove_from_cart" %}', {
+                fetch('{% url "store:remove_from_cart" %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -262,60 +248,39 @@
                 // Обновляем счетчик в шапке
                 updateCartCounter(data.cart_items);
 
-                // Обновляем сумму конкретного товара
-                if (data.item_total !== undefined && variantId !== null) {
-                    const itemTotal = document.querySelector(`.item-total[data-variant-id="${variantId}"]`);
-                    if (itemTotal) {
-                        itemTotal.textContent = `${data.item_total} ₽`;
-                    }
-                }
-            }
-
-            function showNotification(message, type) {
-                const notification = document.createElement('div');
-                notification.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed top-0 start-50 translate-middle-x mt-3`;
-                notification.style.zIndex = '9999';
-                notification.style.minWidth = '300px';
-                notification.textContent = message;
-
-                document.body.appendChild(notification);
-
-                setTimeout(() => {
-                    notification.remove();
-                }, 3000);
-            }
-
-            function getCookie(name) {
-                let cookieValue = null;
-                if (document.cookie && document.cookie !== '') {
-                    const cookies = document.cookie.split(';');
-                    for (let i = 0; i < cookies.length; i++) {
-                        const cookie = cookies[i].trim();
-                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                            break;
+                // Обновляем сумму и количество конкретного товара
+                if (variantId !== null) {
+                    // Обновляем отображаемое количество
+                    if (data.item_quantity !== undefined) {
+                        const quantityDisplay = document.querySelector(`.quantity-display[data-variant-id="${variantId}"]`);
+                        if (quantityDisplay) {
+                            quantityDisplay.textContent = data.item_quantity;
                         }
                     }
+
+                    // Обновляем сумму товара
+                    if (data.item_total !== undefined) {
+                        const itemTotal = document.querySelector(`.item-total[data-variant-id="${variantId}"]`);
+                        if (itemTotal) {
+                            itemTotal.textContent = `${data.item_total} ₽`;
+                        }
+                    }
+
+                    // Обновляем состояние кнопок
+                    const row = document.querySelector(`[data-cart-row][data-variant-id="${variantId}"]`);
+                    if (row && data.item_quantity !== undefined) {
+                        const decreaseBtn = row.querySelector('.update-quantity-btn[data-action="decrease"]');
+                        const increaseBtn = row.querySelector('.update-quantity-btn[data-action="increase"]');
+                        const maxText = row.querySelector('small').textContent;
+                        const maxQuantity = parseInt(maxText.match(/\d+/)[0]);
+
+                        if (decreaseBtn) decreaseBtn.disabled = data.item_quantity <= 1;
+                        if (increaseBtn) increaseBtn.disabled = data.item_quantity >= maxQuantity;
+                    }
                 }
-                return cookieValue;
             }
 
-            function getCsrfToken() {
-                // Сначала пробуем найти в DOM
-                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
-                if (csrfToken) {
-                    return csrfToken;
-                }
-                // Если не нашли, пробуем получить из cookie
-                return getCookie('csrftoken');
-            }
-
-            function updateCartCounter(count) {
-                const cartCounter = document.querySelector('.cart-counter');
-                if (cartCounter) {
-                    cartCounter.textContent = count;
-                }
-            }
+            // Functions are defined in main.js: showNotification, getCsrfToken, updateCartCounter
         });
     </script>
 {% endblock %}

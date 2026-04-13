@@ -1,20 +1,13 @@
-import logging
-from django.contrib.auth import login
-
-from config.celery import send_welcome_email
 from users.models import User
-
-logger = logging.getLogger(__name__)
 
 
 def register_user(form, request):
     """
-    Регистрация нового пользователя и отправка приветственного письма.
+    Регистрация нового пользователя.
 
     Выполняет следующие действия:
     1. Сохраняет пользователя из формы
-    2. Выполняет вход пользователя в систему
-    3. Отправляет приветственное письмо через Celery
+    2. Оставляет пользователя неактивным до подтверждения email
 
     Args:
         form (UserRegistrationForm): Форма регистрации пользователя
@@ -23,17 +16,9 @@ def register_user(form, request):
     Returns:
         User: Созданный пользователь
 
-    Note:
-        Ошибки при отправке письма логируются, но не прерывают процесс регистрации
     """
+    _ = request
     user = form.save()
-    login(request, user)
-
-    # Отправка приветственного письма через Celery с обработкой ошибок
-    try:
-        send_welcome_email.delay(user.email)
-    except Exception as e:
-        logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
 
     return user
 

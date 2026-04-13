@@ -31,6 +31,7 @@ def enrich_product(product):
     Добавляет атрибуты:
     - display_image: основное изображение товара
     - display_price: цена первого варианта товара
+    - in_stock: есть ли хотя бы один вариант в наличии
 
     Алгоритм выбора изображения:
     1. Основное изображение (is_primary=True)
@@ -54,6 +55,12 @@ def enrich_product(product):
         first_image.image if first_image else getattr(getattr(first_variant, "image", None), "image", None)
     )
     product.display_price = first_variant.price if first_variant else None
+    product.in_stock = any(variant.quantity > 0 for variant in variants)
+
+    # ID первого доступного варианта для кнопки быстрого добавления
+    first_available_variant = next((v for v in variants if v.quantity > 0), None)
+    product.first_available_variant_id = first_available_variant.id if first_available_variant else None
+
     return product
 
 

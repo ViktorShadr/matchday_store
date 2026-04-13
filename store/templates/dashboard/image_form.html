@@ -1,0 +1,43 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">{{ page_title }}</h1>
+                <a class="sf-link" href="{% url 'store:warehouse_product_manage' product.pk %}">К товару</a>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-8">
+                    <div class="sf-surface p-4">
+                        <div class="small text-muted mb-3">Товар: {{ product.name }}</div>
+                        <form method="post" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            {{ form.non_field_errors }}
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ form.image.id_for_label }}">Файл</label>
+                                {{ form.image }}
+                                {{ form.image.errors }}
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ form.alt_text.id_for_label }}">Alt-текст</label>
+                                {{ form.alt_text }}
+                                {{ form.alt_text.errors }}
+                            </div>
+                            <div class="form-check mb-3">
+                                {{ form.is_primary }}
+                                <label class="form-check-label" for="{{ form.is_primary.id_for_label }}">Сделать основным изображением</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

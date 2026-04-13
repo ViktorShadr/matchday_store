@@ -5,6 +5,8 @@ from users.models import User
 
 
 class UserRegistrationForm(UserCreationForm):
+    """Класс UserRegistrationForm."""
+
     email = forms.EmailField(
         required=True,
         label="Email",
@@ -35,10 +37,13 @@ class UserRegistrationForm(UserCreationForm):
     )
 
     class Meta(UserCreationForm.Meta):
+        """Мета-настройки класса."""
+
         model = User
         fields = ("email", "password1", "password2")
 
     def clean_email(self):
+        """Проверяет корректность и уникальность электронной почты."""
         email = self.cleaned_data.get("email")
         if User.objects.filter(email=email).exists():
             raise forms.ValidationError("Пользователь с таким email уже зарегистрирован")
@@ -46,6 +51,8 @@ class UserRegistrationForm(UserCreationForm):
 
 
 class UserLoginForm(AuthenticationForm):
+    """Класс UserLoginForm."""
+
     username = forms.EmailField(
         label="Email",
         widget=forms.EmailInput(
@@ -67,7 +74,11 @@ class UserLoginForm(AuthenticationForm):
 
 
 class UserProfileForm(forms.ModelForm):
+    """Класс UserProfileForm."""
+
     class Meta:
+        """Мета-настройки класса."""
+
         model = User
         fields = ("first_name", "last_name", "city", "avatar", "phone")
 
@@ -101,6 +112,8 @@ class UserProfileForm(forms.ModelForm):
 
 
 class ProfileDeleteConfirmForm(forms.Form):
+    """Класс ProfileDeleteConfirmForm."""
+
     password = forms.CharField(
         label="Введите пароль для подтверждения",
         widget=forms.PasswordInput(

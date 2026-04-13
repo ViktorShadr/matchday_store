@@ -27,9 +27,11 @@ class CategoryListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
+        """Возвращает queryset для текущего представления."""
         return Category.objects.all().order_by("name")
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
@@ -53,6 +55,7 @@ class CategoryDetailView(DetailView):
     context_object_name = "category"
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         products = self.object.products.all().order_by("-created_at")
 
@@ -82,9 +85,11 @@ class CategoryCreateView(ModeratorRequiredMixin, CreateView):
     context_object_name = "category"
 
     def get_success_url(self):
+        """Возвращает URL для перенаправления после успешного действия."""
         return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
@@ -109,9 +114,11 @@ class CategoryUpdateView(ModeratorRequiredMixin, UpdateView):
     context_object_name = "category"
 
     def get_success_url(self):
+        """Возвращает URL для перенаправления после успешного действия."""
         return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
@@ -133,6 +140,7 @@ class CategoryDeleteView(ModeratorRequiredMixin, DeleteView):
     success_url = reverse_lazy("store:category_list")
 
     def get_context_data(self, **kwargs):
+        """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context
