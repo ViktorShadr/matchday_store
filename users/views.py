@@ -194,6 +194,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     model = User
     form_class = UserProfileForm
     template_name = "profile_form.html"
+    context_object_name = "profile_user"
 
     def get_object(self, queryset=None):
         """

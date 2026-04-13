@@ -368,6 +368,7 @@ class CartService:
 
             items.append({
                 'variant_id': variant.id,
+                'product_id': product.id,
                 'product_name': product.name,
                 'size': variant.size,
                 'color': variant.color,

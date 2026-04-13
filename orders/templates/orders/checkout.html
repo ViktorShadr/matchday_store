@@ -1,103 +1,131 @@
 {% extends 'main_page/base.html' %}
 
-{% block title %}Оформление заказа{% endblock %}
+{% block title %}Оформление заказа — ФК «Шинник»{% endblock %}
+{% block meta_description %}Оформление заказа в официальном магазине атрибутики ФК «Шинник».{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
-        <div class="container">
-            <div class="sf-section-head">
-                <h1 class="sf-section-title">Оформление заказа</h1>
-                <a class="sf-link" href="{% url 'store:cart' %}">Вернуться в корзину</a>
+<section class="sf-checkout-page">
+    <div class="container">
+        <div class="sf-checkout-hero">
+            <div>
+                <div class="sf-home-eyebrow">Финальный шаг</div>
+                <h1 class="sf-checkout-title">Оформление заказа</h1>
+                <p class="sf-checkout-lead">
+                    Заполни данные для заказа и проверь итоговую информацию перед подтверждением.
+                </p>
             </div>
 
-            <div class="row g-4">
-                <div class="col-12 col-lg-7">
-                    <div class="sf-surface p-4">
-                        <form method="post" novalidate>
-                            {% csrf_token %}
-                            <input type="hidden" name="checkout_token" value="{{ checkout_token }}">
+            <div class="sf-checkout-steps">
+                <div class="sf-checkout-step is-done">Корзина</div>
+                <div class="sf-checkout-step is-active">Оформление</div>
+                <div class="sf-checkout-step">Подтверждение</div>
+            </div>
+        </div>
 
-                            {% if form.non_field_errors %}
-                                <div class="alert alert-danger">
-                                    {% for error in form.non_field_errors %}
-                                        <div>{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
+        <div class="sf-checkout-layout">
+            <div class="sf-checkout-form-card">
+                <h2 class="sf-checkout-section-title">Данные покупателя</h2>
 
-                            <h5 class="mb-3">Контакты</h5>
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <label class="form-label" for="{{ form.recipient_name.id_for_label }}">{{ form.recipient_name.label }}</label>
-                                    {{ form.recipient_name }}
-                                    {% if form.recipient_name.errors %}<div class="text-danger small mt-1">{{ form.recipient_name.errors|join:', ' }}</div>{% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
-                                    {{ form.email }}
-                                    {% if form.email.errors %}<div class="text-danger small mt-1">{{ form.email.errors|join:', ' }}</div>{% endif %}
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label" for="{{ form.phone.id_for_label }}">{{ form.phone.label }}</label>
-                                    {{ form.phone }}
-                                    {% if form.phone.errors %}<div class="text-danger small mt-1">{{ form.phone.errors|join:', ' }}</div>{% endif %}
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label" for="{{ form.customer_comment.id_for_label }}">{{ form.customer_comment.label }}</label>
-                                    {{ form.customer_comment }}
-                                    {% if form.customer_comment.errors %}<div class="text-danger small mt-1">{{ form.customer_comment.errors|join:', ' }}</div>{% endif %}
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger sf-alert mb-4">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="row g-4">
+                        {% for field in form %}
+                            <div class="col-12 {% if field.name in 'first_name,last_name,phone,email' %}col-md-6{% endif %}">
+                                <div class="sf-form-group">
+                                    <label for="{{ field.id_for_label }}" class="form-label">
+                                        {{ field.label }}
+                                        {% if field.field.required %}
+                                            <span class="sf-required">*</span>
+                                        {% endif %}
+                                    </label>
+
+                                    {{ field }}
+
+                                    {% if field.help_text %}
+                                        <div class="sf-field-help">
+                                            {{ field.help_text }}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if field.errors %}
+                                        <div class="sf-field-errors">
+                                            {% for error in field.errors %}
+                                                <div>{{ error }}</div>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
                                 </div>
                             </div>
-
-                            <h5 class="mt-4 mb-3">Самовывоз</h5>
-                            <div class="border rounded-3 p-3 bg-light">
-                                <div class="fw-bold">{{ pickup_location.name }}</div>
-                                <div>{{ pickup_location.address }}</div>
-                                <div class="text-muted">Часы работы: {{ pickup_location.hours }}</div>
-                                <div class="text-muted">Телефон: {{ pickup_location.phone }}</div>
-                            </div>
-
-                            <h5 class="mt-4 mb-3">Оплата</h5>
-                            <div class="border rounded-3 p-3 bg-light">
-                                Оплата при получении товара в магазине.
-                            </div>
-
-                            <button type="submit" class="btn btn-primary btn-lg mt-4 w-100">Подтвердить заказ</button>
-                        </form>
+                        {% endfor %}
                     </div>
-                </div>
 
-                <div class="col-12 col-lg-5">
-                    <div class="sf-surface p-4">
-                        <h5 class="mb-3">Ваш заказ</h5>
-                        <div class="d-flex flex-column gap-3">
-                            {% for item in items %}
-                                <div class="d-flex justify-content-between gap-3">
-                                    <div>
-                                        <div class="fw-bold">{{ item.product_name }}</div>
-                                        <div class="small text-muted">{{ item.size }} / {{ item.color }}</div>
-                                        <div class="small text-muted">{{ item.quantity }} шт.</div>
+                    <div class="sf-checkout-actions">
+                        <a href="{% url 'store:cart' %}" class="btn btn-outline-secondary">
+                            Вернуться в корзину
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            Подтвердить заказ
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <aside class="sf-checkout-sidebar">
+                <div class="sf-checkout-summary-card">
+                    <h3 class="sf-checkout-summary-title">Сводка заказа</h3>
+
+                    {% if cart_items %}
+                        <div class="sf-checkout-items">
+                            {% for item in cart_items %}
+                                <div class="sf-checkout-item">
+                                    <div class="sf-checkout-item-main">
+                                        <div class="sf-checkout-item-name">
+                                            {{ item.product_name }}
+                                        </div>
+                                        <div class="sf-checkout-item-meta">
+                                            {{ item.quantity }} шт.
+                                        </div>
                                     </div>
-                                    <div class="fw-bold">{{ item.total_price_formatted }}</div>
+                                    <div class="sf-checkout-item-price">
+                                        {{ item.total_price }} ₽
+                                    </div>
                                 </div>
                             {% endfor %}
                         </div>
-                        <hr>
-                        <div class="d-flex justify-content-between">
-                            <span>Товары</span>
-                            <span>{{ total_items }} шт.</span>
-                        </div>
-                        <div class="d-flex justify-content-between mt-2">
-                            <span>Доставка</span>
-                            <span>0 ₽</span>
-                        </div>
-                        <div class="d-flex justify-content-between fs-5 fw-bold mt-3">
-                            <span>Итого</span>
-                            <span>{{ total_price }} ₽</span>
-                        </div>
+                    {% endif %}
+
+                    <div class="sf-checkout-summary-divider"></div>
+
+                    <div class="sf-checkout-summary-row">
+                        <span>Товаров</span>
+                        <strong>{{ cart_items|length }}</strong>
+                    </div>
+
+                    <div class="sf-checkout-summary-row sf-checkout-summary-row--total">
+                        <span>Итого</span>
+                        <strong>{{ cart_total }} ₽</strong>
                     </div>
                 </div>
-            </div>
+
+                <div class="sf-checkout-note-card">
+                    <h3 class="sf-checkout-note-title">Важно</h3>
+                    <ul class="sf-checkout-note-list">
+                        <li>Проверь контактные данные перед подтверждением.</li>
+                        <li>После оформления пользователь должен ясно видеть итог покупки.</li>
+                        <li>Checkout должен быть простым и не вызывать сомнений.</li>
+                    </ul>
+                </div>
+            </aside>
         </div>
-    </section>
+    </div>
+</section>
 {% endblock %}

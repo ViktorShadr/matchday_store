@@ -2,38 +2,53 @@
 <!doctype html>
 <html lang="ru">
 {% include 'main_page/_head.html' %}
-<body>
-    <div class="sf-topbar">
+<body class="sf-body">
+    <div class="sf-site-shell">
         {% block header %}{% include 'main_page/_header.html' %}{% endblock %}
         {% block menu %}{% include 'main_page/_menu.html' %}{% endblock %}
+
+        {% block breadcrumbs %}{% endblock %}
+
+        {% if messages %}
+            <section class="sf-flash-wrapper">
+                <div class="container">
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags|default:'info' }} sf-alert shadow-sm border-0 mb-3" role="alert">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+
+        <main class="sf-main">
+            {% block content %}{% endblock %}
+        </main>
+
+        {% block footer %}{% include 'main_page/_footer.html' %}{% endblock %}
     </div>
 
-    {% block breadcrumbs %}{% endblock %}
-
-    <main class="container-fluid px-0">
-        {% block content %}{% endblock %}
-    </main>
-
-    {% block footer %}{% include 'main_page/_footer.html' %}{% endblock %}
-
-    <!-- Cookie Consent Banner -->
     <div id="cookie-banner" class="sf-cookie-banner hidden">
         <div class="container">
             <div class="sf-cookie-content">
-                <p class="sf-cookie-text">
-                    Мы используем cookies для улучшения работы сайта и персонализации контента.
-                    Продолжая использовать сайт, вы соглашаетесь с <a href="{% url 'store:privacy_policy' %}">Политикой конфиденциальности</a>.
-                </p>
+                <div class="sf-cookie-text-wrap">
+                    <div class="sf-cookie-title">Мы используем cookies</div>
+                    <p class="sf-cookie-text mb-0">
+                        Это помогает улучшать работу магазина, сохранять ваши настройки и делать интерфейс удобнее.
+                        Продолжая использовать сайт, вы соглашаетесь с
+                        <a href="{% url 'store:privacy_policy' %}">политикой конфиденциальности</a>.
+                    </p>
+                </div>
                 <div class="sf-cookie-actions">
                     <button id="cookie-accept" class="btn btn-primary btn-sm">Принять</button>
-                    <button id="cookie-decline" class="btn btn-outline-secondary btn-sm">Отклонить</button>
+                    <button id="cookie-decline" class="btn btn-outline-light btn-sm">Отклонить</button>
                 </div>
             </div>
         </div>
     </div>
 
     {% include 'main_page/_scripts.html' %}
-    <script src="{% static 'js/main.js' %}?v=3"></script>
+    <script src="{% static 'js/main.js' %}?v=4"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

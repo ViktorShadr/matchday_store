@@ -1,38 +1,34 @@
-{% comment %}
-Breadcrumb component with Schema.org markup
-Usage:
-  {% include 'main_page/_breadcrumbs.html' with items="[{'title':'Главная','url':'/'},{'title':'Каталог','url':'/products/'}]" %}
-  or pass current_item for simple usage
-{% endcomment %}
-
 {% if breadcrumbs %}
-<nav class="sf-breadcrumb" aria-label="breadcrumb">
+<nav class="sf-breadcrumbs" aria-label="breadcrumb">
     <div class="container">
-        <ol class="sf-breadcrumb-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+        <ol class="sf-breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
             {% for item in breadcrumbs %}
-            <li class="sf-breadcrumb-item{% if forloop.last %} active{% endif %}" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-                {% if item.url and not forloop.last %}
-                    <a href="{{ item.url }}" itemprop="item">
+                <li class="sf-breadcrumbs-item {% if forloop.last %}active{% endif %}"
+                    itemprop="itemListElement"
+                    itemscope
+                    itemtype="https://schema.org/ListItem">
+                    {% if item.url and not forloop.last %}
+                        <a href="{{ item.url }}" itemprop="item">
+                            <span itemprop="name">{{ item.title }}</span>
+                        </a>
+                    {% else %}
                         <span itemprop="name">{{ item.title }}</span>
-                    </a>
-                {% else %}
-                    <span itemprop="name">{{ item.title }}</span>
+                    {% endif %}
+                    <meta itemprop="position" content="{{ forloop.counter }}">
+                </li>
+
+                {% if not forloop.last %}
+                    <li class="sf-breadcrumbs-separator" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </li>
                 {% endif %}
-                <meta itemprop="position" content="{{ forloop.counter }}" />
-            </li>
-            {% if not forloop.last %}
-            <li class="sf-breadcrumb-separator" aria-hidden="true">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-            </li>
-            {% endif %}
             {% endfor %}
         </ol>
     </div>
 </nav>
 
-<!-- JSON-LD BreadcrumbList for SEO -->
 <script type="application/ld+json">
 {
     "@context": "https://schema.org",
@@ -43,11 +39,7 @@ Usage:
             "@type": "ListItem",
             "position": {{ forloop.counter }},
             "name": "{{ item.title|escapejs }}",
-            {% if item.url and not forloop.last %}
-            "item": "{{ request.scheme }}://{{ request.get_host }}{{ item.url }}"
-            {% else %}
-            "item": "{{ request.build_absolute_uri }}"
-            {% endif %}
+            "item": "{% if item.url and not forloop.last %}{{ request.scheme }}://{{ request.get_host }}{{ item.url }}{% else %}{{ request.build_absolute_uri }}{% endif %}"
         }{% if not forloop.last %},{% endif %}
         {% endfor %}
     ]

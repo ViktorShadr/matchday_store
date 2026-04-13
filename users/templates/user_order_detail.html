@@ -1,132 +1,173 @@
 {% extends 'main_page/base.html' %}
-{% load static %}
-{% block title %}Заказ {{ order.number }} — Shinnik Fan Shop{% endblock %}
+
+{% block title %}Детали заказа — ФК «Шинник»{% endblock %}
+{% block meta_description %}Подробная информация о заказе в официальном магазине атрибутики ФК «Шинник».{% endblock %}
+
 {% block content %}
-<section class="sf-section">
+<section class="sf-profile-page">
     <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-lg-8 col-md-10 col-sm-12">
-                <div class="sf-surface p-4">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h2>Заказ {{ order.number }}</h2>
-                        <span class="badge bg-info fs-6">{{ order.get_status_display }}</span>
-                    </div>
+        <div class="sf-profile-hero">
+            <div>
+                <div class="sf-home-eyebrow">Личный кабинет</div>
+                <h1 class="sf-profile-title">Заказ #{{ order.id }}</h1>
+                <p class="sf-profile-lead">
+                    Подробная информация по оформленному заказу: состав, статус и основные данные.
+                </p>
+            </div>
 
-                    {% if messages %}
-                        <div class="mb-3">
-                            {% for message in messages %}
-                                <div class="alert alert-{{ message.tags|default:'info' }} mb-2" role="alert">
-                                    {{ message }}
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
+            <div class="sf-profile-hero-actions">
+                <a href="{% url 'users:order_list' %}" class="btn btn-outline-secondary">
+                    Назад к заказам
+                </a>
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    В каталог
+                </a>
+            </div>
+        </div>
 
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <div class="border rounded-3 p-3 bg-light">
-                                <h6 class="mb-2">Контакты</h6>
-                                <div>{{ order.recipient_name }}</div>
-                                <div class="text-muted">{{ order.email }}</div>
-                                <div class="text-muted">{{ order.phone }}</div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="border rounded-3 p-3 bg-light">
-                                <h6 class="mb-2">{{ order.get_delivery_method_display }}</h6>
-                                {% if order.delivery_method == 'pickup' %}
-                                    <div class="fw-bold">{{ pickup_location_name|default:"Магазин" }}</div>
-                                    <div class="text-muted">Оплата при получении</div>
+        <div class="sf-order-detail-layout">
+            <div class="sf-order-detail-main">
+                <div class="sf-profile-card">
+                    <div class="sf-order-detail-top">
+                        <div>
+                            <div class="sf-order-number">Заказ {{ order.number|default:order.id }}</div>
+                            <div class="sf-order-date">
+                                {% if order.created_at %}
+                                    Оформлен {{ order.created_at|date:"d.m.Y H:i" }}
+                                {% elif order.created %}
+                                    Оформлен {{ order.created|date:"d.m.Y H:i" }}
                                 {% else %}
-                                    <div class="text-muted">Адрес доставки будет указан</div>
+                                    Дата не указана
                                 {% endif %}
                             </div>
                         </div>
-                    </div>
 
-                    {% if order.customer_comment %}
-                        <div class="mb-4">
-                            <h6>Комментарий к заказу</h6>
-                            <div class="text-muted">{{ order.customer_comment }}</div>
+                        <div class="sf-order-status-wrap">
+                            <span class="sf-order-status
+                                {% if order.status == 'completed' or order.status == 'done' %}
+                                    sf-order-status--success
+                                {% elif order.status == 'cancelled' %}
+                                    sf-order-status--danger
+                                {% else %}
+                                    sf-order-status--neutral
+                                {% endif %}
+                            ">
+                                {{ order.get_status_display|default:order.status|default:"В обработке" }}
+                            </span>
                         </div>
-                    {% endif %}
-
-                    <h6 class="mb-3">Состав заказа</h6>
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Товар</th>
-                                    <th>Вариант</th>
-                                    <th class="text-center">Кол-во</th>
-                                    <th class="text-end">Цена</th>
-                                    <th class="text-end">Сумма</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in order.items.all %}
-                                <tr>
-                                    <td class="fw-bold">{{ item.product_name_snapshot }}</td>
-                                    <td class="text-muted">
-                                        {% if item.size_snapshot %}{{ item.size_snapshot }}{% endif %}
-                                        {% if item.size_snapshot and item.color_snapshot %} / {% endif %}
-                                        {% if item.color_snapshot %}{{ item.color_snapshot }}{% endif %}
-                                    </td>
-                                    <td class="text-center">{{ item.quantity }}</td>
-                                    <td class="text-end">{{ item.unit_price }} ₽</td>
-                                    <td class="text-end fw-bold">{{ item.line_total }} ₽</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted">Нет данных о товарах</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <hr>
-                    <div class="row justify-content-end">
-                        <div class="col-md-5">
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>Товары:</span>
-                                <span>{{ order.subtotal_amount }} ₽</span>
-                            </div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>Доставка:</span>
-                                <span>{{ order.delivery_amount|default:"0" }} ₽</span>
-                            </div>
-                            {% if order.discount_amount %}
-                            <div class="d-flex justify-content-between mb-1 text-success">
-                                <span>Скидка:</span>
-                                <span>-{{ order.discount_amount }} ₽</span>
-                            </div>
-                            {% endif %}
-                            <hr>
-                            <div class="d-flex justify-content-between fs-5 fw-bold">
-                                <span>Итого:</span>
-                                <span>{{ order.total_amount }} ₽</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 d-flex gap-2 flex-wrap">
-                        <a href="{% url 'users:order_list' %}" class="btn btn-outline-secondary">К списку заказов</a>
-                        {% if can_cancel %}
-                            <form method="post" action="{% url 'users:order_cancel' order.pk %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-outline-danger">Отменить заказ</button>
-                            </form>
-                        {% endif %}
-                    </div>
-
-                    <div class="mt-3 text-muted small">
-                        Создан: {{ order.created_at|date:"d.m.Y H:i" }}
-                        {% if order.confirmed_at %} | Подтверждён: {{ order.confirmed_at|date:"d.m.Y H:i" }}{% endif %}
-                        {% if order.cancelled_at %} | Отменён: {{ order.cancelled_at|date:"d.m.Y H:i" }}{% endif %}
                     </div>
                 </div>
+
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Состав заказа</h2>
+
+                    {% if order.items.all %}
+                        <div class="sf-order-detail-items">
+                            {% for item in order.items.all %}
+                                <div class="sf-order-detail-item">
+                                    <div class="sf-order-detail-item-main">
+                                        <div class="sf-order-detail-item-name">
+                                            {{ item.product_name_snapshot }}
+                                        </div>
+                                        <div class="sf-order-detail-item-meta">
+                                            {{ item.quantity }} шт.
+                                            {% if item.unit_price %}
+                                                · {{ item.unit_price }} ₽ за шт.
+                                            {% endif %}
+                                            {% if item.size_snapshot or item.color_snapshot %}
+                                                · {{ item.size_snapshot }}{% if item.color_snapshot %} / {{ item.color_snapshot }}{% endif %}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="sf-order-detail-item-price">
+                                        {% if item.line_total %}
+                                            {{ item.line_total }} ₽
+                                        {% elif item.unit_price %}
+                                            {{ item.unit_price }} ₽
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="sf-empty-state text-start">
+                            Состав заказа пока недоступен.
+                        </div>
+                    {% endif %}
+                </div>
             </div>
+
+            <aside class="sf-order-detail-sidebar">
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Сводка</h2>
+
+                    <div class="sf-order-detail-summary">
+                        <div class="sf-order-detail-summary-row">
+                            <span>Номер заказа</span>
+                            <strong>{{ order.number|default:order.id }}</strong>
+                        </div>
+
+                        <div class="sf-order-detail-summary-row">
+                            <span>Статус</span>
+                            <strong>{{ order.get_status_display|default:order.status|default:"В обработке" }}</strong>
+                        </div>
+
+                        <div class="sf-order-detail-summary-row">
+                            <span>Итого</span>
+                            <strong>
+                                {% if order.total_amount %}
+                                    {{ order.total_amount }} ₽
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Данные получателя</h2>
+
+                    <div class="sf-order-detail-recipient">
+                        <div class="sf-order-detail-recipient-item">
+                            <div class="sf-order-detail-recipient-label">Имя</div>
+                            <div class="sf-order-detail-recipient-value">
+                                {% if order.recipient_name %}
+                                    {{ order.recipient_name }}
+                                {% elif request.user.get_full_name %}
+                                    {{ request.user.get_full_name }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if order.email %}
+                            <div class="sf-order-detail-recipient-item">
+                                <div class="sf-order-detail-recipient-label">Email</div>
+                                <div class="sf-order-detail-recipient-value">{{ order.email }}</div>
+                            </div>
+                        {% endif %}
+
+                        {% if order.phone %}
+                            <div class="sf-order-detail-recipient-item">
+                                <div class="sf-order-detail-recipient-label">Телефон</div>
+                                <div class="sf-order-detail-recipient-value">{{ order.phone }}</div>
+                            </div>
+                        {% endif %}
+
+                        {% if order.customer_comment %}
+                            <div class="sf-order-detail-recipient-item">
+                                <div class="sf-order-detail-recipient-label">Комментарий</div>
+                                <div class="sf-order-detail-recipient-value">{{ order.customer_comment }}</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </aside>
         </div>
     </div>
 </section>

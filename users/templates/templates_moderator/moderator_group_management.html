@@ -1,123 +1,146 @@
-{% extends "admin/base_site.html" %}
-{% load i18n admin_urls static admin_modify %}
+{% extends 'main_page/base.html' %}
+{% load static %}
 
-{% block breadcrumbs %}
-<div class="breadcrumbs">
-<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
-&rsaquo; <a href="{% url 'admin:app_list' 'auth' %}">Authentication and Authorization</a>
-&rsaquo; {{ title }}
-</div>
-{% endblock %}
+{% block title %}Управление группами пользователя — ФК «Шинник»{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<div id="content-main">
-    <div class="module">
-        <h2>Текущие модераторы ({{ moderators.count }})</h2>
-        {% if moderators %}
-            <div class="results">
-                <table id="result_list">
-                    <thead>
-                        <tr>
-                            <th scope="col" class="sortable column-id"><div class="text"><span>ID</span></div></th>
-                            <th scope="col" class="sortable column-email"><div class="text"><span>Email</span></div></th>
-                            <th scope="col" class="sortable column-first_name"><div class="text"><span>Имя</span></div></th>
-                            <th scope="col" class="sortable column-last_name"><div class="text"><span>Фамилия</span></div></th>
-                            <th scope="col" class="column-is_active"><div class="text"><span>Активен</span></div></th>
-                            <th scope="col" class="column-actions"><div class="text"><span>Действия</span></div></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for user in moderators %}
-                        <tr class="{% cycle 'row1' 'row2' %}">
-                            <td class="field-id">{{ user.id }}</td>
-                            <td class="field-email">{{ user.email }}</td>
-                            <td class="field-first_name">{{ user.first_name|default:"-" }}</td>
-                            <td class="field-last_name">{{ user.last_name|default:"-" }}</td>
-                            <td class="field-is_active">
-                                {% if user.is_active %}
-                                    <img src="{% static 'admin/img/icon-yes.svg' %}" alt="Да">
-                                {% else %}
-                                    <img src="{% static 'admin/img/icon-no.svg' %}" alt="Нет">
-                                {% endif %}
-                            </td>
-                            <td class="field-actions">
-                                <form method="post" action="{% url 'admin:users_user_changelist' %}" style="display: inline;">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="action" value="remove_from_moderators">
-                                    <input type="hidden" name="_selected_action" value="{{ user.id }}">
-                                    <button type="submit" class="button" onclick="return confirm('Вы уверены, что хотите удалить пользователя из группы модераторов?');">
-                                        Удалить из модераторов
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+<section class="sf-admin-page">
+    <div class="container">
+        <div class="sf-admin-hero">
+            <div>
+                <div class="sf-home-eyebrow">Модерация и доступы</div>
+                <h1 class="sf-admin-title">Управление группами пользователя</h1>
+                <p class="sf-admin-lead">
+                    Назначай и изменяй группы пользователя аккуратно и прозрачно, чтобы права доступа оставались понятными и контролируемыми.
+                </p>
             </div>
-        {% else %}
-            <p class="paginator">В группе модераторов пока нет пользователей.</p>
-        {% endif %}
-    </div>
 
-    <div class="module">
-        <h2>Доступные пользователи для добавления в модераторы ({{ non_moderators.count }})</h2>
-        {% if non_moderators %}
-            <div class="results">
-                <table id="result_list">
-                    <thead>
-                        <tr>
-                            <th scope="col" class="sortable column-id"><div class="text"><span>ID</span></div></th>
-                            <th scope="col" class="sortable column-email"><div class="text"><span>Email</span></div></th>
-                            <th scope="col" class="sortable column-first_name"><div class="text"><span>Имя</span></div></th>
-                            <th scope="col" class="sortable column-last_name"><div class="text"><span>Фамилия</span></div></th>
-                            <th scope="col" class="column-is_active"><div class="text"><span>Активен</span></div></th>
-                            <th scope="col" class="column-actions"><div class="text"><span>Действия</span></div></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for user in non_moderators %}
-                        <tr class="{% cycle 'row1' 'row2' %}">
-                            <td class="field-id">{{ user.id }}</td>
-                            <td class="field-email">{{ user.email }}</td>
-                            <td class="field-first_name">{{ user.first_name|default:"-" }}</td>
-                            <td class="field-last_name">{{ user.last_name|default:"-" }}</td>
-                            <td class="field-is_active">
-                                {% if user.is_active %}
-                                    <img src="{% static 'admin/img/icon-yes.svg' %}" alt="Да">
-                                {% else %}
-                                    <img src="{% static 'admin/img/icon-no.svg' %}" alt="Нет">
-                                {% endif %}
-                            </td>
-                            <td class="field-actions">
-                                <form method="post" action="{% url 'admin:users_user_changelist' %}" style="display: inline;">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="action" value="add_to_moderators">
-                                    <input type="hidden" name="_selected_action" value="{{ user.id }}">
-                                    <button type="submit" class="button">
-                                        Добавить в модераторы
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="sf-admin-hero-actions">
+                {% if target_user %}
+                    <a href="{% url 'users:profile_detail' pk=target_user.pk %}" class="btn btn-outline-secondary">
+                        Открыть профиль
+                    </a>
+                {% endif %}
+                <a href="{% url 'users:profile_list' %}" class="btn btn-outline-secondary">
+                    К списку пользователей
+                </a>
             </div>
-        {% else %}
-            <p class="paginator">Нет доступных пользователей для добавления в группу модераторов.</p>
-            <p class="help">Только сотрудники (is_staff=True) могут быть добавлены в группу модераторов.</p>
-        {% endif %}
-    </div>
+        </div>
 
-    <div class="module">
-        <h2>Массовое управление</h2>
-        <p>Вы также можете использовать массовые действия на странице <a href="{% url 'admin:users_user_changelist' %}">пользователей</a>:</p>
-        <ul>
-            <li>Выберите нескольких пользователей</li>
-            <li>Выберите действие "Добавить в группу модераторов" или "Удалить из группы модераторов"</li>
-            <li>Нажмите "Выполнить"</li>
-        </ul>
+        <div class="sf-admin-layout">
+            <aside class="sf-admin-sidebar">
+                <div class="sf-profile-card sf-profile-card--accent">
+                    <div class="sf-profile-avatar-wrap">
+                        {% if target_user and target_user.avatar %}
+                            <img src="{{ target_user.avatar.url }}" alt="Аватар" class="sf-profile-avatar-lg">
+                        {% else %}
+                            <img src="{% static 'img/default_avatar.png' %}" alt="Аватар" class="sf-profile-avatar-lg">
+                        {% endif %}
+                    </div>
+
+                    <div class="sf-profile-name">
+                        {% if target_user %}
+                            {% if target_user.get_full_name %}
+                                {{ target_user.get_full_name }}
+                            {% else %}
+                                {{ target_user.email }}
+                            {% endif %}
+                        {% else %}
+                            Пользователь
+                        {% endif %}
+                    </div>
+
+                    {% if target_user %}
+                        <div class="sf-profile-email">{{ target_user.email }}</div>
+                    {% endif %}
+
+                    <div class="sf-profile-quick-links">
+                        {% if target_user %}
+                            <a href="{% url 'users:profile_detail' pk=target_user.pk %}" class="sf-profile-quick-link">
+                                Профиль пользователя
+                            </a>
+                        {% endif %}
+                        <a href="{% url 'users:profile_list' %}" class="sf-profile-quick-link">
+                            Все пользователи
+                        </a>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="sf-admin-main">
+                <div class="sf-admin-card">
+                    <h2 class="sf-admin-section-title">Настройка групп</h2>
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger sf-alert mb-4">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        <div class="row g-4">
+                            {% for field in form %}
+                                <div class="col-12">
+                                    <div class="sf-form-group">
+                                        <label for="{{ field.id_for_label }}" class="form-label">
+                                            {{ field.label }}
+                                            {% if field.field.required %}
+                                                <span class="sf-required">*</span>
+                                            {% endif %}
+                                        </label>
+
+                                        <div class="sf-moderator-field-wrap">
+                                            {{ field }}
+                                        </div>
+
+                                        {% if field.help_text %}
+                                            <div class="sf-field-help">{{ field.help_text }}</div>
+                                        {% endif %}
+
+                                        {% if field.errors %}
+                                            <div class="sf-field-errors">
+                                                {% for error in field.errors %}
+                                                    <div>{{ error }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="sf-admin-form-actions">
+                            <a href="{% url 'users:profile_list' %}" class="btn btn-outline-secondary">
+                                Отмена
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                Сохранить изменения
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="sf-admin-card">
+                    <h2 class="sf-admin-section-title">Что важно помнить</h2>
+                    <div class="sf-admin-note-list">
+                        <div class="sf-admin-note-item">
+                            Группы должны отражать реальные роли пользователя в системе.
+                        </div>
+                        <div class="sf-admin-note-item">
+                            Лишние права доступа лучше не выдавать “на всякий случай”.
+                        </div>
+                        <div class="sf-admin-note-item">
+                            Страница управления доступами должна быть чистой и понятной, без визуального шума.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-</div>
+</section>
 {% endblock %}
