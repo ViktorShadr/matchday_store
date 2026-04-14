@@ -6,7 +6,7 @@
     --sf-text-soft: #5b6475;
     --sf-text-muted: #7b8494;
     --sf-border: #e5e9f0;
-    --sf-border-strong: #d7dde7;
+    --sf-border-strong: #0deed0;
 
     --sf-dark: #0f172a;
     --sf-dark-2: #111827;
@@ -734,85 +734,101 @@ textarea.form-control:focus {
     color: var(--sf-text-muted);
 }
 
-.sf-footer {
-    margin-top: 56px;
-    background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 25%),
-    linear-gradient(135deg, #0b1220 0%, #111827 55%, #13274e 100%);
-    color: rgba(255, 255, 255, 0.84);
-    padding-top: 42px;
+.sf-footer--marketplace {
+    padding-top: 34px;
 }
 
-.sf-footer-top {
+.sf-footer--marketplace .sf-footer-top {
     padding-bottom: 24px;
 }
 
-.sf-footer-brand {
-    display: flex;
+.sf-footer--marketplace .sf-footer-brand {
     align-items: flex-start;
-    gap: 14px;
 }
 
-.sf-footer-brand-mark {
-    width: 56px;
-    height: 56px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.08);
+.sf-footer-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.sf-footer-badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-}
-
-.sf-footer-brand-mark img {
-    width: 36px;
-    height: 36px;
-    object-fit: contain;
-}
-
-.sf-footer-title,
-.sf-footer-heading {
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     color: #fff;
+    font-size: 0.76rem;
     font-weight: 800;
+    line-height: 1;
 }
 
-.sf-footer-text {
-    color: rgba(255, 255, 255, 0.70);
-    line-height: 1.65;
+.sf-footer--marketplace .sf-footer-heading {
+    margin-bottom: 14px;
+    font-size: 0.98rem;
 }
 
-.sf-footer-links,
-.sf-footer-contacts {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
+.sf-footer--marketplace .sf-footer-links,
+.sf-footer--marketplace .sf-footer-contacts {
     gap: 10px;
 }
 
-.sf-footer-links a,
-.sf-footer-contacts a {
-    color: rgba(255, 255, 255, 0.76);
+.sf-footer--marketplace .sf-footer-links a,
+.sf-footer--marketplace .sf-footer-contacts,
+.sf-footer--marketplace .sf-footer-contacts a {
+    color: rgba(255, 255, 255, 0.78);
 }
 
-.sf-footer-links a:hover,
-.sf-footer-contacts a:hover {
+.sf-footer--marketplace .sf-footer-links a:hover,
+.sf-footer--marketplace .sf-footer-contacts a:hover {
     color: #fff;
+    text-decoration: underline;
+}
+
+.sf-footer-middle {
+    padding: 0 0 20px;
+}
+
+.sf-footer-middle-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.sf-footer-info-card {
+    border-radius: 18px;
+    padding: 16px 18px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sf-footer-info-title {
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 800;
+    margin-bottom: 6px;
+}
+
+.sf-footer-info-text {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.92rem;
+    line-height: 1.6;
 }
 
 .sf-footer-bottom {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 18px 0 24px;
-    margin-top: 14px;
+    margin-top: 0;
+    padding: 16px 0 20px;
 }
 
-.sf-footer-bottom-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-    font-size: 0.92rem;
-    color: rgba(255, 255, 255, 0.62);
+@media (max-width: 991.98px) {
+    .sf-footer-middle-grid {
+        grid-template-columns: 1fr;
+    }
 }
+
 
 .sf-cookie-banner {
     position: fixed;
@@ -1163,6 +1179,18 @@ textarea.form-control:focus {
     color: var(--sf-text-muted);
 }
 
+.sf-category-tile--more {
+    border-style: dashed;
+}
+
+.sf-category-tile--more .sf-category-tile-icon {
+    background: rgba(10, 42, 102, 0.08);
+}
+
+.sf-category-tile--more:hover {
+    border-color: rgba(10, 42, 102, 0.22);
+}
+
 .sf-value-card {
     height: 100%;
     padding: 24px;
@@ -1324,9 +1352,8 @@ textarea.form-control:focus {
 .sf-catalog-hero-card {
     border-radius: 28px;
     padding: 30px;
-    background:
-        radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 24%),
-        linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 24%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
 }
@@ -1380,7 +1407,7 @@ textarea.form-control:focus {
 }
 
 .sf-catalog-meta-label {
-    color: rgba(255,255,255,0.66);
+    color: rgba(255, 255, 255, 0.66);
     font-size: 0.9rem;
 }
 
@@ -1442,7 +1469,7 @@ textarea.form-control:focus {
     margin-bottom: 22px;
     padding: 18px 20px;
     border-radius: 22px;
-    background: rgba(255,255,255,0.88);
+    background: rgba(255, 255, 255, 0.88);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-sm);
 }
@@ -1586,7 +1613,7 @@ textarea.form-control:focus {
 .sf-product-content-card,
 .sf-product-side-card {
     border-radius: 26px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
 }
@@ -1922,7 +1949,7 @@ textarea.form-control:focus {
 }
 
 .sf-cart-meta-label {
-    color: rgba(255,255,255,0.66);
+    color: rgba(255, 255, 255, 0.66);
     font-size: 0.9rem;
 }
 
@@ -1941,7 +1968,7 @@ textarea.form-control:focus {
 .sf-cart-item,
 .sf-cart-summary-card {
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
 }
@@ -2257,7 +2284,7 @@ textarea.form-control:focus {
 .sf-checkout-summary-card,
 .sf-checkout-note-card {
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
 }
@@ -2415,7 +2442,7 @@ textarea.form-control:focus {
 .sf-success-card,
 .sf-success-order-card {
     border-radius: 28px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
 }
@@ -2571,16 +2598,15 @@ textarea.form-control:focus {
 .sf-auth-aside-card,
 .sf-auth-form-card {
     border-radius: 28px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
 }
 
 .sf-auth-aside-card {
     padding: 34px;
-    background:
-        radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 26%),
-        linear-gradient(135deg, #0b1220 0%, #111827 58%, #15356d 100%);
+    background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 26%),
+    linear-gradient(135deg, #0b1220 0%, #111827 58%, #15356d 100%);
     color: #fff;
     overflow: hidden;
     position: relative;
@@ -2590,9 +2616,8 @@ textarea.form-control:focus {
     content: "";
     position: absolute;
     inset: 0;
-    background:
-        linear-gradient(120deg, rgba(255,255,255,0.04), transparent 30%),
-        radial-gradient(circle at left bottom, rgba(255,255,255,0.05), transparent 24%);
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 30%),
+    radial-gradient(circle at left bottom, rgba(255, 255, 255, 0.05), transparent 24%);
     pointer-events: none;
 }
 
@@ -2608,7 +2633,7 @@ textarea.form-control:focus {
 .sf-auth-lead {
     margin: 0;
     max-width: 640px;
-    color: rgba(255,255,255,0.78);
+    color: rgba(255, 255, 255, 0.78);
     line-height: 1.8;
 }
 
@@ -2621,8 +2646,8 @@ textarea.form-control:focus {
 .sf-auth-benefit {
     border-radius: 20px;
     padding: 18px 18px 16px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     backdrop-filter: blur(8px);
 }
 
@@ -2636,7 +2661,7 @@ textarea.form-control:focus {
 .sf-auth-benefit-text {
     font-size: 0.93rem;
     line-height: 1.6;
-    color: rgba(255,255,255,0.72);
+    color: rgba(255, 255, 255, 0.72);
 }
 
 .sf-auth-form-wrap {
@@ -2738,16 +2763,15 @@ textarea.form-control:focus {
 
 .sf-profile-card {
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
     padding: 26px;
 }
 
 .sf-profile-card--accent {
-    background:
-        radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 28%),
-        linear-gradient(135deg, #0b1220 0%, #111827 60%, #15356d 100%);
+    background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 28%),
+    linear-gradient(135deg, #0b1220 0%, #111827 60%, #15356d 100%);
     color: #fff;
     overflow: hidden;
     position: relative;
@@ -2757,9 +2781,8 @@ textarea.form-control:focus {
     content: "";
     position: absolute;
     inset: 0;
-    background:
-        linear-gradient(120deg, rgba(255,255,255,0.04), transparent 30%),
-        radial-gradient(circle at left bottom, rgba(255,255,255,0.05), transparent 24%);
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 30%),
+    radial-gradient(circle at left bottom, rgba(255, 255, 255, 0.05), transparent 24%);
     pointer-events: none;
 }
 
@@ -2772,7 +2795,7 @@ textarea.form-control:focus {
     height: 96px;
     border-radius: 999px;
     object-fit: cover;
-    border: 3px solid rgba(255,255,255,0.16);
+    border: 3px solid rgba(255, 255, 255, 0.16);
     box-shadow: 0 10px 28px rgba(2, 8, 23, 0.18);
 }
 
@@ -2785,7 +2808,7 @@ textarea.form-control:focus {
 }
 
 .sf-profile-email {
-    color: rgba(255,255,255,0.74);
+    color: rgba(255, 255, 255, 0.74);
     margin-bottom: 20px;
     word-break: break-word;
 }
@@ -2801,14 +2824,14 @@ textarea.form-control:focus {
     min-height: 44px;
     padding: 0 14px;
     border-radius: 14px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     color: #fff;
     font-weight: 700;
 }
 
 .sf-profile-quick-link:hover {
-    background: rgba(255,255,255,0.14);
+    background: rgba(255, 255, 255, 0.14);
     color: #fff;
 }
 
@@ -2930,7 +2953,7 @@ textarea.form-control:focus {
 
 .sf-order-card {
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
     overflow: hidden;
@@ -3243,7 +3266,7 @@ textarea.form-control:focus {
 
 .sf-admin-card {
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
     padding: 26px;
@@ -3300,7 +3323,7 @@ textarea.form-control:focus {
 .sf-delete-card {
     width: min(760px, 100%);
     border-radius: 28px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
     padding: 30px;
@@ -3434,7 +3457,7 @@ textarea.form-control:focus {
     flex-direction: column;
     padding: 24px;
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
     transition: var(--sf-transition);
@@ -3553,7 +3576,7 @@ textarea.form-control:focus {
 }
 
 .sf-category-detail-meta-label {
-    color: rgba(255,255,255,0.66);
+    color: rgba(255, 255, 255, 0.66);
     font-size: 0.9rem;
 }
 
@@ -3573,9 +3596,8 @@ textarea.form-control:focus {
     text-align: center;
     border-radius: 30px;
     padding: 42px 30px;
-    background:
-        radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 25%),
-        linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 25%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-lg);
 }
@@ -3633,7 +3655,7 @@ textarea.form-control:focus {
 
 .sf-user-card {
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
     padding: 24px;
@@ -3812,7 +3834,7 @@ textarea.form-control:focus {
 .sf-legal-card,
 .sf-legal-side-card {
     border-radius: 24px;
-    background: rgba(255,255,255,0.96);
+    background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(229, 233, 240, 0.95);
     box-shadow: var(--sf-shadow-md);
 }

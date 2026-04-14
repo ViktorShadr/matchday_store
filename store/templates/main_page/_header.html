@@ -4,10 +4,6 @@
         <div class="container">
             <div class="sf-header-top-row">
                 <div class="sf-header-top-left">
-                    <span class="sf-header-chip">Официальный магазин ФК «Шинник»</span>
-                    <span class="sf-header-note d-none d-md-inline">Клубная атрибутика, форма и аксессуары</span>
-                </div>
-                <div class="sf-header-top-right">
                     <span class="sf-header-note">Ярославль</span>
                     <span class="sf-header-divider"></span>
                     <span class="sf-header-note">Самовывоз и оформление заказов онлайн</span>
@@ -21,7 +17,7 @@
             <div class="sf-header-main-row">
                 <a class="sf-logo" href="{% url 'store:base' %}">
                     <span class="sf-logo-mark">
-                        <img src="{% static 'img/favicon.ico' %}" alt="Шинник" loading="lazy">
+                        <img src="{% static 'img/favicon.ico' %}" alt="Логотип ФК Шинник" loading="lazy">
                     </span>
                     <span class="sf-logo-text">
                         <span class="sf-logo-title">ФК «Шинник»</span>
@@ -41,7 +37,7 @@
                             type="search"
                             name="q"
                             class="form-control sf-search-input"
-                            placeholder="Найти форму, аксессуары, атрибутику..."
+                            placeholder="Найти форму, аксессуары или атрибутику"
                             value="{{ request.GET.q|default:'' }}"
                         >
                         <button type="submit" class="btn btn-primary sf-search-btn">Найти</button>
@@ -120,7 +116,7 @@
                             </ul>
                         </div>
                     {% else %}
-                        <a class="sf-action-btn" href="{% url 'users:login' %}" aria-label="Вход">
+                        <a class="sf-action-btn" href="{% url 'users:login' %}" aria-label="Войти">
                             <span class="sf-action-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>

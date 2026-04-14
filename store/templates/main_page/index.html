@@ -4,184 +4,162 @@
 {% block meta_description %}Официальный магазин атрибутики ФК «Шинник»: форма, одежда, аксессуары и клубный мерч для болельщиков.{% endblock %}
 
 {% block content %}
-<section class="sf-home-hero" id="catalog">
-    <div class="container">
-        <div class="sf-home-hero-card">
-            <div class="row align-items-center g-4">
-                <div class="col-lg-7">
-                    <div class="sf-home-eyebrow">Официальный клубный магазин</div>
-                    <h1 class="sf-home-title">
-                        Атрибутика ФК «Шинник» для тех, кто с командой всегда
-                    </h1>
-                    <p class="sf-home-lead">
-                        Форма, одежда, аксессуары и клубный мерч в современном фирменном стиле.
-                        Собери свой матчдэй-образ: от повседневной атрибутики до подарков для настоящих болельщиков.
-                    </p>
+    <section class="sf-home-hero" id="catalog">
+        <div class="container">
+            <div class="sf-home-hero-card">
+                <div class="row align-items-center g-4">
+                    <div class="col-lg-8">
+                        <div class="sf-home-eyebrow">Официальный клубный магазин</div>
 
-                    <div class="sf-home-actions">
-                        <a href="{% url 'store:product_list' %}" class="btn btn-primary">
-                            Перейти в каталог
+                        <h1 class="sf-home-title">
+                            Атрибутика ФК «Шинник» для тех, кто всегда с командой
+                        </h1>
+
+                        <p class="sf-home-lead">
+                            Форма, одежда и аксессуары в фирменном стиле клуба.
+                        </p>
+
+                        <div class="sf-home-actions">
+                            <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                                Перейти в каталог
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="sf-section" id="categories">
+        <div class="container">
+            <div class="sf-section-head">
+                <div>
+                    <h2 class="sf-section-title">Категории</h2>
+                    <p class="sf-section-subtitle">
+                        Быстрый переход к основным разделам магазина.
+                    </p>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                {% for c in categories|slice:":4" %}
+                    <div class="col-12 col-sm-6 col-lg">
+                        <a href="{% url 'store:product_list' %}?category_id={{ c.id }}" class="sf-category-tile">
+                            <div class="sf-category-tile-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="4" y="5" width="16" height="14" rx="3"></rect>
+                                    <path d="M8 9h8"></path>
+                                    <path d="M8 13h5"></path>
+                                </svg>
+                            </div>
+
+                            <div class="sf-category-tile-body">
+                                <div class="sf-category-tile-title">
+                                    {{ c.name|default:'Категория' }}
+                                </div>
+                                <div class="sf-category-tile-text">
+                                    Смотреть товары
+                                </div>
+                            </div>
                         </a>
-                        <a href="#categories" class="btn btn-outline-secondary">
-                            Смотреть категории
+                    </div>
+                {% empty %}
+                    <div class="col-12">
+                        <div class="sf-empty-state">
+                            Категории пока не добавлены.
+                        </div>
+                    </div>
+                {% endfor %}
+
+                {% if categories|length > 4 %}
+                    <div class="col-12 col-sm-6 col-lg">
+                        <a href="{% url 'store:product_list' %}" class="sf-category-tile sf-category-tile--more">
+                            <div class="sf-category-tile-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="9"></circle>
+                                    <path d="M10 8l4 4-4 4"></path>
+                                </svg>
+                            </div>
+
+                            <div class="sf-category-tile-body">
+                                <div class="sf-category-tile-title">
+                                    Все категории
+                                </div>
+                                <div class="sf-category-tile-text">
+                                    Перейти в полный каталог
+                                </div>
+                            </div>
                         </a>
                     </div>
-
-                    <div class="sf-home-metrics">
-                        <div class="sf-home-metric">
-                            <div class="sf-home-metric-value">Официально</div>
-                            <div class="sf-home-metric-label">клубная атрибутика</div>
-                        </div>
-                        <div class="sf-home-metric">
-                            <div class="sf-home-metric-value">Быстро</div>
-                            <div class="sf-home-metric-label">оформление заказа</div>
-                        </div>
-                        <div class="sf-home-metric">
-                            <div class="sf-home-metric-value">Удобно</div>
-                            <div class="sf-home-metric-label">для фанатов и гостей клуба</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-lg-5">
-                    <div class="sf-home-showcase">
-                        <div class="sf-home-showcase-badge">Коллекция сезона</div>
-
-                        <div class="sf-home-showcase-panel">
-                            <div class="sf-home-showcase-title">Клубный стиль без компромиссов</div>
-                            <div class="sf-home-showcase-text">
-                                Современная витрина, удобная покупка, единый визуальный язык
-                                и атмосфера официального магазина клуба.
-                            </div>
-
-                            <ul class="sf-home-showcase-list">
-                                <li>Футболки, худи, шарфы и аксессуары</li>
-                                <li>Подарки для болельщиков и коллекционеров</li>
-                                <li>Аккуратный и понятный пользовательский путь</li>
-                            </ul>
-
-                            <a href="#popular" class="sf-link">Смотреть популярные товары</a>
-                        </div>
-                    </div>
-                </div>
+                {% endif %}
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<section class="sf-section" id="categories">
-    <div class="container">
-        <div class="sf-section-head">
-            <div>
-                <h2 class="sf-section-title">Категории</h2>
-                <p class="sf-section-subtitle">
-                    Быстрый переход к основным разделам магазина.
-                </p>
-            </div>
-            <a class="sf-link" href="{% url 'store:product_list' %}">Весь каталог</a>
-        </div>
-
-        <div class="row g-4">
-            {% for c in categories %}
-                <div class="col-12 col-sm-6 col-lg-3">
-                    <a href="{% url 'store:product_list' %}?category_id={{ c.id }}" class="sf-category-tile">
-                        <div class="sf-category-tile-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                                <path d="M20.5 5.5 12 2 3.5 5.5"></path>
-                                <path d="M4 6v6c0 4.5 8 10 8 10s8-5.5 8-10V6"></path>
-                            </svg>
-                        </div>
-                        <div class="sf-category-tile-body">
-                            <div class="sf-category-tile-title">
-                                {{ c.name|default:'Категория' }}
-                            </div>
-                            <div class="sf-category-tile-text">
-                                Перейти к товарам категории
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            {% empty %}
-                <div class="col-12">
-                    <div class="sf-empty-state">
-                        Категории пока не добавлены.
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
-    </div>
-</section>
-
-<section class="sf-section pt-0" id="popular">
-    <div class="container">
-        <div class="sf-section-head">
-            <div>
-                <h2 class="sf-section-title">Популярные товары</h2>
-                <p class="sf-section-subtitle">
-                    То, что болельщики выбирают чаще всего.
-                </p>
-            </div>
-            <a class="sf-link" href="{% url 'store:product_list' %}">Смотреть все товары</a>
-        </div>
-
-        <div class="row g-4">
-            {% for product in popular_products %}
-                <div class="col-12 col-md-6 col-xl-4">
-                    {% include 'main_page/_product_card.html' with product=product %}
-                </div>
-            {% empty %}
-                <div class="col-12">
-                    <div class="sf-empty-state">
-                        Популярные товары пока не добавлены.
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
-    </div>
-</section>
-
-<section class="sf-section pt-0" id="about">
-    <div class="container">
-        <div class="sf-section-head">
-            <div>
-                <h2 class="sf-section-title">Почему магазин выглядит сильнее</h2>
-                <p class="sf-section-subtitle">
-                    Мы уходим от ощущения “учебного проекта” и собираем полноценную клубную витрину.
-                </p>
-            </div>
-        </div>
-
-        <div class="row g-4">
-            <div class="col-md-4">
-                <div class="sf-value-card">
-                    <div class="sf-value-card-title">Единый стиль</div>
-                    <p class="sf-value-card-text">
-                        Все страницы магазина собираются в одном визуальном языке:
-                        шапка, карточки, кнопки, секции и формы.
+    <section class="sf-section pt-0" id="popular">
+        <div class="container">
+            <div class="sf-section-head">
+                <div>
+                    <h2 class="sf-section-title">Популярные товары</h2>
+                    <p class="sf-section-subtitle">
+                        То, что болельщики выбирают чаще всего.
                     </p>
                 </div>
+                <a class="sf-link" href="{% url 'store:product_list' %}">Смотреть все товары</a>
             </div>
 
-            <div class="col-md-4">
-                <div class="sf-value-card">
-                    <div class="sf-value-card-title">Коммерческая подача</div>
-                    <p class="sf-value-card-text">
-                        Чистая витрина, правильная иерархия контента и акцент на товарах,
-                        а не на случайных элементах интерфейса.
-                    </p>
+            <div class="row g-4">
+                {% for product in popular_products %}
+                    <div class="col-12 col-md-6 col-xl-4">
+                        {% include 'main_page/_product_card.html' with product=product %}
+                    </div>
+                {% empty %}
+                    <div class="col-12">
+                        <div class="sf-empty-state">
+                            Популярные товары пока не добавлены.
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="sf-section pt-0" id="about">
+        <div class="container">
+            <div class="sf-section-head">
+                <div>
+                    <h2 class="sf-section-title">Официальный клубный мерч</h2>
                 </div>
             </div>
 
-            <div class="col-md-4">
-                <div class="sf-value-card">
-                    <div class="sf-value-card-title">Удобство для покупателя</div>
-                    <p class="sf-value-card-text">
-                        Пользователь быстро понимает, куда перейти, что посмотреть
-                        и как оформить заказ без лишней путаницы.
-                    </p>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="sf-value-card">
+                        <div class="sf-value-card-title">Удобный заказ</div>
+                        <p class="sf-value-card-text">
+                            Выбирайте товары и оформляйте покупку без сложностей.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="sf-value-card">
+                        <div class="sf-value-card-title">Самовывоз со стадиона</div>
+                        <p class="sf-value-card-text">
+                            Заберите заказ в удобное время прямо на стадионе.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="sf-value-card">
+                        <div class="sf-value-card-title">Настоящая клубная продукция</div>
+                        <p class="sf-value-card-text">
+                            Только оригинальная атрибутика ФК «Шинник».
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 {% endblock %}
