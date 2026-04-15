@@ -86,8 +86,15 @@
                         {% csrf_token %}
                         <input type="hidden" name="variant_id" value="{{ product.first_available_variant_id }}">
                         <input type="hidden" name="quantity" value="1">
-                        <button type="submit" class="btn btn-primary">
-                            В корзину
+                        <button type="submit" class="btn btn-primary sf-product-card-cart-btn">
+                            <span class="sf-product-card-cart-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="9" cy="20" r="1.4"></circle>
+                                    <circle cx="18" cy="20" r="1.4"></circle>
+                                    <path d="M3 4h2l2.2 10.2a1 1 0 0 0 .98.8h9.7a1 1 0 0 0 .97-.77L21 7H7"></path>
+                                </svg>
+                            </span>
+                            <span>В корзину</span>
                         </button>
                     </form>
                 {% else %}

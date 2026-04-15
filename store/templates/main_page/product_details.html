@@ -43,7 +43,7 @@
                 {% if product.images.all %}
                     <div class="sf-product-thumbs">
                         {% for image in product.images.all|slice:":4" %}
-                            <div class="sf-product-thumb">
+                            <div class="sf-product-thumb {% if forloop.first %}is-active{% endif %}">
                                 <img src="{{ image.image.url }}" alt="{{ product.name }}">
                             </div>
                         {% endfor %}
@@ -96,46 +96,30 @@
                             {% csrf_token %}
                             <input type="hidden" name="variant_id" value="{{ product.first_available_variant_id }}">
                             <input type="hidden" name="quantity" value="1">
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                Добавить в корзину
+                            <button type="submit" class="btn btn-primary btn-lg sf-product-main-cta">
+                                <span class="sf-product-main-cta-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="9" cy="20" r="1.4"></circle>
+                                        <circle cx="18" cy="20" r="1.4"></circle>
+                                        <path d="M3 4h2l2.2 10.2a1 1 0 0 0 .98.8h9.7a1 1 0 0 0 .97-.77L21 7H7"></path>
+                                    </svg>
+                                </span>
+                                <span>Добавить в корзину</span>
                             </button>
                         </form>
                     {% else %}
-                        <button type="button" class="btn btn-secondary btn-lg" disabled>
+                        <button type="button" class="btn btn-secondary btn-lg sf-product-main-cta sf-product-main-cta--disabled" disabled>
                             Временно недоступно
                         </button>
                     {% endif %}
 
-                    <a href="{% url 'store:product_list' %}" class="btn btn-secondary btn-lg">
+                    <a href="{% url 'store:product_list' %}" class="btn btn-secondary btn-lg sf-product-back-link">
                         Вернуться в каталог
                     </a>
                 </div>
 
-                <div class="sf-product-trust-grid">
-                    <div class="sf-product-trust-item">
-                        <div class="sf-product-trust-title">Официальный магазин</div>
-                        <div class="sf-product-trust-text">Клубная атрибутика в едином фирменном стиле</div>
-                    </div>
-                    <div class="sf-product-trust-item">
-                        <div class="sf-product-trust-title">Понятный заказ</div>
-                        <div class="sf-product-trust-text">Простой путь от выбора товара до оформления</div>
-                    </div>
-                    <div class="sf-product-trust-item">
-                        <div class="sf-product-trust-title">Для болельщиков</div>
-                        <div class="sf-product-trust-text">Мерч, аксессуары и подарки для фанатов клуба</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="sf-section pt-0">
-    <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-8">
-                <div class="sf-product-content-card">
-                    <h2 class="sf-product-section-title">Описание товара</h2>
+                <div class="sf-product-inline-description">
+                    <h2 class="sf-product-section-title sf-product-section-title--compact">Описание товара</h2>
 
                     {% if product.description %}
                         <div class="sf-product-description">
@@ -146,22 +130,6 @@
                             Подробное описание товара пока не заполнено.
                         </div>
                     {% endif %}
-                </div>
-            </div>
-
-            <div class="col-lg-4">
-                <div class="sf-product-side-card">
-                    <h3 class="sf-product-side-title">Почему это удобно</h3>
-
-                    <ul class="sf-product-side-list">
-                        <li>Чистая и понятная страница товара</li>
-                        <li>Быстрый переход к оформлению заказа</li>
-                        <li>Подходит для клубной витрины и коммерческого запуска</li>
-                    </ul>
-
-                    <div class="sf-product-side-note">
-                        Страница товара должна продавать не только вещь, но и доверие к самому магазину.
-                    </div>
                 </div>
             </div>
         </div>
