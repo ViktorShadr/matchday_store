@@ -10,7 +10,7 @@
             <div class="sf-catalog-hero-card">
                 <div class="sf-catalog-hero-top">
                     <div>
-                        <div class="sf-home-eyebrow">Каталог атрибутики</div>
+                        <div class="sf-home-eyebrow">Каталог клуба</div>
                         <h1 class="sf-catalog-title">
                             {% if selected_category %}
                                 {{ selected_category.name }}
@@ -67,7 +67,7 @@
                                         {% elif request.GET.sort == 'name_desc' %}
                                             По названию Я–А
                                         {% else %}
-                                            Сортировка по умолчанию
+                                            Сначала популярные
                                         {% endif %}
                                     </button>
 
@@ -77,7 +77,7 @@
                                                     name="sort"
                                                     value=""
                                                     class="dropdown-item {% if not request.GET.sort %}active{% endif %}">
-                                                Сортировка по умолчанию
+                                                Сначала популярные
                                             </button>
                                         </li>
                                         <li>

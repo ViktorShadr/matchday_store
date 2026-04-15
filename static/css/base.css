@@ -1551,42 +1551,59 @@ textarea.form-control:focus {
 }
 
 .sf-catalog-hero {
-    padding: 24px 0 32px;
+    padding: 14px 0 24px;
 }
 
 .sf-catalog-hero-card {
+    position: relative;
     border-radius: 28px;
-    padding: 30px;
-    background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.12), transparent 24%),
-    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid rgba(229, 233, 240, 0.95);
-    box-shadow: var(--sf-shadow-md);
+    padding: 24px;
+    background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.18), transparent 28%),
+    linear-gradient(135deg, #0b1220 0%, #111827 52%, #15356d 100%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: var(--sf-shadow-lg);
+    color: #fff;
+}
+
+.sf-catalog-hero-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 30%),
+    radial-gradient(circle at left bottom, rgba(255, 255, 255, 0.05), transparent 22%);
+    pointer-events: none;
+}
+
+.sf-catalog-hero-card > * {
+    position: relative;
+    z-index: 1;
 }
 
 .sf-catalog-hero-top {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 20px;
+    gap: 14px;
     flex-wrap: wrap;
-    margin-bottom: 22px;
+    margin-bottom: 16px;
 }
 
 .sf-catalog-title {
-    margin: 0 0 12px;
-    font-size: clamp(2rem, 3vw, 3.1rem);
+    margin: 0 0 10px;
+    font-size: clamp(1.8rem, 2.4vw, 2.7rem);
     line-height: 1.04;
     font-weight: 900;
     letter-spacing: -0.04em;
-    color: var(--sf-dark);
+    color: #fff;
 }
 
 .sf-catalog-lead {
     margin: 0;
     max-width: 760px;
-    font-size: 1rem;
-    line-height: 1.75;
-    color: var(--sf-text-soft);
+    font-size: 0.96rem;
+    line-height: 1.62;
+    color: rgba(255, 255, 255, 0.78);
 }
 
 .sf-catalog-hero-meta {
@@ -1599,7 +1616,8 @@ textarea.form-control:focus {
     min-width: 140px;
     border-radius: 20px;
     padding: 18px 18px 16px;
-    background: var(--sf-dark);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     color: #fff;
     box-shadow: var(--sf-shadow-sm);
 }
@@ -1612,14 +1630,14 @@ textarea.form-control:focus {
 }
 
 .sf-catalog-meta-label {
-    color: rgba(255, 255, 255, 0.66);
+    color: rgba(255, 255, 255, 0.72);
     font-size: 0.9rem;
 }
 
 .sf-catalog-toolbar {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 14px;
 }
 
 .sf-catalog-toolbar-main {
@@ -1627,7 +1645,7 @@ textarea.form-control:focus {
     align-items: flex-start;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 12px;
 }
 
 .sf-catalog-sort {
@@ -1662,12 +1680,30 @@ textarea.form-control:focus {
 
 .sf-sort-toggle {
     width: 100%;
+    min-height: 42px;
+    padding: 0 14px;
     justify-content: space-between;
     text-align: left;
 }
 
 .sf-sort-toggle::after {
     margin-left: 12px;
+}
+
+.sf-catalog-sort .btn-secondary {
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: rgba(11, 18, 32, 0.42);
+    color: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(8px);
+}
+
+.sf-catalog-sort .btn-secondary:hover,
+.sf-catalog-sort .btn-secondary:focus,
+.sf-catalog-sort .show > .btn-secondary.dropdown-toggle,
+.sf-catalog-sort .btn-check:focus + .btn-secondary {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
 }
 
 .sf-sort-menu {
@@ -1692,23 +1728,24 @@ textarea.form-control:focus {
     min-height: 40px;
     padding: 0 14px;
     border-radius: 999px;
-    background: #fff;
-    border: 1px solid var(--sf-border);
-    color: var(--sf-dark);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: rgba(255, 255, 255, 0.92);
     font-size: 0.9rem;
     font-weight: 700;
     transition: var(--sf-transition);
+    backdrop-filter: blur(8px);
 }
 
 .sf-filter-chip:hover {
-    border-color: rgba(10, 42, 102, 0.24);
-    background: var(--sf-primary-soft);
-    color: var(--sf-primary);
+    border-color: rgba(255, 255, 255, 0.40);
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
 }
 
 .sf-filter-chip.active {
-    background: var(--sf-primary);
-    border-color: var(--sf-primary);
+    background: #234ca3;
+    border-color: #234ca3;
     color: #fff;
 }
 
@@ -1817,7 +1854,7 @@ textarea.form-control:focus {
 
 @media (max-width: 991.98px) {
     .sf-catalog-hero-card {
-        padding: 24px;
+        padding: 20px;
     }
 
     .sf-catalog-toolbar-main {
@@ -1845,8 +1882,8 @@ textarea.form-control:focus {
 
 @media (max-width: 767.98px) {
     .sf-catalog-hero-card {
-        padding: 20px;
-        border-radius: 24px;
+        padding: 18px;
+        border-radius: 22px;
     }
 
     .sf-catalog-title {
