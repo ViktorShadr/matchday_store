@@ -44,6 +44,14 @@
                     что удаление действительно необходимо и не повлияет на рабочие процессы.
                 </p>
 
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
                 {% if object %}
                     <div class="sf-delete-summary">
                         <div class="sf-delete-summary-item">
@@ -82,6 +90,17 @@
 
                 <form method="post" class="sf-delete-actions">
                     {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="id_password" class="form-label">Введите пароль для подтверждения</label>
+                        {{ form.password }}
+                        {% if form.password.errors %}
+                            <div class="text-danger">
+                                {% for error in form.password.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
                     <a href="{% url 'users:profile_list' %}" class="btn btn-secondary">
                         Отмена
                     </a>

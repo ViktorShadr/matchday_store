@@ -33,7 +33,7 @@
                 <h2 class="sf-delete-title">
                     Удалить товар
                     {% if object %}
-                        «{{ object.name|default:object.title }}»
+                        «{{ object.name }}»
                     {% endif %}
                     ?
                 </h2>
@@ -47,7 +47,7 @@
                     <div class="sf-delete-summary">
                         <div class="sf-delete-summary-item">
                             <div class="sf-delete-summary-label">Товар</div>
-                            <div class="sf-delete-summary-value">{{ object.name|default:object.title }}</div>
+                            <div class="sf-delete-summary-value">{{ object.name }}</div>
                         </div>
 
                         {% if object.category %}

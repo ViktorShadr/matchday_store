@@ -185,7 +185,12 @@ class ProductListViewTest(TestCase):
             test_image = SimpleUploadedFile(f"test_image_{i}.jpg", b"fake_image_data", content_type="image/jpeg")
             image = ProductImage.objects.create(product=product, image=test_image, is_primary=True)
             ProductVariant.objects.create(
-                product=product, size="L", color="Красный", price=Decimal("2999.99"), quantity=10, image=image
+                product=product,
+                size="L",
+                color="Красный",
+                price=Decimal("1000.00") + Decimal(i),
+                quantity=10,
+                image=image,
             )
 
     def test_product_list_view_status_code(self):
@@ -210,6 +215,38 @@ class ProductListViewTest(TestCase):
         response = self.client.get(reverse("store:product_list") + "?page=2")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["products"]), 3)
+
+    def test_product_list_sort_by_price_asc(self):
+        """Список должен сортироваться по цене по возрастанию."""
+        response = self.client.get(reverse("store:product_list"), {"sort": "price_asc"})
+
+        self.assertEqual(response.status_code, 200)
+        prices = [product.display_price for product in response.context["products"]]
+        self.assertEqual(prices, sorted(prices))
+
+    def test_product_list_sort_by_price_desc(self):
+        """Список должен сортироваться по цене по убыванию."""
+        response = self.client.get(reverse("store:product_list"), {"sort": "price_desc"})
+
+        self.assertEqual(response.status_code, 200)
+        prices = [product.display_price for product in response.context["products"]]
+        self.assertEqual(prices, sorted(prices, reverse=True))
+
+    def test_product_list_sort_by_name_asc(self):
+        """Список должен сортироваться по названию А-Я."""
+        response = self.client.get(reverse("store:product_list"), {"sort": "name_asc"})
+
+        self.assertEqual(response.status_code, 200)
+        names = [product.name for product in response.context["products"]]
+        self.assertEqual(names, sorted(names))
+
+    def test_product_list_sort_by_name_desc(self):
+        """Список должен сортироваться по названию Я-А."""
+        response = self.client.get(reverse("store:product_list"), {"sort": "name_desc"})
+
+        self.assertEqual(response.status_code, 200)
+        names = [product.name for product in response.context["products"]]
+        self.assertEqual(names, sorted(names, reverse=True))
 
     def test_product_list_shows_out_of_stock_status(self):
         """Товар без остатков должен маркироваться как отсутствующий."""

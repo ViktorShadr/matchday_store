@@ -1,4 +1,5 @@
 from django.urls import reverse_lazy
+from django.db.models import Min, Q
 from django.views.generic import DeleteView, DetailView, ListView, TemplateView, UpdateView, CreateView
 
 from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, ModeratorRequiredMixin
@@ -51,11 +52,30 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
 
     def get_queryset(self):
         """Возвращает queryset для текущего представления."""
-        queryset = self.get_catalog_queryset().order_by("-created_at")
+        queryset = self.get_catalog_queryset()
+
+        query = (self.request.GET.get("q") or "").strip()
+        if query:
+            queryset = queryset.filter(Q(name__icontains=query) | Q(description__icontains=query))
+
         category_id = self.request.GET.get("category_id")
         if category_id:
             queryset = queryset.filter(category_id=category_id)
-        return queryset
+
+        sort = self.request.GET.get("sort")
+        if sort in {"price_asc", "price_desc"}:
+            queryset = queryset.annotate(min_variant_price=Min("variants__price"))
+
+        if sort == "price_asc":
+            return queryset.order_by("min_variant_price", "name", "id")
+        if sort == "price_desc":
+            return queryset.order_by("-min_variant_price", "name", "id")
+        if sort == "name_asc":
+            return queryset.order_by("name", "id")
+        if sort == "name_desc":
+            return queryset.order_by("-name", "id")
+
+        return queryset.order_by("-created_at")
 
     def get_context_data(self, **kwargs):
         """Формирует контекст для шаблона."""
