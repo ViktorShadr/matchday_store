@@ -19,7 +19,7 @@
                             {% endif %}
                         </h1>
                         <p class="sf-catalog-lead">
-                            Официальная клубная атрибутика, одежда, аксессуары и мерч для болельщиков ФК «Шинник».
+                            Форма, одежда и аксессуары ФК «Шинник»
                         </p>
                     </div>
                 </div>
@@ -51,26 +51,70 @@
 
                         <div class="sf-catalog-toolbar-actions">
                             <div class="sf-catalog-sort">
-                                <select name="sort" class="form-select" onchange="this.form.submit()">
-                                    <option value="">Сортировка по умолчанию</option>
-                                    <option value="price_asc" {% if request.GET.sort == 'price_asc' %}selected{% endif %}>
-                                        Сначала дешевле
-                                    </option>
-                                    <option value="price_desc" {% if request.GET.sort == 'price_desc' %}selected{% endif %}>
-                                        Сначала дороже
-                                    </option>
-                                    <option value="name_asc" {% if request.GET.sort == 'name_asc' %}selected{% endif %}>
-                                        По названию А–Я
-                                    </option>
-                                    <option value="name_desc" {% if request.GET.sort == 'name_desc' %}selected{% endif %}>
-                                        По названию Я–А
-                                    </option>
-                                </select>
-                            </div>
+                                <div class="dropdown">
+                                    <button
+                                            class="btn btn-secondary dropdown-toggle sf-sort-toggle"
+                                            type="button"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false"
+                                    >
+                                        {% if request.GET.sort == 'price_asc' %}
+                                            Сначала дешевле
+                                        {% elif request.GET.sort == 'price_desc' %}
+                                            Сначала дороже
+                                        {% elif request.GET.sort == 'name_asc' %}
+                                            По названию А–Я
+                                        {% elif request.GET.sort == 'name_desc' %}
+                                            По названию Я–А
+                                        {% else %}
+                                            Сортировка по умолчанию
+                                        {% endif %}
+                                    </button>
 
-                            <button type="submit" class="btn btn-primary">
-                                Применить
-                            </button>
+                                    <ul class="dropdown-menu dropdown-menu-end sf-dropdown-menu sf-sort-menu">
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value=""
+                                                    class="dropdown-item {% if not request.GET.sort %}active{% endif %}">
+                                                Сортировка по умолчанию
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="price_asc"
+                                                    class="dropdown-item {% if request.GET.sort == 'price_asc' %}active{% endif %}">
+                                                Сначала дешевле
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="price_desc"
+                                                    class="dropdown-item {% if request.GET.sort == 'price_desc' %}active{% endif %}">
+                                                Сначала дороже
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="name_asc"
+                                                    class="dropdown-item {% if request.GET.sort == 'name_asc' %}active{% endif %}">
+                                                По названию А–Я
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="name_desc"
+                                                    class="dropdown-item {% if request.GET.sort == 'name_desc' %}active{% endif %}">
+                                                По названию Я–А
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </form>

@@ -1656,6 +1656,36 @@ textarea.form-control:focus {
     min-width: 260px;
 }
 
+.sf-catalog-sort .dropdown {
+    width: 100%;
+}
+
+.sf-sort-toggle {
+    width: 100%;
+    justify-content: space-between;
+    text-align: left;
+}
+
+.sf-sort-toggle::after {
+    margin-left: 12px;
+}
+
+.sf-sort-menu {
+    width: 100%;
+    min-width: 100%;
+}
+
+.sf-sort-menu .dropdown-item {
+    width: 100%;
+}
+
+.sf-sort-menu .dropdown-item.active,
+.sf-sort-menu .dropdown-item:active {
+    background: var(--sf-primary-soft);
+    color: var(--sf-primary);
+    font-weight: 700;
+}
+
 .sf-filter-chip {
     display: inline-flex;
     align-items: center;
