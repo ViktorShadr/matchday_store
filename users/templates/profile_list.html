@@ -17,7 +17,7 @@
             </div>
 
             <div class="sf-admin-hero-actions">
-                <a href="{% url 'store:base' %}" class="btn btn-outline-secondary">
+                <a href="{% url 'store:base' %}" class="btn btn-secondary">
                     На главную
                 </a>
             </div>
@@ -76,11 +76,11 @@
                                 Открыть профиль
                             </a>
                             {% if profile_user.pk == request.user.pk %}
-                                <a href="{% url 'users:profile_delete' %}" class="btn btn-outline-secondary">
+                                <a href="{% url 'users:profile_delete' %}" class="btn btn-secondary">
                                     Удаление
                                 </a>
                             {% else %}
-                                <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-outline-secondary">
+                                <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
                                     Удаление недоступно
                                 </a>
                             {% endif %}

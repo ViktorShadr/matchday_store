@@ -16,11 +16,11 @@
             </div>
 
             <div class="sf-admin-hero-actions">
-                <a href="{% url 'users:profile_list' %}" class="btn btn-outline-secondary">
+                <a href="{% url 'users:profile_list' %}" class="btn btn-secondary">
                     К списку пользователей
                 </a>
                 {% if object %}
-                    <a href="{% url 'users:profile_detail' pk=object.pk %}" class="btn btn-outline-secondary">
+                    <a href="{% url 'users:profile_detail' pk=object.pk %}" class="btn btn-secondary">
                         Открыть профиль
                     </a>
                 {% endif %}
@@ -82,7 +82,7 @@
 
                 <form method="post" class="sf-delete-actions">
                     {% csrf_token %}
-                    <a href="{% url 'users:profile_list' %}" class="btn btn-outline-secondary">
+                    <a href="{% url 'users:profile_list' %}" class="btn btn-secondary">
                         Отмена
                     </a>
                     <button type="submit" class="btn btn-danger">

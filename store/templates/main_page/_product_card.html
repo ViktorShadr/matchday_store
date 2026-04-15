@@ -77,7 +77,7 @@
             </div>
 
             <div class="sf-product-card-actions">
-                <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-outline-secondary">
+                <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-secondary">
                     Подробнее
                 </a>
 
@@ -91,7 +91,7 @@
                         </button>
                     </form>
                 {% else %}
-                    <button type="button" class="btn btn-outline-secondary" disabled>
+                    <button type="button" class="btn btn-secondary" disabled>
                         Недоступно
                     </button>
                 {% endif %}

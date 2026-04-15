@@ -1,9 +1,9 @@
 <div class="d-flex flex-wrap gap-2 mb-4">
-    <a class="btn {% if request.resolver_match.url_name == 'dashboard_home' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+    <a class="btn {% if request.resolver_match.url_name == 'dashboard_home' %}btn-primary{% else %}btn-secondary{% endif %}"
        href="{% url 'store:dashboard_home' %}">
         Обзор
     </a>
-    <a class="btn {% if 'warehouse' in request.resolver_match.url_name %}btn-primary{% else %}btn-outline-primary{% endif %}"
+    <a class="btn {% if 'warehouse' in request.resolver_match.url_name %}btn-primary{% else %}btn-secondary{% endif %}"
        href="{% url 'store:warehouse_dashboard' %}">
         Склад
     </a>

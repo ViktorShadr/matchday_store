@@ -45,7 +45,7 @@
                 </div>
 
                 <div class="sf-header-actions">
-                    <a href="{% url 'store:cart' %}" class="sf-action-btn position-relative" aria-label="Корзина">
+                    <a href="{% url 'store:cart' %}" class="btn btn-secondary sf-action-btn position-relative" aria-label="Корзина">
                         <span class="sf-action-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M6 6h15l-1.5 9h-12z"></path>
@@ -61,7 +61,7 @@
                     {% if user.is_authenticated %}
                         <div class="dropdown">
                             <button
-                                class="sf-action-btn sf-profile-btn dropdown-toggle"
+                                class="btn btn-secondary sf-action-btn sf-profile-btn dropdown-toggle"
                                 type="button"
                                 id="profileDropdown"
                                 data-bs-toggle="dropdown"
@@ -116,7 +116,7 @@
                             </ul>
                         </div>
                     {% else %}
-                        <a class="sf-action-btn" href="{% url 'users:login' %}" aria-label="Войти">
+                        <a class="btn btn-secondary sf-action-btn" href="{% url 'users:login' %}" aria-label="Войти">
                             <span class="sf-action-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>

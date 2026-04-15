@@ -11,8 +11,8 @@
                     <div class="text-muted">{{ product.category.name|default:'Без категории' }}</div>
                 </div>
                 <div class="d-flex gap-2">
-                    <a class="btn btn-outline-primary" href="{% url 'store:warehouse_product_edit' product.pk %}">Редактировать</a>
-                    <a class="btn btn-outline-danger" href="{% url 'store:warehouse_product_delete' product.pk %}">Удалить</a>
+                    <a class="btn btn-secondary" href="{% url 'store:warehouse_product_edit' product.pk %}">Редактировать</a>
+                    <a class="btn btn-danger" href="{% url 'store:warehouse_product_delete' product.pk %}">Удалить</a>
                 </div>
             </div>
 
@@ -34,8 +34,8 @@
                                         <div class="small text-muted">{{ variant.price }} ₽</div>
                                     </div>
                                     <div class="d-flex gap-2">
-                                        <a class="sf-link small" href="{% url 'store:warehouse_variant_edit' variant.pk %}">Изменить</a>
-                                        <a class="text-danger small text-decoration-none" href="{% url 'store:warehouse_variant_delete' variant.pk %}">Удалить</a>
+                                        <a class="btn btn-secondary btn-sm" href="{% url 'store:warehouse_variant_edit' variant.pk %}">Изменить</a>
+                                        <a class="btn btn-danger btn-sm" href="{% url 'store:warehouse_variant_delete' variant.pk %}">Удалить</a>
                                     </div>
                                 </div>
                                 <form method="post" action="{% url 'store:warehouse_variant_stock_update' variant.pk %}" class="row g-2 align-items-end">
@@ -59,7 +59,7 @@
                     <div class="sf-surface p-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h2 class="h4 mb-0">Изображения</h2>
-                            <a class="btn btn-outline-primary btn-sm" href="{% url 'store:warehouse_image_create' product.pk %}">Добавить изображение</a>
+                            <a class="btn btn-secondary btn-sm" href="{% url 'store:warehouse_image_create' product.pk %}">Добавить изображение</a>
                         </div>
                         <div class="row g-3">
                             {% for image in images %}
@@ -73,7 +73,7 @@
                                             <div class="badge text-bg-primary mb-2">Основное</div>
                                         {% endif %}
                                         <div>
-                                            <a class="text-danger small text-decoration-none" href="{% url 'store:warehouse_image_delete' image.pk %}">Удалить</a>
+                                            <a class="btn btn-danger btn-sm" href="{% url 'store:warehouse_image_delete' image.pk %}">Удалить</a>
                                         </div>
                                     </div>
                                 </div>

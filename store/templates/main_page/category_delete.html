@@ -15,7 +15,7 @@
             </div>
 
             <div class="sf-admin-hero-actions">
-                <a href="{% url 'store:product_list' %}" class="btn btn-outline-secondary">
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
                     Назад в каталог
                 </a>
             </div>
@@ -56,7 +56,7 @@
 
                 <form method="post" class="sf-delete-actions">
                     {% csrf_token %}
-                    <a href="{% url 'store:product_list' %}" class="btn btn-outline-secondary">
+                    <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
                         Отмена
                     </a>
                     <button type="submit" class="btn btn-danger">

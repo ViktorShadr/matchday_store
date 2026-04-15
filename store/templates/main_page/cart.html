@@ -91,7 +91,7 @@
                                                    min="1"
                                                    value="{{ item.quantity }}"
                                                    class="form-control sf-cart-qty-input">
-                                            <button type="submit" class="btn btn-outline-secondary">
+                                            <button type="submit" class="btn btn-secondary">
                                                 Обновить
                                             </button>
                                         </form>
@@ -100,7 +100,7 @@
                                     <form method="post" action="{% url 'store:remove_from_cart' %}">
                                         {% csrf_token %}
                                         <input type="hidden" name="variant_id" value="{{ item.variant_id }}">
-                                        <button type="submit" class="btn btn-outline-secondary sf-cart-remove-btn">
+                                        <button type="submit" class="btn btn-secondary sf-cart-remove-btn">
                                             Удалить
                                         </button>
                                     </form>
@@ -145,7 +145,7 @@
                             <a href="{% url 'orders:checkout' %}" class="btn btn-primary">
                                 Перейти к оформлению
                             </a>
-                            <a href="{% url 'store:product_list' %}" class="btn btn-outline-secondary">
+                            <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
                                 Продолжить покупки
                             </a>
                         </div>

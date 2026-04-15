@@ -8,7 +8,7 @@
             <div class="sf-section-head">
                 <h1 class="sf-section-title">Склад</h1>
                 <div class="d-flex gap-2">
-                    <a class="btn btn-outline-primary" href="{% url 'store:warehouse_category_create' %}">Создать категорию</a>
+                    <a class="btn btn-secondary" href="{% url 'store:warehouse_category_create' %}">Создать категорию</a>
                     <a class="btn btn-primary" href="{% url 'store:warehouse_product_create' %}">Добавить товар</a>
                 </div>
             </div>
@@ -38,7 +38,7 @@
                                         <td>{{ product.variant_count }}</td>
                                         <td>{{ product.stock_total }}</td>
                                         <td class="text-end">
-                                            <a class="btn btn-sm btn-outline-primary" href="{% url 'store:warehouse_product_manage' product.pk %}">Управлять</a>
+                                            <a class="btn btn-secondary btn-sm" href="{% url 'store:warehouse_product_manage' product.pk %}">Управлять</a>
                                         </td>
                                     </tr>
                                 {% empty %}
@@ -63,8 +63,8 @@
                                         <div class="small text-muted">Товаров: {{ category.product_count }}</div>
                                     </div>
                                     <div class="d-flex gap-2">
-                                        <a class="sf-link small" href="{% url 'store:warehouse_category_edit' category.pk %}">Изменить</a>
-                                        <a class="text-danger small text-decoration-none" href="{% url 'store:warehouse_category_delete' category.pk %}">Удалить</a>
+                                        <a class="btn btn-secondary btn-sm" href="{% url 'store:warehouse_category_edit' category.pk %}">Изменить</a>
+                                        <a class="btn btn-danger btn-sm" href="{% url 'store:warehouse_category_delete' category.pk %}">Удалить</a>
                                     </div>
                                 </div>
                             </div>
