@@ -92,9 +92,9 @@ class CheckoutFlowTest(TestCase):
         self.cart = Cart.objects.create(user=self.user)
         self.cart_item = CartItem.objects.create(cart=self.cart, product_variant=self.variant, quantity=2)
 
-    def _build_service_request(self):
+    def _build_service_request(self, user=None):
         request = self.factory.post(reverse("orders:checkout"))
-        request.user = self.user
+        request.user = user or self.user
         session_middleware = SessionMiddleware(lambda req: None)
         session_middleware.process_request(request)
         request.session.save()
@@ -219,6 +219,79 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(first_order.pk, second_order.pk)
         self.assertEqual(Order.objects.filter(user=self.user).count(), 1)
         self.assertEqual(Payment.objects.filter(order=first_order).count(), 1)
+
+    def test_checkout_with_nullable_variant_attributes_saves_empty_snapshots(self):
+        """Checkout должен проходить при variant.size/color=None."""
+        self.variant.size = None
+        self.variant.color = None
+        self.variant.save(update_fields=["size", "color"])
+
+        self.client.login(email="buyer@example.com", password="testpass123")
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user=self.user)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        order_item = OrderItem.objects.get(order=order)
+        self.assertEqual(order_item.size_snapshot, "")
+        self.assertEqual(order_item.color_snapshot, "")
+
+    def test_checkout_service_does_not_conflict_between_users_with_same_token(self):
+        """Одинаковый checkout_token у разных пользователей не должен конфликтовать."""
+        second_user = User.objects.create_user(
+            email="buyer2@example.com",
+            password="testpass123",
+            first_name="Сергей",
+            last_name="Сергеев",
+            phone="+79990002233",
+            is_active=True,
+        )
+        second_cart = Cart.objects.create(user=second_user)
+        CartItem.objects.create(cart=second_cart, product_variant=self.variant, quantity=1)
+        self.variant.quantity = 10
+        self.variant.save(update_fields=["quantity"])
+
+        service = CheckoutService()
+        first_request = self._build_service_request(user=self.user)
+        second_request = self._build_service_request(user=second_user)
+
+        first_order = service.create_order_from_cart(
+            first_request,
+            cleaned_data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+            checkout_token="shared-token",
+        )
+        second_order = service.create_order_from_cart(
+            second_request,
+            cleaned_data={
+                "recipient_name": "Сергей Сергеев",
+                "email": "buyer2@example.com",
+                "phone": "+79990002233",
+                "customer_comment": "",
+            },
+            checkout_token="shared-token",
+        )
+
+        self.assertNotEqual(first_order.pk, second_order.pk)
+        self.assertEqual(Order.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(Order.objects.filter(user=second_user).count(), 1)
+        self.assertTrue(
+            Payment.objects.filter(order=first_order, idempotency_key=f"checkout-{self.user.id}-shared-token").exists()
+        )
+        self.assertTrue(
+            Payment.objects.filter(order=second_order, idempotency_key=f"checkout-{second_user.id}-shared-token").exists()
+        )
 
 
 class OrderCancellationServiceTest(TestCase):

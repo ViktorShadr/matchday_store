@@ -61,21 +61,46 @@ class CheckoutService(ICheckoutService):
         return f"ORD-{timezone.now():%Y%m%d%H%M%S}-{uuid4().hex[:6].upper()}"
 
     @staticmethod
-    def build_checkout_idempotency_key(checkout_token: Optional[str]) -> str:
-        """Собрать idempotency key для checkout."""
+    def _normalize_snapshot_text(value) -> str:
+        """Привести snapshot-поля к строке (OrderItem snapshot поля non-nullable)."""
+        if value is None:
+            return ""
+        return str(value)
+
+    @staticmethod
+    def build_checkout_idempotency_key(checkout_token: Optional[str], user_id: Optional[int] = None) -> str:
+        """Собрать idempotency key для checkout с учетом пользователя."""
         if checkout_token:
+            if user_id is not None:
+                return f"checkout-{user_id}-{checkout_token}"
             return f"checkout-{checkout_token}"
         return uuid4().hex
 
+    def _find_existing_checkout_payment(self, checkout_token: Optional[str], user_id: int):
+        """Найти уже созданный payment для checkout (новый и legacy ключи)."""
+        if not checkout_token:
+            return None
+
+        current_key = self.build_checkout_idempotency_key(checkout_token, user_id=user_id)
+        existing_payment = self.payment_repository.get_payment_by_idempotency_key(current_key)
+        if existing_payment and existing_payment.order.user_id == user_id:
+            return existing_payment
+
+        # Backward compatibility for keys created before user-scoped idempotency.
+        legacy_key = self.build_checkout_idempotency_key(checkout_token)
+        existing_legacy_payment = self.payment_repository.get_payment_by_idempotency_key(legacy_key)
+        if existing_legacy_payment and existing_legacy_payment.order.user_id == user_id:
+            return existing_legacy_payment
+
+        return None
+
     def create_order_from_cart(self, request, cleaned_data, checkout_token: Optional[str] = None):
         """Создать заказ, списать остатки и очистить корзину."""
-        payment_idempotency_key = self.build_checkout_idempotency_key(checkout_token)
+        payment_idempotency_key = self.build_checkout_idempotency_key(checkout_token, user_id=request.user.id)
 
-        existing_payment = None
-        if checkout_token:
-            existing_payment = self.payment_repository.get_payment_by_idempotency_key(payment_idempotency_key)
-            if existing_payment and existing_payment.order.user_id == request.user.id:
-                return existing_payment.order
+        existing_payment = self._find_existing_checkout_payment(checkout_token, request.user.id)
+        if existing_payment:
+            return existing_payment.order
 
         try:
             with transaction.atomic():
@@ -88,10 +113,8 @@ class CheckoutService(ICheckoutService):
                     if checkout_token:
                         # Повторно проверяем idempotency после захвата блокировок:
                         # в параллельном submit первый запрос мог уже создать заказ и очистить корзину.
-                        existing_payment = self.payment_repository.get_payment_by_idempotency_key(
-                            payment_idempotency_key
-                        )
-                        if existing_payment and existing_payment.order.user_id == request.user.id:
+                        existing_payment = self._find_existing_checkout_payment(checkout_token, request.user.id)
+                        if existing_payment:
                             return existing_payment.order
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
@@ -122,8 +145,8 @@ class CheckoutService(ICheckoutService):
                             product_variant=variant,
                             product_name_snapshot=variant.product.name,
                             sku_snapshot=str(variant.id),
-                            size_snapshot=variant.size,
-                            color_snapshot=variant.color,
+                            size_snapshot=self._normalize_snapshot_text(variant.size),
+                            color_snapshot=self._normalize_snapshot_text(variant.color),
                             unit_price=variant.price,
                             quantity=cart_item.quantity,
                             line_total=line_total,
@@ -177,8 +200,8 @@ class CheckoutService(ICheckoutService):
                 return order
         except IntegrityError as exc:
             if checkout_token:
-                existing_payment = self.payment_repository.get_payment_by_idempotency_key(payment_idempotency_key)
-                if existing_payment and existing_payment.order.user_id == request.user.id:
+                existing_payment = self._find_existing_checkout_payment(checkout_token, request.user.id)
+                if existing_payment:
                     return existing_payment.order
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
 
