@@ -5,28 +5,25 @@
 {% block meta_description %}Корзина товаров официального магазина атрибутики ФК «Шинник».{% endblock %}
 
 {% block content %}
-<section class="sf-cart-page">
+<section class="sf-catalog-hero">
     <div class="container">
-        <div class="sf-cart-hero">
-            <div>
-                <div class="sf-home-eyebrow">Оформление покупки</div>
-                <h1 class="sf-cart-title">Корзина</h1>
-                <p class="sf-cart-lead">
-                    Проверь выбранные товары, измени количество при необходимости
-                    и переходи к оформлению заказа.
-                </p>
-            </div>
-
-            {% if cart_items %}
-                <div class="sf-cart-hero-meta">
-                    <div class="sf-cart-meta-card">
-                        <div class="sf-cart-meta-value">{{ cart_items|length }}</div>
-                        <div class="sf-cart-meta-label">позиций в корзине</div>
-                    </div>
+        <div class="sf-catalog-hero-card">
+            <div class="sf-catalog-hero-top">
+                <div>
+                    <div class="sf-home-eyebrow">Оформление покупки</div>
+                    <h1 class="sf-catalog-title">Корзина</h1>
+                    <p class="sf-catalog-lead">
+                        Проверь выбранные товары, измени количество и переходи к оформлению заказа.
+                    </p>
                 </div>
-            {% endif %}
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary">Вернуться в каталог</a>
+            </div>
         </div>
+    </div>
+</section>
 
+<section class="sf-section pt-0 sf-cart-page">
+    <div class="container">
         {% if cart_items %}
             <div class="sf-cart-layout">
                 <div class="sf-cart-items">
@@ -63,9 +60,9 @@
                             </div>
 
                             <div class="sf-cart-item-body">
-                                {% if item.size or item.color %}
+                                {% if item.variant_label %}
                                     <div class="sf-cart-item-category">
-                                        {{ item.size }}{% if item.color %} / {{ item.color }}{% endif %}
+                                        {{ item.variant_label }}
                                     </div>
                                 {% endif %}
 
@@ -91,7 +88,7 @@
                                                    min="1"
                                                    value="{{ item.quantity }}"
                                                    class="form-control sf-cart-qty-input">
-                                            <button type="submit" class="btn btn-secondary">
+                                            <button type="submit" class="btn btn-outline-primary">
                                                 Обновить
                                             </button>
                                         </form>
@@ -100,7 +97,7 @@
                                     <form method="post" action="{% url 'store:remove_from_cart' %}">
                                         {% csrf_token %}
                                         <input type="hidden" name="variant_id" value="{{ item.variant_id }}">
-                                        <button type="submit" class="btn btn-secondary sf-cart-remove-btn">
+                                        <button type="submit" class="btn btn-outline-primary sf-cart-remove-btn">
                                             Удалить
                                         </button>
                                     </form>
@@ -126,11 +123,6 @@
                         <h3 class="sf-cart-summary-title">Ваш заказ</h3>
 
                         <div class="sf-cart-summary-row">
-                            <span>Товаров</span>
-                            <strong>{{ cart_items|length }}</strong>
-                        </div>
-
-                        <div class="sf-cart-summary-row">
                             <span>Итого</span>
                             <strong>{{ cart_total }} ₽</strong>
                         </div>
@@ -145,7 +137,7 @@
                             <a href="{% url 'orders:checkout' %}" class="btn btn-primary">
                                 Перейти к оформлению
                             </a>
-                            <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                            <a href="{% url 'store:product_list' %}" class="btn btn-outline-primary">
                                 Продолжить покупки
                             </a>
                         </div>

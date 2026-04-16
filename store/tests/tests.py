@@ -5,6 +5,7 @@ from users.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import Group
 
+from orders.models import Order, OrderItem
 from store.models import Cart, CartItem, Category, Product, ProductVariant, ProductImage
 
 
@@ -405,10 +406,11 @@ class ModeratorDashboardAccessTest(TestCase):
     def test_dashboard_available_for_group_moderator(self):
         self.client.login(email="mod@example.com", password="modpass123")
 
-        response = self.client.get(reverse("store:dashboard_home"))
+        response = self.client.get(reverse("store:dashboard_home"), follow=True)
 
+        self.assertRedirects(response, reverse("store:warehouse_dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Дашборд модератора")
+        self.assertContains(response, "Склад")
 
     def test_dashboard_forbidden_for_staff_without_moderator_group(self):
         self.client.login(email="staff-no-group@example.com", password="testpass123")
@@ -427,9 +429,18 @@ class ModeratorDashboardAccessTest(TestCase):
     def test_dashboard_available_for_superuser(self):
         self.client.login(email="root@example.com", password="rootpass123")
 
-        response = self.client.get(reverse("store:dashboard_home"))
+        response = self.client.get(reverse("store:dashboard_home"), follow=True)
 
+        self.assertRedirects(response, reverse("store:warehouse_dashboard"))
         self.assertEqual(response.status_code, 200)
+
+    def test_legacy_warehouse_path_redirects_to_stock(self):
+        self.client.login(email="mod@example.com", password="modpass123")
+
+        response = self.client.get("/dashboard/warehouse/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("store:warehouse_dashboard"))
 
 
 class WarehouseStockManagementTest(TestCase):
@@ -497,6 +508,113 @@ class WarehouseStockManagementTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Склад")
         self.assertContains(response, self.product.name)
+
+    def test_product_manage_page_updates_main_product_form(self):
+        self.client.login(email="mod2@example.com", password="modpass123")
+        new_category = Category.objects.create(name="Сувениры")
+
+        response = self.client.post(
+            reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}),
+            data={
+                "name": "Обновленный шарф",
+                "category": new_category.pk,
+                "description": "Новое описание",
+            },
+        )
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.name, "Обновленный шарф")
+        self.assertEqual(self.product.category_id, new_category.pk)
+        self.assertEqual(self.product.description, "Новое описание")
+
+
+class DashboardOrdersManagementTest(TestCase):
+    """Тесты вкладки заказов модераторского дашборда."""
+
+    def setUp(self):
+        self.client = Client()
+        self.moderator = User.objects.create_user(
+            email="dashboard-mod@example.com",
+            password="modpass123",
+            is_staff=True,
+            is_active=True,
+        )
+        self.moderator.groups.add(Group.objects.create(name="Модераторы"))
+        self.regular_user = User.objects.create_user(
+            email="dashboard-user@example.com",
+            password="userpass123",
+            is_active=True,
+        )
+        self.customer = User.objects.create_user(
+            email="customer@example.com",
+            password="customerpass123",
+            is_active=True,
+        )
+
+        self.category = Category.objects.create(name="Сувениры")
+        self.product = Product.objects.create(name="Шарф ФК Шинник", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("1500.00"),
+            quantity=10,
+        )
+        self.order = Order.objects.create(
+            number="ORD-TEST-0001",
+            user=self.customer,
+            recipient_name="Покупатель",
+            email=self.customer.email,
+            phone="+79001112233",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            subtotal_amount=Decimal("1500.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("1500.00"),
+        )
+        OrderItem.objects.create(
+            order=self.order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.pk),
+            unit_price=Decimal("1500.00"),
+            quantity=1,
+            line_total=Decimal("1500.00"),
+        )
+
+    def test_orders_dashboard_available_for_moderator(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_orders"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Заказы")
+        self.assertContains(response, self.order.number)
+        self.assertContains(response, "Новый")
+
+    def test_order_status_update_from_dashboard_detail(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "ready"},
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.RESERVED)
+        self.assertEqual(self.order.status, Order.Status.PROCESSING)
+
+    def test_orders_dashboard_forbidden_for_regular_user(self):
+        self.client.login(email="dashboard-user@example.com", password="userpass123")
+
+        response = self.client.get(reverse("store:dashboard_orders"))
+
+        self.assertEqual(response.status_code, 403)
 
 
 class ProductDeleteViewTest(TestCase):
@@ -597,6 +715,35 @@ class RemoveFromCartViewTest(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertJSONEqual(response.content, {"success": False, "error": "Товар не найден в корзине"})
+
+
+class CartPageRenderingTest(TestCase):
+    """Тесты рендера страницы корзины."""
+
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name="Аксессуары")
+        self.product = Product.objects.create(name="Тестовый шарф", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size=None,
+            color="Сине-гранатовый",
+            price=Decimal("1999.99"),
+            quantity=10,
+        )
+
+        session = self.client.session
+        session.save()
+        cart = Cart.objects.create(session_key=session.session_key)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=1)
+
+    def test_cart_page_hides_none_variant_values_and_positions_block(self):
+        response = self.client.get(reverse("store:cart"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Сине-гранатовый")
+        self.assertNotContains(response, "None /")
+        self.assertNotContains(response, "позиций в корзине")
 
 
 class WarehouseImageDeleteDetachVariantTest(TestCase):

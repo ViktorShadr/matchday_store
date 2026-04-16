@@ -219,13 +219,17 @@ class CartDisplayService:
         """
         variant = cart_item.product_variant
         product = variant.product
+        size = CartDisplayService._clean_variant_value(variant.size)
+        color = CartDisplayService._clean_variant_value(variant.color)
+        variant_parts = [part for part in (size, color) if part]
 
         return {
             "variant_id": variant.id,
             "product_id": product.id,
             "product_name": product.name,
-            "size": variant.size,
-            "color": variant.color,
+            "size": size or None,
+            "color": color or None,
+            "variant_label": " / ".join(variant_parts),
             "price": variant.price,
             "price_formatted": f"{variant.price} ₽",
             "quantity": cart_item.quantity,
@@ -234,6 +238,15 @@ class CartDisplayService:
             "total_price_formatted": f"{cart_item.total_price} ₽",
             "image": getattr(variant.image.image if variant.image else None, "url", None),
         }
+
+    @staticmethod
+    def _clean_variant_value(value: Any) -> str:
+        if value is None:
+            return ""
+        normalized = str(value).strip()
+        if normalized.lower() == "none":
+            return ""
+        return normalized
 
     @staticmethod
     def prepare_cart_items(items) -> List[Dict[str, Any]]:

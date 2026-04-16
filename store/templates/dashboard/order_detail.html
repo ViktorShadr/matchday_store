@@ -1,0 +1,78 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Заказ #{{ order.number|default:order.pk }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <div>
+                    <h1 class="sf-section-title">Заказ #{{ order.number|default:order.pk }}</h1>
+                    <p class="sf-section-subtitle">
+                        Пользователь: {{ order.email|default:order.user.email }}<br>
+                        Дата: {{ order.created_at|date:"d.m.Y H:i" }}
+                    </p>
+                </div>
+                <a class="btn btn-outline-primary" href="{% url 'store:dashboard_orders' %}">Назад к заказам</a>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-8">
+                    <div class="sf-surface p-4">
+                        <h2 class="h4 mb-3">Состав заказа</h2>
+                        <div class="d-grid gap-2">
+                            {% for item in items %}
+                                <div class="sf-order-item-row">
+                                    <div>
+                                        <div class="fw-semibold">{{ item.product_name_snapshot }}</div>
+                                        <div class="small text-muted">
+                                            {{ item.quantity }} шт.
+                                            {% if item.size_snapshot or item.color_snapshot %}
+                                                · {{ item.size_snapshot|default:'—' }} / {{ item.color_snapshot|default:'—' }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="fw-semibold">{{ item.line_total|floatformat:"-2" }} ₽</div>
+                                </div>
+                            {% empty %}
+                                <div class="text-muted">Состав заказа пока недоступен.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-4">
+                    <div class="sf-surface p-4 mb-4">
+                        <h2 class="h4 mb-3">Сводка</h2>
+                        <div class="d-grid gap-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Статус</span>
+                                <span class="{{ current_status_badge }}">{{ current_status_label }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Итого</span>
+                                <strong>{{ order.total_amount|floatformat:"-2" }} ₽</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sf-surface p-4">
+                        <h2 class="h4 mb-3">Изменить статус</h2>
+                        <form method="post" action="{% url 'store:dashboard_order_status_update' order.pk %}">
+                            {% csrf_token %}
+                            <label class="form-label" for="dashboardOrderStatus">Статус заказа</label>
+                            <select id="dashboardOrderStatus" class="form-select" name="status">
+                                {% for value, label in status_choices %}
+                                    <option value="{{ value }}" {% if current_status_key == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-primary w-100 mt-3">Сохранить</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

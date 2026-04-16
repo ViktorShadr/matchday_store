@@ -46,6 +46,7 @@ def enrich_product(product):
     """
     images = list(product.images.all())
     variants = list(product.variants.all())
+    available_variants = [variant for variant in variants if variant.quantity > 0]
 
     primary_image = next((image for image in images if image.is_primary), None)
     first_image = primary_image or (images[0] if images else None)
@@ -54,11 +55,18 @@ def enrich_product(product):
     product.display_image = (
         first_image.image if first_image else getattr(getattr(first_variant, "image", None), "image", None)
     )
-    product.display_price = first_variant.price if first_variant else None
-    product.in_stock = any(variant.quantity > 0 for variant in variants)
+    price_source = available_variants if available_variants else variants
+    if price_source:
+        prices = [variant.price for variant in price_source if variant.price is not None]
+        product.display_price = min(prices) if prices else None
+    else:
+        product.display_price = None
+
+    product.in_stock = bool(available_variants)
+    product.available_variant_count = len(available_variants)
 
     # ID первого доступного варианта для кнопки быстрого добавления
-    first_available_variant = next((v for v in variants if v.quantity > 0), None)
+    first_available_variant = available_variants[0] if available_variants else None
     product.first_available_variant_id = first_available_variant.id if first_available_variant else None
 
     return product

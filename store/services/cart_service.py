@@ -15,6 +15,16 @@ from .cart_validator import CartValidator
 logger = logging.getLogger(__name__)
 
 
+def _clean_variant_value(value) -> str:
+    """Нормализовать значение варианта для отображения в UI."""
+    if value is None:
+        return ""
+    normalized = str(value).strip()
+    if normalized.lower() == "none":
+        return ""
+    return normalized
+
+
 class CartService:
     """
     Сервис для работы с корзиной.
@@ -357,6 +367,10 @@ class CartService:
         ).prefetch_related('product_variant__product__images').all():
             variant = item.product_variant
             product = variant.product
+            size = _clean_variant_value(variant.size)
+            color = _clean_variant_value(variant.color)
+            variant_parts = [part for part in (size, color) if part]
+            variant_label = " / ".join(variant_parts)
 
             # Get product image
             image_url = None
@@ -370,8 +384,9 @@ class CartService:
                 'variant_id': variant.id,
                 'product_id': product.id,
                 'product_name': product.name,
-                'size': variant.size,
-                'color': variant.color,
+                'size': size or None,
+                'color': color or None,
+                'variant_label': variant_label,
                 'quantity': item.quantity,
                 'price': variant.price,
                 'total_price': item.total_price,

@@ -149,6 +149,7 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
 
         # Variants data
         variants = list(product.variants.all())
+        available_variants = [variant for variant in variants if variant.quantity > 0]
         variant_prices = [v.price for v in variants if v.price]
         variant_quantities = [v.quantity for v in variants if v.quantity > 0]
 
@@ -156,6 +157,7 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
         context["product_details"] = ProductDisplayService.prepare_product_details(product)
         context["product_images"] = product.images.all()
         context["variants"] = variants
+        context["available_variants"] = available_variants
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
 
         # Price range for Schema.org

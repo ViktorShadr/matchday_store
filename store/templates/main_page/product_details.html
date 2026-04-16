@@ -91,10 +91,26 @@
                 </div>
 
                 <div class="sf-product-actions">
-                    {% if product.in_stock and product.first_available_variant_id %}
+                    {% if available_variants %}
                         <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-buy-form">
                             {% csrf_token %}
-                            <input type="hidden" name="variant_id" value="{{ product.first_available_variant_id }}">
+                            {% if available_variants|length > 1 %}
+                                <div class="mb-3">
+                                    <label class="form-label" for="variantSelect">Выберите вариант</label>
+                                    <select id="variantSelect" name="variant_id" class="form-select">
+                                        {% for variant in available_variants %}
+                                            <option value="{{ variant.id }}">
+                                                {{ variant.size|default:'Без размера' }} / {{ variant.color|default:'Без цвета' }} - {{ variant.price|floatformat:"-2" }} ₽
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            {% else %}
+                                <input type="hidden" name="variant_id" value="{{ available_variants.0.id }}">
+                                <div class="small text-muted mb-2">
+                                    Вариант: {{ available_variants.0.size|default:'Без размера' }} / {{ available_variants.0.color|default:'Без цвета' }}
+                                </div>
+                            {% endif %}
                             <input type="hidden" name="quantity" value="1">
                             <button type="submit" class="btn btn-primary btn-lg sf-product-main-cta">
                                 <span class="sf-product-main-cta-icon" aria-hidden="true">

@@ -4,6 +4,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from store.mixins import ModeratorRequiredMixin
 from store.models import Category
 from store.services import PermissionService, CategoryService, ProductDisplayService
+from store.services.catalog_service import enrich_products
 
 
 class CategoryListView(ListView):
@@ -59,7 +60,7 @@ class CategoryDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         products = self.object.products.all().order_by("-created_at")
 
-        context["products"] = products
+        context["products"] = enrich_products(products)
         context["products_prepared"] = [ProductDisplayService.prepare_category_product(p) for p in products]
         context["category_data"] = CategoryService.enrich_category(self.object, self.request.user)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
