@@ -2,10 +2,12 @@ from decimal import Decimal
 from django.test import TestCase, Client
 from django.urls import reverse
 from users.models import User
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import Group
 
 from orders.models import Order, OrderItem
+from payments.models import Payment
 from store.models import Cart, CartItem, Category, Product, ProductVariant, ProductImage
 
 
@@ -609,6 +611,53 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.RESERVED)
         self.assertEqual(self.order.status, Order.Status.PROCESSING)
 
+    def test_order_payment_status_update_from_dashboard_detail(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_payment_status_update", kwargs={"pk": self.order.pk}),
+            data={"payment_status": Order.PaymentStatus.SUCCEEDED},
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        payment = Payment.objects.get(order=self.order, provider=Payment.Provider.MANUAL)
+        self.assertEqual(payment.status, Payment.Status.SUCCEEDED)
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+        self.assertIsNotNone(self.order.paid_at)
+
+    def test_order_cannot_be_issued_without_successful_payment(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "issued"},
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.NEW)
+        self.assertEqual(self.order.status, Order.Status.PLACED)
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.PENDING)
+
+    def test_order_can_be_issued_after_successful_payment(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+        self.client.post(
+            reverse("store:dashboard_order_payment_status_update", kwargs={"pk": self.order.pk}),
+            data={"payment_status": Order.PaymentStatus.SUCCEEDED},
+        )
+
+        response = self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "issued"},
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
+        self.assertEqual(self.order.status, Order.Status.DELIVERED)
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+
     def test_order_cancel_from_dashboard_uses_cancellation_service(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
         self.variant.quantity = 9
@@ -634,6 +683,35 @@ class DashboardOrdersManagementTest(TestCase):
         response = self.client.get(reverse("store:dashboard_orders"))
 
         self.assertEqual(response.status_code, 403)
+
+
+class ModeratorGroupCommandTest(TestCase):
+    """Тесты команды создания/обновления группы модераторов."""
+
+    def test_command_updates_existing_group_with_orders_and_payments_permissions(self):
+        group = Group.objects.create(name="Модераторы")
+
+        call_command("create_moderator_group")
+
+        group.refresh_from_db()
+        group_permissions = set(group.permissions.values_list("codename", flat=True))
+        expected_permissions = {
+            "view_product",
+            "add_product",
+            "change_product",
+            "delete_product",
+            "view_category",
+            "add_category",
+            "change_category",
+            "delete_category",
+            "view_order",
+            "change_order",
+            "view_orderitem",
+            "view_payment",
+            "add_payment",
+            "change_payment",
+        }
+        self.assertTrue(expected_permissions.issubset(group_permissions))
 
 
 class ProductDeleteViewTest(TestCase):

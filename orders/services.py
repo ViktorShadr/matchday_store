@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from orders.models import Order, OrderItem
 from payments.models import Payment
+from payments.services import PaymentStatusSyncService
 from store.repositories import IProductVariantRepository
 from store.repositories import ProductVariantRepository
 from orders.repositories import IOrderRepository, IPaymentRepository
@@ -15,12 +16,17 @@ from orders.repositories import OrderRepository, PaymentRepository
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
 
+
 class CheckoutError(Exception):
     """Бизнес-ошибка оформления заказа."""
 
 
 class OrderCancellationError(Exception):
     """Бизнес-ошибка отмены заказа."""
+
+
+class ManualPaymentUpdateError(Exception):
+    """Бизнес-ошибка обновления оплаты заказа."""
 
 
 class CheckoutService(ICheckoutService):
@@ -307,4 +313,112 @@ class OrderCancellationService:
                 ]
             )
 
+            return order
+
+
+class ManualPaymentUpdateService:
+    """Сервис обновления статуса ручной оплаты для заказа."""
+
+    ALLOWED_PAYMENT_STATUSES = frozenset(
+        {
+            Order.PaymentStatus.PENDING,
+            Order.PaymentStatus.SUCCEEDED,
+            Order.PaymentStatus.FAILED,
+            Order.PaymentStatus.CANCELLED,
+            Order.PaymentStatus.REFUNDED,
+        }
+    )
+    RESET_PAID_AT_STATUSES = frozenset(
+        {
+            Order.PaymentStatus.PENDING,
+            Order.PaymentStatus.FAILED,
+            Order.PaymentStatus.CANCELLED,
+        }
+    )
+
+    @classmethod
+    def _ensure_can_update_payment(cls, order: Order, next_payment_status: str) -> None:
+        if next_payment_status not in cls.ALLOWED_PAYMENT_STATUSES:
+            raise ManualPaymentUpdateError("Недопустимый статус оплаты.")
+
+        if order.delivery_method != Order.DeliveryMethod.PICKUP:
+            raise ManualPaymentUpdateError("Ручное обновление оплаты доступно только для самовывоза.")
+
+        if order.status == Order.Status.CANCELLED and next_payment_status == Order.PaymentStatus.SUCCEEDED:
+            raise ManualPaymentUpdateError("Нельзя отметить оплату успешной для отмененного заказа.")
+
+        if next_payment_status == Order.PaymentStatus.REFUNDED:
+            has_successful_payment = order.payments.filter(status=Payment.Status.SUCCEEDED).exists()
+            if not has_successful_payment and order.payment_status != Order.PaymentStatus.SUCCEEDED:
+                raise ManualPaymentUpdateError("Нельзя выполнить возврат: успешная оплата не найдена.")
+
+    @staticmethod
+    def _build_dashboard_idempotency_key(order_id: int) -> str:
+        return f"dashboard-manual-{order_id}-{uuid4().hex}"
+
+    def update_order_payment_status(self, order_id: int, next_payment_status: str) -> Order:
+        """
+        Обновить статус оплаты заказа через ручной staff-flow.
+
+        Создает платеж manual при его отсутствии и синхронизирует
+        Order.payment_status + Order.paid_at.
+        """
+        with transaction.atomic():
+            try:
+                order = Order.objects.select_for_update().get(pk=order_id)
+            except Order.DoesNotExist as exc:
+                raise ManualPaymentUpdateError("Заказ не найден.") from exc
+
+            self._ensure_can_update_payment(order, next_payment_status)
+            now = timezone.now()
+
+            payment = (
+                Payment.objects.select_for_update()
+                .filter(order=order, provider=Payment.Provider.MANUAL)
+                .order_by("-updated_at", "-created_at", "-pk")
+                .first()
+            )
+
+            if payment is None:
+                payment = Payment.objects.create(
+                    order=order,
+                    provider=Payment.Provider.MANUAL,
+                    idempotency_key=self._build_dashboard_idempotency_key(order.id),
+                    status=next_payment_status,
+                    amount=order.total_amount,
+                    currency=order.currency,
+                    paid_at=now if next_payment_status == Order.PaymentStatus.SUCCEEDED else None,
+                    raw_request={"payment_method": "pay_on_receipt", "source": "dashboard"},
+                )
+            else:
+                payment.provider = Payment.Provider.MANUAL
+                payment.status = next_payment_status
+                payment.amount = order.total_amount
+                payment.currency = order.currency
+                if next_payment_status == Order.PaymentStatus.SUCCEEDED:
+                    payment.paid_at = now
+                elif next_payment_status in self.RESET_PAID_AT_STATUSES:
+                    payment.paid_at = None
+                payment.save(
+                    update_fields=[
+                        "provider",
+                        "status",
+                        "amount",
+                        "currency",
+                        "paid_at",
+                        "updated_at",
+                    ]
+                )
+
+            PaymentStatusSyncService.sync_order_payment_status(order)
+
+            if next_payment_status == Order.PaymentStatus.SUCCEEDED:
+                if order.paid_at is None:
+                    order.paid_at = payment.paid_at or now
+                    order.save(update_fields=["paid_at", "updated_at"])
+            elif next_payment_status in self.RESET_PAID_AT_STATUSES and order.paid_at is not None:
+                order.paid_at = None
+                order.save(update_fields=["paid_at", "updated_at"])
+
+            order.refresh_from_db()
             return order

@@ -5,36 +5,37 @@ from django.contrib.auth.models import Group, Permission
 class Command(BaseCommand):
     """Команда управления проектом."""
 
-    help = 'Создает группу "Модераторы" с правами на управление товарами и категориями'
+    help = 'Создает/обновляет группу "Модераторы" с правами для каталога, заказов и оплаты'
+
+    PERMISSIONS_BY_MODEL = {
+        ("store", "product"): ("view_product", "add_product", "change_product", "delete_product"),
+        ("store", "category"): ("view_category", "add_category", "change_category", "delete_category"),
+        ("orders", "order"): ("view_order", "change_order"),
+        ("orders", "orderitem"): ("view_orderitem",),
+        ("payments", "payment"): ("view_payment", "add_payment", "change_payment"),
+    }
 
     def handle(self, *args, **options):
         """Выполняет основную логику команды."""
         group, created = Group.objects.get_or_create(name="Модераторы")
+        assigned_codenames = []
 
+        for (app_label, model), codenames in self.PERMISSIONS_BY_MODEL.items():
+            permissions = Permission.objects.filter(
+                content_type__app_label=app_label,
+                content_type__model=model,
+                codename__in=codenames,
+            )
+            for permission in permissions:
+                group.permissions.add(permission)
+                assigned_codenames.append(permission.codename)
+
+        assigned_codenames = sorted(set(assigned_codenames))
         if created:
-            # Права для управления товарами
-            product_permissions = Permission.objects.filter(
-                content_type__app_label="store", content_type__model="product"
-            )
-
-            # Права для управления категориями
-            category_permissions = Permission.objects.filter(
-                content_type__app_label="store", content_type__model="category"
-            )
-
-            # Добавляем права для товаров: просмотр, добавление, изменение, удаление
-            product_codenames = ["view_product", "add_product", "change_product", "delete_product"]
-            for permission in product_permissions.filter(codename__in=product_codenames):
-                group.permissions.add(permission)
-
-            # Добавляем права для категорий: просмотр, добавление, изменение, удаление
-            category_codenames = ["view_category", "add_category", "change_category", "delete_category"]
-            for permission in category_permissions.filter(codename__in=category_codenames):
-                group.permissions.add(permission)
-
-            all_permissions = product_codenames + category_codenames
             self.stdout.write(
-                self.style.SUCCESS(f'Группа "Модераторы" создана с правами: {", ".join(all_permissions)}')
+                self.style.SUCCESS(f'Группа "Модераторы" создана с правами: {", ".join(assigned_codenames)}')
             )
         else:
-            self.stdout.write(self.style.WARNING('Группа "Модераторы" уже существует'))
+            self.stdout.write(
+                self.style.SUCCESS(f'Группа "Модераторы" обновлена. Актуальные права: {", ".join(assigned_codenames)}')
+            )

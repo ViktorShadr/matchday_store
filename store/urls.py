@@ -32,6 +32,7 @@ from store.views.views_dashboard import (
     OrdersDashboardView,
     DashboardOrderDetailView,
     DashboardOrderStatusUpdateView,
+    DashboardOrderPaymentStatusUpdateView,
     WarehouseProductCreateView,
     WarehouseProductDeleteView,
     WarehouseCategoryCreateView,
@@ -62,6 +63,11 @@ urlpatterns = [
         "dashboard/orders/<int:pk>/status/",
         DashboardOrderStatusUpdateView.as_view(),
         name="dashboard_order_status_update",
+    ),
+    path(
+        "dashboard/orders/<int:pk>/payment/",
+        DashboardOrderPaymentStatusUpdateView.as_view(),
+        name="dashboard_order_payment_status_update",
     ),
     path("dashboard/products/create/", WarehouseProductCreateView.as_view(), name="warehouse_product_create"),
     path(

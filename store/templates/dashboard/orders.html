@@ -59,6 +59,7 @@
                             <th>Дата</th>
                             <th>Сумма</th>
                             <th>Статус</th>
+                            <th>Оплата</th>
                             <th class="text-end">Действия</th>
                         </tr>
                         </thead>
@@ -72,13 +73,16 @@
                                 <td>
                                     <span class="{{ order.dashboard_status_badge }}">{{ order.dashboard_status_label }}</span>
                                 </td>
+                                <td>
+                                    <span class="{{ order.dashboard_payment_badge }}">{{ order.dashboard_payment_label }}</span>
+                                </td>
                                 <td class="text-end">
                                     <a class="btn btn-sm btn-primary" href="{% url 'store:dashboard_order_detail' order.pk %}">Открыть</a>
                                 </td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-5">
+                                <td colspan="7" class="text-center text-muted py-5">
                                     Заказы по выбранным фильтрам не найдены.
                                 </td>
                             </tr>

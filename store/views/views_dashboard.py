@@ -12,7 +12,12 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, RedirectView, TemplateView, UpdateView
 
 from orders.models import Order
-from orders.services import OrderCancellationService, OrderCancellationError
+from orders.services import (
+    ManualPaymentUpdateError,
+    ManualPaymentUpdateService,
+    OrderCancellationError,
+    OrderCancellationService,
+)
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm, VariantStockForm
 from store.mixins import ModeratorRequiredMixin
 from store.models import Category, Product, ProductImage, ProductVariant
@@ -60,6 +65,39 @@ DASHBOARD_ORDER_STATUS_META = {
 
 DASHBOARD_ORDER_STATUS_KEYS = {choice[0] for choice in DASHBOARD_ORDER_STATUS_CHOICES}
 
+DASHBOARD_PAYMENT_STATUS_CHOICES = (
+    (Order.PaymentStatus.PENDING, "Ожидает оплаты"),
+    (Order.PaymentStatus.SUCCEEDED, "Оплачен"),
+    (Order.PaymentStatus.FAILED, "Ошибка оплаты"),
+    (Order.PaymentStatus.CANCELLED, "Оплата отменена"),
+    (Order.PaymentStatus.REFUNDED, "Возврат выполнен"),
+)
+
+DASHBOARD_PAYMENT_STATUS_META = {
+    Order.PaymentStatus.PENDING: {
+        "label": "Ожидает оплаты",
+        "badge_class": "sf-status-badge sf-status-badge--warning",
+    },
+    Order.PaymentStatus.SUCCEEDED: {
+        "label": "Оплачен",
+        "badge_class": "sf-status-badge sf-status-badge--success",
+    },
+    Order.PaymentStatus.FAILED: {
+        "label": "Ошибка оплаты",
+        "badge_class": "sf-status-badge sf-status-badge--danger",
+    },
+    Order.PaymentStatus.CANCELLED: {
+        "label": "Оплата отменена",
+        "badge_class": "sf-status-badge sf-status-badge--dark",
+    },
+    Order.PaymentStatus.REFUNDED: {
+        "label": "Возврат выполнен",
+        "badge_class": "sf-status-badge sf-status-badge--info",
+    },
+}
+
+DASHBOARD_PAYMENT_STATUS_KEYS = {choice[0] for choice in DASHBOARD_PAYMENT_STATUS_CHOICES}
+
 
 def _format_variant_label(variant_count: int) -> str:
     if variant_count % 10 == 1 and variant_count % 100 != 11:
@@ -89,6 +127,13 @@ def _get_dashboard_order_status_key(order: Order) -> str:
     if order.fulfillment_status in {Order.FulfillmentStatus.PACKING, Order.FulfillmentStatus.SHIPPED}:
         return "processing"
     return "new"
+
+
+def _get_dashboard_payment_status_meta(order: Order) -> dict:
+    return DASHBOARD_PAYMENT_STATUS_META.get(
+        order.payment_status,
+        DASHBOARD_PAYMENT_STATUS_META[Order.PaymentStatus.PENDING],
+    )
 
 
 def _apply_dashboard_order_status(order: Order, status_key: str) -> None:
@@ -278,9 +323,12 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
         for order in orders:
             dashboard_status_key = _get_dashboard_order_status_key(order)
             dashboard_status_meta = DASHBOARD_ORDER_STATUS_META[dashboard_status_key]
+            payment_status_meta = _get_dashboard_payment_status_meta(order)
             order.dashboard_status_key = dashboard_status_key
             order.dashboard_status_label = dashboard_status_meta["label"]
             order.dashboard_status_badge = dashboard_status_meta["badge_class"]
+            order.dashboard_payment_label = payment_status_meta["label"]
+            order.dashboard_payment_badge = payment_status_meta["badge_class"]
 
         context["orders"] = orders
         context["current_status_filter"] = status_filter
@@ -301,12 +349,17 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         dashboard_status_key = _get_dashboard_order_status_key(self.object)
         dashboard_status_meta = DASHBOARD_ORDER_STATUS_META[dashboard_status_key]
+        payment_status_meta = _get_dashboard_payment_status_meta(self.object)
 
         context["items"] = self.object.items.order_by("pk")
         context["status_choices"] = DASHBOARD_ORDER_STATUS_CHOICES
+        context["payment_status_choices"] = DASHBOARD_PAYMENT_STATUS_CHOICES
         context["current_status_key"] = dashboard_status_key
         context["current_status_label"] = dashboard_status_meta["label"]
         context["current_status_badge"] = dashboard_status_meta["badge_class"]
+        context["current_payment_status_key"] = self.object.payment_status
+        context["current_payment_status_label"] = payment_status_meta["label"]
+        context["current_payment_status_badge"] = payment_status_meta["badge_class"]
         return context
 
 
@@ -326,8 +379,34 @@ class DashboardOrderStatusUpdateView(ModeratorRequiredMixin, View):
                 messages.error(request, str(exc))
             return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
+        if next_status == "issued" and order.payment_status != Order.PaymentStatus.SUCCEEDED:
+            messages.error(request, "Нельзя выдать заказ без подтвержденной оплаты.")
+            return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
         _apply_dashboard_order_status(order, next_status)
         order.save(update_fields=["fulfillment_status", "status", "cancelled_at", "updated_at"])
+        return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
+
+class DashboardOrderPaymentStatusUpdateView(ModeratorRequiredMixin, View):
+    payment_service = ManualPaymentUpdateService()
+
+    def post(self, request, *args, **kwargs):
+        order = get_object_or_404(Order, pk=self.kwargs["pk"])
+        next_payment_status = request.POST.get("payment_status", "").strip()
+        if next_payment_status not in DASHBOARD_PAYMENT_STATUS_KEYS:
+            return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
+        try:
+            self.payment_service.update_order_payment_status(
+                order_id=order.pk,
+                next_payment_status=next_payment_status,
+            )
+        except ManualPaymentUpdateError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Статус оплаты обновлен.")
+
         return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
 
