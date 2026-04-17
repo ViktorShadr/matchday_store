@@ -73,6 +73,7 @@ class CheckoutFlowTest(TestCase):
             last_name="Иванов",
             phone="+79990001122",
             is_active=True,
+            is_email_confirmed=True,
         )
         self.category = Category.objects.create(name="Шарфы")
         self.product = Product.objects.create(name="Шарф ФК Шинник", category=self.category)
@@ -106,6 +107,13 @@ class CheckoutFlowTest(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("users:login"), response.url)
+
+    def test_checkout_requires_authentication_shows_login_hint_message(self):
+        response = self.client.get(reverse("orders:checkout"), follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
+        self.assertContains(response, "Авторизация")
 
     def test_checkout_creates_order_deducts_stock_and_clears_cart(self):
         """Оформление заказа должно создать order, payment и очистить корзину."""
@@ -146,6 +154,16 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(payment.provider, Payment.Provider.MANUAL)
         self.assertEqual(payment.status, Payment.Status.PENDING)
         self.assertEqual(payment.amount, Decimal("3980.00"))
+
+    def test_checkout_redirects_to_profile_when_email_not_confirmed(self):
+        self.user.is_email_confirmed = False
+        self.user.save(update_fields=["is_email_confirmed"])
+        self.client.login(email="buyer@example.com", password="testpass123")
+
+        response = self.client.get(reverse("orders:checkout"), follow=True)
+
+        self.assertRedirects(response, reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
+        self.assertContains(response, "Подтвердите email в личном кабинете перед оформлением заказа.")
 
     def test_checkout_repeat_submit_with_same_token_redirects_to_existing_order(self):
         """Повторный POST с тем же checkout_token не должен создавать новый заказ."""

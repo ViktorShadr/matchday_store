@@ -50,7 +50,15 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
     def dispatch(self, request, *args, **kwargs):
         """Не допускать оформление с пустой корзиной."""
         if not request.user.is_authenticated:
+            messages.info(request, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
             return self.handle_no_permission()
+
+        if not request.user.is_email_confirmed:
+            messages.warning(
+                request,
+                "Подтвердите email в личном кабинете перед оформлением заказа.",
+            )
+            return redirect(reverse("users:profile_detail", kwargs={"pk": request.user.pk}))
 
         cart_summary = cart_service.get_cart_summary(request)
         if not cart_summary["items"]:
