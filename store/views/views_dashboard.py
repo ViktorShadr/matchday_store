@@ -1,6 +1,7 @@
 from decimal import Decimal
 from urllib.parse import urlencode
 
+from django.contrib import messages
 from django.db.models import Count, Min, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
@@ -11,6 +12,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, RedirectView, TemplateView, UpdateView
 
 from orders.models import Order
+from orders.services import OrderCancellationService, OrderCancellationError
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm, VariantStockForm
 from store.mixins import ModeratorRequiredMixin
 from store.models import Category, Product, ProductImage, ProductVariant
@@ -309,10 +311,19 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
 
 
 class DashboardOrderStatusUpdateView(ModeratorRequiredMixin, View):
+    cancellation_service = OrderCancellationService()
+
     def post(self, request, *args, **kwargs):
         order = get_object_or_404(Order, pk=self.kwargs["pk"])
         next_status = request.POST.get("status", "").strip()
         if next_status not in DASHBOARD_ORDER_STATUS_KEYS:
+            return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
+        if next_status == "cancelled":
+            try:
+                self.cancellation_service.cancel_order(order_id=order.pk)
+            except OrderCancellationError as exc:
+                messages.error(request, str(exc))
             return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
         _apply_dashboard_order_status(order, next_status)

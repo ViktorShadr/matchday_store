@@ -609,6 +609,25 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.RESERVED)
         self.assertEqual(self.order.status, Order.Status.PROCESSING)
 
+    def test_order_cancel_from_dashboard_uses_cancellation_service(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+        self.variant.quantity = 9
+        self.variant.save(update_fields=["quantity", "updated_at"])
+
+        response = self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "cancelled"},
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertEqual(self.variant.quantity, 10)
+
     def test_orders_dashboard_forbidden_for_regular_user(self):
         self.client.login(email="dashboard-user@example.com", password="userpass123")
 
