@@ -84,6 +84,7 @@ class User(AbstractUser):
     is_superuser = models.BooleanField(default=False)
     is_email_confirmed = models.BooleanField(default=False)
     email_token = models.CharField(max_length=64, blank=True, null=True)
+    confirmation_email_last_sent_at = models.DateTimeField(blank=True, null=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

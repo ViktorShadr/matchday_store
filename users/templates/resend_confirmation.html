@@ -1,0 +1,69 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Повторная отправка письма — ФК «Шинник»{% endblock %}
+{% block meta_description %}Повторная отправка письма подтверждения email для входа в аккаунт.{% endblock %}
+
+{% block content %}
+<section class="sf-auth-page">
+    <div class="container">
+        <div class="sf-auth-layout">
+            <div class="sf-auth-aside">
+                <div class="sf-auth-aside-card">
+                    <div class="sf-home-eyebrow">Подтверждение аккаунта</div>
+                    <h1 class="sf-auth-title">Повторная отправка письма</h1>
+                    <p class="sf-auth-lead">
+                        Введи email, указанный при регистрации.
+                        Если аккаунт существует и еще не подтвержден, мы отправим новую ссылку.
+                    </p>
+                </div>
+            </div>
+
+            <div class="sf-auth-form-wrap">
+                <div class="sf-auth-form-card">
+                    <h2 class="sf-auth-form-title">Отправить письмо повторно</h2>
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger sf-alert mb-4">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% for field in form %}
+                            <div class="sf-form-group mb-3">
+                                <label for="{{ field.id_for_label }}" class="form-label">
+                                    {{ field.label }}
+                                </label>
+
+                                {{ field }}
+
+                                {% if field.errors %}
+                                    <div class="sf-field-errors">
+                                        {% for error in field.errors %}
+                                            <div>{{ error }}</div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <div class="sf-auth-actions">
+                            <button type="submit" class="btn btn-primary w-100">
+                                Отправить письмо
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="sf-auth-footer">
+                        <a href="{% url 'users:login' %}" class="sf-link">Вернуться ко входу</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

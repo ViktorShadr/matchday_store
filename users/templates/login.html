@@ -86,6 +86,11 @@
                         <span>Нет аккаунта?</span>
                         <a href="{% url 'users:registration' %}" class="sf-link">Зарегистрироваться</a>
                     </div>
+                    <div class="sf-auth-footer mt-2">
+                        <a href="{% url 'users:resend_confirmation' %}" class="sf-link">
+                            Повторно отправить письмо подтверждения
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

@@ -123,3 +123,17 @@ class ProfileDeleteConfirmForm(forms.Form):
             }
         ),
     )
+
+
+class ResendConfirmationEmailForm(forms.Form):
+    """Форма повторной отправки письма подтверждения email."""
+
+    email = forms.EmailField(
+        label="Email",
+        widget=forms.EmailInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Введите email при регистрации",
+            }
+        ),
+    )

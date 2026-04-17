@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.utils import timezone
 
 from orders.models import Order, OrderItem
 from store.models import Category, Product, ProductImage, ProductVariant
@@ -154,7 +155,8 @@ class UserViewsTest(TestCase):
     def test_registration_view_success(self, mock_confirmation_email, mock_welcome_email):
         """Проверяет сценарий 'registration view success'."""
         form_data = {"email": "newuser@example.com", "password1": "complexpass123", "password2": "complexpass123"}
-        response = self.client.post(reverse("users:registration"), data=form_data)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse("users:registration"), data=form_data)
 
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, reverse("users:login"))
@@ -164,6 +166,64 @@ class UserViewsTest(TestCase):
         self.assertIsNotNone(new_user.email_token)
         mock_confirmation_email.delay.assert_called_once_with("newuser@example.com", ANY)
         mock_welcome_email.delay.assert_not_called()
+
+    def test_registration_view_uses_sync_fallback_when_celery_unavailable(self):
+        form_data = {"email": "fallback@example.com", "password1": "complexpass123", "password2": "complexpass123"}
+
+        with patch("users.views.send_confirmation_email") as mock_confirmation_email:
+            with patch("users.views.send_confirmation_email_sync", return_value=True) as mock_confirmation_email_sync:
+                mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.client.post(reverse("users:registration"), data=form_data)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("users:login"))
+        new_user = User.objects.get(email="fallback@example.com")
+        self.assertFalse(new_user.is_active)
+        self.assertIsNotNone(new_user.email_token)
+        self.assertIsNotNone(new_user.confirmation_email_last_sent_at)
+        mock_confirmation_email.delay.assert_called_once_with("fallback@example.com", ANY)
+        mock_confirmation_email_sync.assert_called_once_with("fallback@example.com", ANY)
+
+    @patch("users.views.send_confirmation_email")
+    def test_resend_confirmation_email_success(self, mock_confirmation_email):
+        inactive_user = User.objects.create_user(
+            email="inactive@example.com",
+            password="inactivepass123",
+            is_active=False,
+            is_email_confirmed=False,
+        )
+        inactive_user.generate_email_token()
+
+        response = self.client.post(
+            reverse("users:resend_confirmation"),
+            data={"email": "inactive@example.com"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("users:login"))
+        inactive_user.refresh_from_db()
+        self.assertIsNotNone(inactive_user.confirmation_email_last_sent_at)
+        mock_confirmation_email.delay.assert_called_once_with("inactive@example.com", ANY)
+
+    def test_resend_confirmation_email_throttled(self):
+        inactive_user = User.objects.create_user(
+            email="throttle@example.com",
+            password="inactivepass123",
+            is_active=False,
+            is_email_confirmed=False,
+        )
+        inactive_user.generate_email_token()
+        inactive_user.confirmation_email_last_sent_at = timezone.now()
+        inactive_user.save(update_fields=["confirmation_email_last_sent_at"])
+
+        response = self.client.post(
+            reverse("users:resend_confirmation"),
+            data={"email": "throttle@example.com"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Повторная отправка будет доступна")
 
     def test_registration_view_failure(self):
         """Проверяет сценарий 'registration view failure'."""
@@ -460,7 +520,8 @@ class UserIntegrationTest(TestCase):
         # 1. Register new user
         """Проверяет сценарий 'full user flow'."""
         form_data = {"email": "flowtest@example.com", "password1": "complexpass123", "password2": "complexpass123"}
-        response = self.client.post(reverse("users:registration"), data=form_data)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse("users:registration"), data=form_data)
         self.assertEqual(response.status_code, 302)
 
         user = User.objects.get(email="flowtest@example.com")

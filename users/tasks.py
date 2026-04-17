@@ -1,6 +1,10 @@
+import logging
+
 from celery import shared_task
-from django.core.mail import send_mail
 from django.conf import settings
+from django.core.mail import send_mail
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task
@@ -31,8 +35,7 @@ def send_welcome_email(user_email):
         return False
 
 
-@shared_task
-def send_confirmation_email(user_email, confirmation_token):
+def send_confirmation_email_sync(user_email, confirmation_token):
     """
     Отправка письма с подтверждением email
 
@@ -66,8 +69,14 @@ def send_confirmation_email(user_email, confirmation_token):
             recipient_list=recipient_list,
             fail_silently=False,
         )
-        print(f"Письмо с подтверждением отправлено на {user_email}")
+        logger.info("Письмо с подтверждением отправлено на %s", user_email)
         return True
-    except Exception as e:
-        print(f"Ошибка отправки email с подтверждением: {e}")
+    except Exception:
+        logger.exception("Ошибка отправки email с подтверждением на %s", user_email)
         return False
+
+
+@shared_task
+def send_confirmation_email(user_email, confirmation_token):
+    """Celery task для отправки письма с подтверждением email."""
+    return send_confirmation_email_sync(user_email, confirmation_token)

@@ -4,21 +4,43 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 
 from orders.models import Order
 from orders.services import OrderCancellationService, OrderCancellationError
-from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
+from users.forms import (
+    UserLoginForm,
+    UserProfileForm,
+    UserRegistrationForm,
+    ProfileDeleteConfirmForm,
+    ResendConfirmationEmailForm,
+)
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
-from users.tasks import send_confirmation_email, send_welcome_email
+from users.tasks import send_confirmation_email, send_confirmation_email_sync, send_welcome_email
 
 logger = logging.getLogger(__name__)
+CONFIRMATION_EMAIL_RESEND_COOLDOWN_SECONDS = 60
+
+
+def _send_confirmation_email_with_fallback(user_email: str, confirmation_token: str) -> bool:
+    """Попробовать отправить письмо через Celery и откатиться на синхронную отправку."""
+    try:
+        send_confirmation_email.delay(user_email, confirmation_token)
+        return True
+    except Exception:
+        logger.exception(
+            "Ошибка постановки задачи отправки подтверждения для %s, используем sync fallback",
+            user_email,
+        )
+        return send_confirmation_email_sync(user_email, confirmation_token)
 
 
 class CustomLoginView(CartContextMixin, LoginView):
@@ -91,22 +113,67 @@ class CustomRegistrationView(CartContextMixin, CreateView):
         Returns:
             HttpResponse: Редирект на страницу входа
         """
-        user = form.save()
-        self.object = user
+        send_result = {"success": False}
 
-        # Генерируем токен подтверждения email
+        with transaction.atomic():
+            user = form.save()
+            self.object = user
+            confirmation_token = user.generate_email_token()
+
+            def _dispatch_confirmation_email():
+                is_sent = _send_confirmation_email_with_fallback(user.email, confirmation_token)
+                send_result["success"] = is_sent
+                if is_sent:
+                    User.objects.filter(pk=user.pk).update(confirmation_email_last_sent_at=timezone.now())
+
+            transaction.on_commit(_dispatch_confirmation_email)
+
+        if send_result["success"]:
+            messages.success(
+                self.request,
+                "Регистрация успешна! На ваш email отправлено письмо с ссылкой для подтверждения аккаунта."
+            )
+        else:
+            messages.warning(
+                self.request,
+                "Аккаунт создан, но письмо подтверждения пока не отправлено. Повторите отправку на странице входа.",
+            )
+        return HttpResponseRedirect(self.get_success_url())
+
+
+class ResendConfirmationEmailView(FormView):
+    """Повторная отправка письма подтверждения для неподтвержденных аккаунтов."""
+
+    template_name = "resend_confirmation.html"
+    form_class = ResendConfirmationEmailForm
+    success_url = reverse_lazy("users:login")
+
+    def form_valid(self, form):
+        email = form.cleaned_data["email"].strip().lower()
+        generic_message = "Если аккаунт с таким email существует и не подтвержден, письмо отправлено."
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user or user.is_email_confirmed:
+            messages.info(self.request, generic_message)
+            return HttpResponseRedirect(self.get_success_url())
+
+        now = timezone.now()
+        last_sent = user.confirmation_email_last_sent_at
+        if last_sent is not None:
+            elapsed_seconds = int((now - last_sent).total_seconds())
+            if elapsed_seconds < CONFIRMATION_EMAIL_RESEND_COOLDOWN_SECONDS:
+                seconds_left = CONFIRMATION_EMAIL_RESEND_COOLDOWN_SECONDS - elapsed_seconds
+                form.add_error(None, f"Повторная отправка будет доступна через {seconds_left} сек.")
+                return self.form_invalid(form)
+
         confirmation_token = user.generate_email_token()
+        if not _send_confirmation_email_with_fallback(user.email, confirmation_token):
+            form.add_error(None, "Не удалось отправить письмо подтверждения. Попробуйте позже.")
+            return self.form_invalid(form)
 
-        # Отправка письма с подтверждением через Celery с обработкой ошибок
-        try:
-            send_confirmation_email.delay(user.email, confirmation_token)
-        except Exception as e:
-            logger.error(f"Ошибка при отправке письма с подтверждением пользователю {user.email}: {e}")
-
-        messages.success(
-            self.request,
-            "Регистрация успешна! На ваш email отправлено письмо с ссылкой для подтверждения аккаунта."
-        )
+        user.confirmation_email_last_sent_at = now
+        user.save(update_fields=["confirmation_email_last_sent_at"])
+        messages.success(self.request, "Письмо с подтверждением отправлено. Проверьте почту.")
         return HttpResponseRedirect(self.get_success_url())
 
 
