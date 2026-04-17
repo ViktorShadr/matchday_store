@@ -11,13 +11,12 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 
-from config.celery import send_welcome_email
 from orders.models import Order
 from orders.services import OrderCancellationService, OrderCancellationError
 from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
-from users.tasks import send_confirmation_email
+from users.tasks import send_confirmation_email, send_welcome_email
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,6 @@ from .template_filters import (
     CategoryService,
     ProductDisplayService,
     CartDisplayService,
-    DateService,
 )
 from .cart_exceptions import (
     CartException,
@@ -24,7 +23,6 @@ __all__ = [
     "CategoryService",
     "ProductDisplayService",
     "CartDisplayService",
-    "DateService",
     "CartException",
     "InsufficientStockError",
     "InvalidQuantityError",

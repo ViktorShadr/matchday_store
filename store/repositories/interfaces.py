@@ -70,8 +70,3 @@ class IProductVariantRepository(ABC):
     def get_variants_for_update(self, variant_ids: List[int]) -> QuerySet[ProductVariant]:
         """Получить варианты товаров с блокировкой для обновления."""
         pass
-
-    @abstractmethod
-    def get_variant_by_id(self, variant_id: int) -> Optional[ProductVariant]:
-        """Получить вариант товара по ID."""
-        pass

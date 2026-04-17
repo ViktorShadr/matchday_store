@@ -15,10 +15,6 @@ from orders.repositories import OrderRepository, PaymentRepository
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
 
-# Глобальный экземпляр для обратной совместимости
-cart_service = CartService()
-
-
 class CheckoutError(Exception):
     """Бизнес-ошибка оформления заказа."""
 

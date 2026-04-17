@@ -2,7 +2,7 @@ import logging
 from django.db import transaction
 from typing import Optional
 
-from ..models import Cart, CartItem, ProductVariant
+from ..models import ProductVariant
 from ..repositories import ICartRepository, IProductVariantRepository
 from ..repositories import CartRepository, ProductVariantRepository
 from .cart_exceptions import (
@@ -10,7 +10,6 @@ from .cart_exceptions import (
     ProductVariantNotFoundError,
     CartOperationError,
 )
-from .cart_validator import CartValidator
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +261,7 @@ class CartService:
         except ProductVariant.DoesNotExist:
             logger.error(f"Product variant not found: {product_variant_id}")
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
-        except (InsufficientStockError, ProductVariantNotFoundError, ValueError) as e:
+        except (InsufficientStockError, ProductVariantNotFoundError, ValueError):
             raise
         except Exception as e:
             logger.error(f"Error updating cart item: {e}", exc_info=True)
@@ -295,42 +294,6 @@ class CartService:
         except Exception as e:
             logger.error(f"Error removing item from cart: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при удалении товара из корзины: {str(e)}")
-
-    @transaction.atomic
-    def clear_cart(self, request):
-        """
-        Очистить корзину.
-
-        Args:
-            request: HTTP запрос
-
-        Returns:
-            Cart: Объект корзины
-        """
-        try:
-            cart = self.get_or_create_cart(request)
-            items_count = self.cart_repository.delete_cart_items(cart)
-            logger.info(
-                f"Cart cleared: removed {items_count} items from user "
-                f"{request.user.id if request.user.is_authenticated else 'anonymous'}"
-            )
-            return cart
-        except Exception as e:
-            logger.error(f"Error clearing cart: {e}", exc_info=True)
-            raise CartOperationError(f"Ошибка при очистке корзины: {str(e)}")
-
-    def get_cart_items(self, request):
-        """
-        Получить все товары из корзины.
-
-        Args:
-            request: HTTP запрос
-
-        Returns:
-            QuerySet: Список элементов корзины
-        """
-        cart = self.get_or_create_cart(request)
-        return self.cart_repository.get_cart_items(cart)
 
     def get_cart_summary(self, request):
         """

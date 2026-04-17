@@ -3,8 +3,7 @@
 Содержит функции для обогащения объектов необходимыми для отображения атрибутами.
 """
 
-from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 
 from store.mixins import is_moderator_user
 
@@ -86,48 +85,8 @@ class CategoryService:
 
         return data
 
-    @staticmethod
-    def enrich_categories(categories, user=None) -> List[Dict[str, Any]]:
-        """
-        Обогатить список категорий данными для отображения.
-
-        Args:
-            categories: Список или queryset категорий
-            user: Объект пользователя для проверки прав (опционально)
-
-        Returns:
-            List[Dict[str, Any]]: Список обогащённых категорий
-        """
-        return [CategoryService.enrich_category(cat, user) for cat in categories]
-
-
 class ProductDisplayService:
     """Сервис для подготовки данных товаров к отображению в шаблонах"""
-
-    @staticmethod
-    def prepare_product_card_data(product) -> Dict[str, Any]:
-        """
-        Подготовить данные товара для карточки товара.
-
-        Используется в шаблоне _product_card.html для отображения товара.
-
-        Args:
-            product: Объект товара (должен быть обогащён через catalog_service.enrich_product)
-
-        Returns:
-            Dict[str, Any]: Словарь с данными для отображения
-        """
-        return {
-            "id": product.pk,
-            "name": product.name,
-            "title": getattr(product, "title", None) or product.name,
-            "price": getattr(product, "display_price", None),
-            "image": getattr(product, "display_image", None),
-            "url": product.get_absolute_url(),
-            "price_formatted": (
-                f"{getattr(product, 'display_price', '—')} ₽" if getattr(product, "display_price", None) else "—"
-            ),
-        }
 
     @staticmethod
     def prepare_product_details(product) -> Dict[str, Any]:
@@ -260,37 +219,3 @@ class CartDisplayService:
             List[Dict[str, Any]]: Список обогащённых данных товаров
         """
         return [CartDisplayService.prepare_cart_item(item) for item in items]
-
-
-class DateService:
-    """Сервис для форматирования дат в шаблонах"""
-
-    @staticmethod
-    def format_datetime(dt: Optional[datetime], format_str: str = "%d.%m.%Y %H:%M") -> str:
-        """
-        Форматировать datetime объект в строку.
-
-        Args:
-            dt: Datetime объект
-            format_str: Строка формата
-
-        Returns:
-            str: Отформатированная строка даты
-        """
-        if not dt:
-            return ""
-        return dt.strftime(format_str)
-
-    @staticmethod
-    def format_date(dt: Optional[datetime], format_str: str = "%d.%m.%Y") -> str:
-        """
-        Форматировать datetime объект в строку только с датой.
-
-        Args:
-            dt: Datetime объект
-            format_str: Строка формата
-
-        Returns:
-            str: Отформатированная строка даты
-        """
-        return DateService.format_datetime(dt, format_str)

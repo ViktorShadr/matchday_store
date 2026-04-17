@@ -9,4 +9,6 @@ class PaymentsConfig(AppConfig):
 
     def ready(self):
         """Инициализация приложения при запуске."""
-        import payments.signals
+        from . import signals
+
+        _ = signals

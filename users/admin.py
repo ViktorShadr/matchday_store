@@ -2,7 +2,6 @@ from django.contrib import admin, messages
 from django.contrib.auth.models import Group
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from django.utils.html import format_html
 from django.shortcuts import render
 
 from users.models import User
