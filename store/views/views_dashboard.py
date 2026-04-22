@@ -131,7 +131,7 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         payment_status_meta = DashboardOrderPresenter.get_payment_meta(self.object)
 
         context["items"] = self.object.items.order_by("pk")
-        context["status_choices"] = DASHBOARD_ORDER_STATUS_CHOICES
+        context["status_choices"] = DashboardOrderPresenter.get_available_status_choices(self.object)
         context["payment_status_choices"] = DASHBOARD_PAYMENT_STATUS_CHOICES
         context["current_status_key"] = dashboard_status_key
         context["current_status_label"] = dashboard_status_meta["label"]
@@ -139,6 +139,7 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         context["current_payment_status_key"] = self.object.payment_status
         context["current_payment_status_label"] = payment_status_meta["label"]
         context["current_payment_status_badge"] = payment_status_meta["badge_class"]
+        context["staff_guidance"] = DashboardOrderPresenter.build_staff_guidance(self.object)
         return context
 
 

@@ -17,6 +17,7 @@ from django.views.generic import CreateView, DetailView, FormView, ListView, Upd
 
 from orders.models import Order
 from orders.services import OrderCancellationService, OrderCancellationError
+from orders.application.checkout_session_service import CheckoutSessionService
 from users.forms import (
     UserLoginForm,
     UserProfileForm,
@@ -390,6 +391,9 @@ class UserOrderDetailView(LoginRequiredMixin, CartContextMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["can_cancel"] = OrderCancellationService.can_be_cancelled(self.object)
+        context["order_items"] = self.object.items.order_by("pk")
+        if self.object.delivery_method == Order.DeliveryMethod.PICKUP:
+            context["pickup_location"] = CheckoutSessionService.build_pickup_location()
         return context
 
 

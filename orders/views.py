@@ -109,10 +109,11 @@ class CheckoutSuccessView(LoginRequiredMixin, CartContextMixin, TemplateView):
         """Вернуть оформленный заказ текущего пользователя."""
         context = super().get_context_data(**kwargs)
         try:
-            order = Order.objects.get(pk=self.kwargs["pk"], user=self.request.user)
+            order = Order.objects.prefetch_related("items").get(pk=self.kwargs["pk"], user=self.request.user)
         except Order.DoesNotExist as exc:
             raise Http404 from exc
 
         context["order"] = order
+        context["order_items"] = order.items.order_by("pk")
         context["pickup_location"] = CheckoutSessionService.build_pickup_location()
         return context

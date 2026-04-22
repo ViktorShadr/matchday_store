@@ -2,6 +2,7 @@
 
 {% block title %}Детали заказа — ФК «Шинник»{% endblock %}
 {% block meta_description %}Подробная информация о заказе в официальном магазине атрибутики ФК «Шинник».{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
 <section class="sf-profile-page">
@@ -61,9 +62,9 @@
                 <div class="sf-profile-card">
                     <h2 class="sf-profile-section-title">Состав заказа</h2>
 
-                    {% if order.items.all %}
+                    {% if order_items %}
                         <div class="sf-order-detail-items">
-                            {% for item in order.items.all %}
+                            {% for item in order_items %}
                                 <div class="sf-order-detail-item">
                                     <div class="sf-order-detail-item-main">
                                         <div class="sf-order-detail-item-name">
@@ -116,6 +117,11 @@
                         </div>
 
                         <div class="sf-order-detail-summary-row">
+                            <span>Оплата</span>
+                            <strong>{{ order.get_payment_status_display }}</strong>
+                        </div>
+
+                        <div class="sf-order-detail-summary-row">
                             <span>Итого</span>
                             <strong>
                                 {% if order.total_amount %}
@@ -127,6 +133,31 @@
                         </div>
                     </div>
                 </div>
+
+                {% if pickup_location %}
+                    <div class="sf-profile-card">
+                        <h2 class="sf-profile-section-title">Самовывоз</h2>
+
+                        <div class="sf-order-detail-summary">
+                            <div class="sf-order-detail-summary-row">
+                                <span>Магазин</span>
+                                <strong>{{ pickup_location.name }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Адрес</span>
+                                <strong>{{ pickup_location.address }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Часы работы</span>
+                                <strong>{{ pickup_location.hours }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Телефон</span>
+                                <strong>{{ pickup_location.phone }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
 
                 <div class="sf-profile-card">
                     <h2 class="sf-profile-section-title">Данные получателя</h2>
@@ -167,6 +198,19 @@
                         {% endif %}
                     </div>
                 </div>
+
+                {% if can_cancel %}
+                    <div class="sf-profile-card">
+                        <h2 class="sf-profile-section-title">Действия</h2>
+                        <p class="sf-order-detail-recipient-value mb-3">
+                            Заказ можно отменить, пока он не выдан и не переведен в финальный оплаченный статус.
+                        </p>
+                        <form method="post" action="{% url 'users:order_cancel' pk=order.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger w-100">Отменить заказ</button>
+                        </form>
+                    </div>
+                {% endif %}
             </aside>
         </div>
     </div>

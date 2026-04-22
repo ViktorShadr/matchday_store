@@ -673,6 +673,10 @@ class DashboardOrdersManagementTest(TestCase):
             reverse("store:dashboard_order_payment_status_update", kwargs={"pk": self.order.pk}),
             data={"payment_status": Order.PaymentStatus.SUCCEEDED},
         )
+        self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "ready"},
+        )
 
         response = self.client.post(
             reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
@@ -730,6 +734,10 @@ class DashboardOrdersManagementTest(TestCase):
         self.client.post(
             reverse("store:dashboard_order_payment_status_update", kwargs={"pk": self.order.pk}),
             data={"payment_status": Order.PaymentStatus.SUCCEEDED},
+        )
+        self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "ready"},
         )
         self.client.post(
             reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),

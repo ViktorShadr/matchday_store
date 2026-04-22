@@ -110,6 +110,11 @@ if "test" in sys.argv:
         "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
+else:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 
 AUTH_USER_MODEL = "users.User"
 
@@ -139,3 +144,6 @@ STORE_PICKUP_LOCATION_NAME = os.getenv("STORE_PICKUP_LOCATION_NAME", "Фирме
 STORE_PICKUP_ADDRESS = os.getenv("STORE_PICKUP_ADDRESS", "г. Ярославль, ул. Победы, 12")
 STORE_PICKUP_HOURS = os.getenv("STORE_PICKUP_HOURS", "Ежедневно с 10:00 до 20:00")
 STORE_PICKUP_PHONE = os.getenv("STORE_PICKUP_PHONE", "+7 (4852) 00-00-00")
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()
+]

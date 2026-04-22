@@ -6,7 +6,8 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from orders.application import CheckoutContext
+from orders.application.checkout_context import CheckoutContext
+from orders.application.order_notification_service import OrderNotificationService
 from orders.models import Order, OrderItem
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
@@ -205,6 +206,7 @@ class CheckoutService(ICheckoutService):
                     variant.save(update_fields=["quantity", "updated_at"])
 
                 cart.items.all().delete()
+                OrderNotificationService.schedule_created(order.id)
                 return order
         except IntegrityError as exc:
             if checkout_token:
@@ -318,6 +320,7 @@ class OrderCancellationService:
                     "updated_at",
                 ]
             )
+            OrderNotificationService.schedule_cancelled(order.id)
 
             return order
 
@@ -375,6 +378,7 @@ class ManualPaymentUpdateService:
             except Order.DoesNotExist as exc:
                 raise ManualPaymentUpdateError("Заказ не найден.") from exc
 
+            previous_payment_status = order.payment_status
             self._ensure_can_update_payment(order, next_payment_status)
             now = timezone.now()
 
@@ -426,4 +430,9 @@ class ManualPaymentUpdateService:
                 order.save(update_fields=["paid_at", "updated_at"])
 
             order.refresh_from_db()
+            if (
+                previous_payment_status != Order.PaymentStatus.SUCCEEDED
+                and order.payment_status == Order.PaymentStatus.SUCCEEDED
+            ):
+                OrderNotificationService.schedule_paid(order.id)
             return order

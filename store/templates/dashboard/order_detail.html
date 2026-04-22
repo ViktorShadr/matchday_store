@@ -59,6 +59,27 @@
                                 <span class="text-muted">Итого</span>
                                 <strong>{{ order.total_amount|floatformat:"-2" }} ₽</strong>
                             </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Получатель</span>
+                                <strong class="text-end">{{ order.recipient_name|default:order.email }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Телефон</span>
+                                <strong class="text-end">{{ order.phone }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Получение</span>
+                                <strong class="text-end">Самовывоз</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sf-surface p-4 mb-4">
+                        <h2 class="h4 mb-3">Следующий шаг</h2>
+                        <div class="d-grid gap-2">
+                            {% for note in staff_guidance %}
+                                <div class="small">{{ note }}</div>
+                            {% endfor %}
                         </div>
                     </div>
 
@@ -68,12 +89,12 @@
                             {% csrf_token %}
                             <label class="form-label" for="dashboardOrderStatus">Статус заказа</label>
                             <select id="dashboardOrderStatus" class="form-select" name="status">
-                                {% for value, label in status_choices %}
-                                    <option value="{{ value }}" {% if current_status_key == value %}selected{% endif %}>{{ label }}</option>
+                                {% for value, label, is_allowed in status_choices %}
+                                    <option value="{{ value }}" {% if current_status_key == value %}selected{% endif %} {% if not is_allowed %}disabled{% endif %}>{{ label }}</option>
                                 {% endfor %}
                             </select>
                             <div class="form-text mt-2">
-                                Для статуса «Выдан» оплата должна быть подтверждена.
+                                Доступны только корректные переходы. Для статуса «Выдан» оплата должна быть подтверждена.
                             </div>
                             <button type="submit" class="btn btn-primary w-100 mt-3">Сохранить</button>
                         </form>

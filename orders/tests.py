@@ -7,6 +7,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import close_old_connections
 from django.urls import reverse
 from django.utils import timezone
+from unittest.mock import patch
 
 from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService
 from orders.forms import CheckoutForm
@@ -272,6 +273,28 @@ class CheckoutFlowTest(TestCase):
         order_item = OrderItem.objects.get(order=order)
         self.assertEqual(order_item.size_snapshot, "")
         self.assertEqual(order_item.color_snapshot, "")
+
+    def test_checkout_success_page_shows_pickup_details_and_order_items(self):
+        self.client.login(email="buyer@example.com", password="testpass123")
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user=self.user)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+
+        success_response = self.client.get(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.assertEqual(success_response.status_code, 200)
+        self.assertContains(success_response, "Самовывоз")
+        self.assertContains(success_response, "Фирменный магазин ФК")
+        self.assertContains(success_response, "Шарф ФК Шинник")
+        self.assertContains(success_response, "Ожидает оплаты")
 
     def test_checkout_service_does_not_conflict_between_users_with_same_token(self):
         """Одинаковый checkout_token у разных пользователей не должен конфликтовать."""
@@ -673,6 +696,39 @@ class DashboardOrderFlowServiceTest(TestCase):
         self.assertEqual(self.order.status, Order.Status.PLACED)
         self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.NEW)
 
+    def test_cannot_skip_directly_from_new_to_issued_even_if_payment_succeeded(self):
+        self.order.payment_status = Order.PaymentStatus.SUCCEEDED
+        self.order.save(update_fields=["payment_status", "updated_at"])
+
+        with self.assertRaises(DashboardOrderFlowError):
+            self.service.update_order_status(self.order, "issued")
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.PLACED)
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.NEW)
+
+    def test_ready_order_can_be_issued_after_successful_payment(self):
+        self.order.payment_status = Order.PaymentStatus.SUCCEEDED
+        self.order.fulfillment_status = Order.FulfillmentStatus.RESERVED
+        self.order.status = Order.Status.PROCESSING
+        self.order.save(update_fields=["payment_status", "fulfillment_status", "status", "updated_at"])
+
+        result = self.service.update_order_status(self.order, "issued")
+
+        self.order.refresh_from_db()
+        self.assertTrue(result.changed)
+        self.assertEqual(self.order.status, Order.Status.DELIVERED)
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
+
+    def test_noop_status_update_returns_non_changed_result(self):
+        result = self.service.update_order_status(self.order, "new")
+
+        self.order.refresh_from_db()
+        self.assertFalse(result.changed)
+        self.assertEqual(result.message, "Статус заказа уже установлен.")
+        self.assertEqual(self.order.status, Order.Status.PLACED)
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.NEW)
+
     def test_cancelled_status_delegates_to_cancellation_service(self):
         result = self.service.update_order_status(self.order, "cancelled")
 
@@ -691,3 +747,138 @@ class DashboardOrderFlowServiceTest(TestCase):
         self.assertTrue(result.changed)
         self.assertEqual(result.message, "Статус оплаты обновлен.")
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+
+
+class OrderNotificationServiceIntegrationTest(TestCase):
+    """Тесты планирования уведомлений по заказу."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="notify@example.com",
+            password="testpass123",
+            first_name="Анна",
+            last_name="Смирнова",
+            phone="+79992223344",
+            is_active=True,
+            is_email_confirmed=True,
+        )
+        self.category = Category.objects.create(name="Уведомления")
+        self.product = Product.objects.create(name="Шапка клуба", category=self.category)
+        self.image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("hat.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="L",
+            color="Черный",
+            price=Decimal("1900.00"),
+            quantity=6,
+            image=self.image,
+        )
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_checkout_schedules_created_notification(self, mock_send_order_notification):
+        cart = Cart.objects.create(user=self.user)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=1)
+        service = CheckoutService()
+        request = RequestFactory().post(reverse("orders:checkout"))
+        request.user = self.user
+        session_middleware = SessionMiddleware(lambda req: None)
+        session_middleware.process_request(request)
+        request.session.save()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            order = service.create_order_from_cart(
+                CheckoutContext(user=self.user, cart_context=CartContextResolver().resolve_request(request)),
+                cleaned_data={
+                    "recipient_name": "Анна Смирнова",
+                    "email": self.user.email,
+                    "phone": self.user.phone,
+                    "customer_comment": "",
+                },
+                checkout_token="notify-created",
+            )
+
+        mock_send_order_notification.delay.assert_called_once_with(order.id, "created")
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_cancellation_schedules_cancelled_notification(self, mock_send_order_notification):
+        order = Order.objects.create(
+            number="ORD-NOTIFY-1",
+            user=self.user,
+            recipient_name="Анна Смирнова",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("1900.00"),
+            total_amount=Decimal("1900.00"),
+            confirmed_at=timezone.now(),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=1,
+            line_total=Decimal("1900.00"),
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            OrderCancellationService().cancel_order(order_id=order.id, user_id=self.user.id)
+
+        mock_send_order_notification.delay.assert_called_once_with(order.id, "cancelled")
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_ready_status_schedules_ready_notification(self, mock_send_order_notification):
+        order = Order.objects.create(
+            number="ORD-NOTIFY-2",
+            user=self.user,
+            recipient_name="Анна Смирнова",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=Order.Status.PROCESSING,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.PACKING,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("1900.00"),
+            total_amount=Decimal("1900.00"),
+            confirmed_at=timezone.now(),
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            DashboardOrderFlowService().update_order_status(order, "ready")
+
+        mock_send_order_notification.delay.assert_called_once_with(order.id, "ready")
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_successful_manual_payment_schedules_paid_notification(self, mock_send_order_notification):
+        order = Order.objects.create(
+            number="ORD-NOTIFY-3",
+            user=self.user,
+            recipient_name="Анна Смирнова",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=Order.Status.PROCESSING,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.RESERVED,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("1900.00"),
+            total_amount=Decimal("1900.00"),
+            confirmed_at=timezone.now(),
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            ManualPaymentUpdateService().update_order_payment_status(order.id, Order.PaymentStatus.SUCCEEDED)
+
+        mock_send_order_notification.delay.assert_called_once_with(order.id, "paid")
