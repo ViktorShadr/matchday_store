@@ -12,6 +12,7 @@ from users.views import (
     UserOrderDetailView,
     UserOrderCancelView,
     EmailConfirmationView,
+    ResendOwnConfirmationEmailView,
 )
 
 app_name = "users"
@@ -21,6 +22,7 @@ urlpatterns = [
     path("logout/", CustomLogoutView.as_view(), name="logout"),
     path("registration/", CustomRegistrationView.as_view(), name="registration"),
     path("confirm-email/<str:token>/", EmailConfirmationView.as_view(), name="confirm_email"),
+    path("profile/resend-confirmation/", ResendOwnConfirmationEmailView.as_view(), name="resend_confirmation"),
     path("profile/<int:pk>/", ProfileDetailView.as_view(), name="profile_detail"),
     path("profile/edit/", ProfileUpdateView.as_view(), name="profile_edit"),
     path("profile/delete/", ProfileDeleteView.as_view(), name="profile_delete"),

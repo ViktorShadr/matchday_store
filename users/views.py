@@ -1,23 +1,32 @@
 import logging
 
+from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import login as auth_login
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 
-from config.celery import send_welcome_email
 from orders.models import Order
 from orders.services import OrderCancellationService, OrderCancellationError
-from users.forms import UserLoginForm, UserProfileForm, UserRegistrationForm, ProfileDeleteConfirmForm
+from users.forms import (
+    UserLoginForm,
+    UserProfileForm,
+    UserRegistrationForm,
+    ProfileDeleteConfirmForm,
+)
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
-from users.tasks import send_confirmation_email
+from users.application import EmailConfirmationService
+from users.tasks import send_confirmation_email, send_confirmation_email_sync, send_welcome_email
 
 logger = logging.getLogger(__name__)
 
@@ -92,23 +101,51 @@ class CustomRegistrationView(CartContextMixin, CreateView):
         Returns:
             HttpResponse: Редирект на страницу входа
         """
-        user = form.save()
-        self.object = user
+        send_result = {"success": False}
 
-        # Генерируем токен подтверждения email
-        confirmation_token = user.generate_email_token()
+        with transaction.atomic():
+            user = form.save()
+            if not user.is_active:
+                user.is_active = True
+                user.save(update_fields=["is_active"])
+            self.object = user
+            EmailConfirmationService.schedule_confirmation_for_new_user(user, send_result)
 
-        # Отправка письма с подтверждением через Celery с обработкой ошибок
-        try:
-            send_confirmation_email.delay(user.email, confirmation_token)
-        except Exception as e:
-            logger.error(f"Ошибка при отправке письма с подтверждением пользователю {user.email}: {e}")
-
-        messages.success(
-            self.request,
-            "Регистрация успешна! На ваш email отправлено письмо с ссылкой для подтверждения аккаунта."
-        )
+        if send_result["success"]:
+            messages.success(
+                self.request,
+                "Регистрация успешна! Подтвердите email по ссылке из письма, чтобы оформить первый заказ."
+            )
+        else:
+            messages.warning(
+                self.request,
+                "Аккаунт создан, но письмо подтверждения пока не отправлено. "
+                "Оформление заказа будет доступно после подтверждения email.",
+            )
         return HttpResponseRedirect(self.get_success_url())
+
+
+class ResendOwnConfirmationEmailView(LoginRequiredMixin, View):
+    """Повторная отправка письма подтверждения из личного кабинета."""
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+
+        if user.is_email_confirmed:
+            messages.info(request, "Email уже подтвержден.")
+            return redirect("users:profile_detail", pk=user.pk)
+
+        can_resend, seconds_left = EmailConfirmationService.can_resend(user)
+        if not can_resend:
+            messages.info(request, f"Повторная отправка будет доступна через {seconds_left} сек.")
+            return redirect("users:profile_detail", pk=user.pk)
+
+        if not EmailConfirmationService.resend_confirmation(user):
+            messages.error(request, "Не удалось отправить письмо подтверждения. Попробуйте позже.")
+            return redirect("users:profile_detail", pk=user.pk)
+
+        messages.success(request, "Письмо отправлено. Проверьте почту.")
+        return redirect("users:profile_detail", pk=user.pk)
 
 
 class ProfileDetailView(LoginRequiredMixin, DetailView):
@@ -149,6 +186,9 @@ class ProfileDetailView(LoginRequiredMixin, DetailView):
             {"title": "Главная", "url": reverse_lazy("store:base")},
             {"title": "Профиль", "url": None},
         ]
+        context["show_email_confirmation_prompt"] = (
+            self.request.user.pk == self.object.pk and not self.request.user.is_email_confirmed
+        )
         return context
 
 
@@ -194,6 +234,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     model = User
     form_class = UserProfileForm
     template_name = "profile_form.html"
+    context_object_name = "profile_user"
 
     def get_object(self, queryset=None):
         """
@@ -368,17 +409,19 @@ class EmailConfirmationView(View):
             token (str): Токен подтверждения email
 
         Returns:
-            HttpResponse: Редирект на страницу входа с сообщением об успехе или ошибке
+            HttpResponse: Редирект в профиль с авто-входом или на страницу входа при ошибке
         """
         try:
             user = User.objects.get(email_token=token)
             user.confirm_email()
+            auth_backend = getattr(user, "backend", None) or settings.AUTHENTICATION_BACKENDS[0]
+            auth_login(request, user, backend=auth_backend)
             try:
                 send_welcome_email.delay(user.email)
             except Exception as e:
                 logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
-            messages.success(request, "Ваш email успешно подтвержден! Теперь вы можете войти в аккаунт.")
-            return redirect("users:login")
+            messages.success(request, "Email подтвержден. Вы автоматически вошли в аккаунт.")
+            return redirect("users:profile_detail", pk=user.pk)
         except User.DoesNotExist:
             messages.error(request, "Недействительная ссылка подтверждения или срок действия ссылки истек.")
             return redirect("users:login")

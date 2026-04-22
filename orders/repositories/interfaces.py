@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
-from decimal import Decimal
 from typing import List, Optional
-from django.db.models import QuerySet
 
 from orders.models import Order, OrderItem
 from payments.models import Payment
@@ -18,11 +16,6 @@ class IOrderRepository(ABC):
     @abstractmethod
     def bulk_create_order_items(self, order_items: List[OrderItem]) -> None:
         """Массовое создание элементов заказа."""
-        pass
-
-    @abstractmethod
-    def get_order_by_pk(self, pk: int) -> Optional[Order]:
-        """Получить заказ по первичному ключу."""
         pass
 
 

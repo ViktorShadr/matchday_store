@@ -1,3 +1,10 @@
-<!-- _scripts.html -->
 {% load static %}
+
+<!-- Bootstrap -->
 <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+
+<!-- Основной JS проекта -->
+<script src="{% static 'js/main.js' %}"></script>
+
+<!-- Переопределяемые скрипты -->
+{% block extra_scripts %}{% endblock %}

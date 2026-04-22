@@ -4,13 +4,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from orders.models import Address, Order
+from payments.application import PaymentWorkflowService
 from payments.models import Payment
 
 User = get_user_model()
 
 
-class PaymentStatusSignalTest(TestCase):
-    """Тесты для PaymentStatusSignalTest."""
+class PaymentWorkflowTest(TestCase):
+    """Тесты явного workflow синхронизации платежа и заказа."""
 
     def setUp(self):
         """Подготавливает тестовые данные перед выполнением тестов."""
@@ -35,14 +36,14 @@ class PaymentStatusSignalTest(TestCase):
         )
 
     def create_payment(self, **kwargs):
-        """Создает объект в сценарии 'payment'."""
+        """Создает payment через workflow."""
         defaults = {
             "order": self.order,
             "idempotency_key": f"idem-{Payment.objects.count() + 1}",
             "amount": Decimal("1000.00"),
         }
         defaults.update(kwargs)
-        return Payment.objects.create(**defaults)
+        return PaymentWorkflowService.create_payment(**defaults)
 
     def test_successful_payment_updates_order_payment_status(self):
         """Проверяет сценарий 'successful payment updates order payment status'."""
@@ -75,7 +76,7 @@ class PaymentStatusSignalTest(TestCase):
         pending_payment = self.create_payment(status=Payment.Status.PENDING)
         succeeded_payment = self.create_payment(status=Payment.Status.SUCCEEDED)
 
-        succeeded_payment.delete()
+        PaymentWorkflowService.delete_payment(succeeded_payment)
         self.order.refresh_from_db()
         pending_payment.refresh_from_db()
 

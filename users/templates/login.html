@@ -1,56 +1,94 @@
 {% extends 'main_page/base.html' %}
-{% load static %}
 
-{% block title %}Вход{% endblock %}
+{% block title %}Вход — ФК «Шинник»{% endblock %}
+{% block meta_description %}Вход в личный кабинет официального магазина атрибутики ФК «Шинник».{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
-        <div class="container">
-            <div class="sf-section-head justify-content-center">
-                <h1 class="sf-section-title">Вход в аккаунт</h1>
+<section class="sf-auth-page">
+    <div class="container">
+        <div class="sf-auth-layout">
+            <div class="sf-auth-aside">
+                <div class="sf-auth-aside-card">
+                    <div class="sf-home-eyebrow">Личный кабинет</div>
+                    <h1 class="sf-auth-title">Вход в аккаунт</h1>
+                    <p class="sf-auth-lead">
+                        Войди в личный кабинет, чтобы оформлять заказы быстрее,
+                        отслеживать покупки и хранить свои данные в одном месте.
+                    </p>
+
+                    <div class="sf-auth-benefits">
+                        <div class="sf-auth-benefit">
+                            <div class="sf-auth-benefit-title">Заказы под рукой</div>
+                            <div class="sf-auth-benefit-text">История покупок и быстрый доступ к заказам</div>
+                        </div>
+                        <div class="sf-auth-benefit">
+                            <div class="sf-auth-benefit-title">Удобнее оформление</div>
+                            <div class="sf-auth-benefit-text">Контактные данные не нужно вводить заново каждый раз</div>
+                        </div>
+                        <div class="sf-auth-benefit">
+                            <div class="sf-auth-benefit-title">Единый стиль сервиса</div>
+                            <div class="sf-auth-benefit-text">Кабинет должен выглядеть так же уверенно, как витрина магазина</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="row justify-content-center">
-                <div class="col-lg-5 col-md-6 col-sm-10">
-                    <div class="sf-surface p-4">
-                        <form method="post" novalidate>
-                            {% csrf_token %}
+            <div class="sf-auth-form-wrap">
+                <div class="sf-auth-form-card">
+                    <h2 class="sf-auth-form-title">Авторизация</h2>
 
-                            {% if form.non_field_errors %}
-                                <div class="alert alert-danger">
-                                    {% for error in form.non_field_errors %}
-                                        <div>{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
+                    <form method="post" novalidate>
+                        {% csrf_token %}
 
-                            <div class="mb-3">
-                                <label class="form-label" for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
-                                {{ form.username }}
-                                {% if form.username.errors %}
-                                    <div class="text-danger small mt-1">{{ form.username.errors|join:', ' }}</div>
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger sf-alert mb-4">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% for field in form %}
+                            <div class="sf-form-group mb-3">
+                                <label for="{{ field.id_for_label }}" class="form-label">
+                                    {{ field.label }}
+                                    {% if field.field.required %}
+                                        <span class="sf-required">*</span>
+                                    {% endif %}
+                                </label>
+
+                                {{ field }}
+
+                                {% if field.help_text %}
+                                    <div class="sf-field-help">
+                                        {{ field.help_text }}
+                                    </div>
+                                {% endif %}
+
+                                {% if field.errors %}
+                                    <div class="sf-field-errors">
+                                        {% for error in field.errors %}
+                                            <div>{{ error }}</div>
+                                        {% endfor %}
+                                    </div>
                                 {% endif %}
                             </div>
+                        {% endfor %}
 
-                            <div class="mb-4">
-                                <label class="form-label" for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
-                                {{ form.password }}
-                                {% if form.password.errors %}
-                                    <div class="text-danger small mt-1">{{ form.password.errors|join:', ' }}</div>
-                                {% endif %}
-                            </div>
+                        <div class="sf-auth-actions">
+                            <button type="submit" class="btn btn-primary w-100">
+                                Войти
+                            </button>
+                        </div>
+                    </form>
 
-                            <button type="submit" class="btn btn-primary w-100 mb-3">Войти</button>
-
-                            <div class="text-center">
-                                <a href="{% url 'users:registration' %}" class="btn btn-outline-secondary w-100">
-                                    Зарегистрироваться
-                                </a>
-                            </div>
-                        </form>
+                    <div class="sf-auth-footer">
+                        <span>Нет аккаунта?</span>
+                        <a href="{% url 'users:registration' %}" class="sf-link">Зарегистрироваться</a>
                     </div>
                 </div>
             </div>
         </div>
-    </section>
+    </div>
+</section>
 {% endblock %}

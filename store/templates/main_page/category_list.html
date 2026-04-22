@@ -1,76 +1,74 @@
 {% extends 'main_page/base.html' %}
-{% block title %}Категории{% endblock %}
+
+{% block title %}Категории товаров — ФК «Шинник»{% endblock %}
+{% block meta_description %}Категории официального магазина атрибутики ФК «Шинник».{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
-        <div class="container">
-            <div class="sf-section-head">
-                <h1 class="sf-section-title">Категории товаров</h1>
-                {% if user_permissions.is_moderator %}
-                    <a class="btn btn-primary" href="{% url 'store:category_create' %}">Создать категорию</a>
-                {% endif %}
+<section class="sf-categories-page">
+    <div class="container">
+        <div class="sf-categories-hero">
+            <div>
+                <div class="sf-home-eyebrow">Структура каталога</div>
+                <h1 class="sf-categories-title">Категории товаров</h1>
+                <p class="sf-categories-lead">
+                    Выберите нужный раздел, чтобы быстрее перейти к подходящим товарам:
+                    одежде, аксессуарам, атрибутике и клубному мерчу.
+                </p>
             </div>
 
-            <div class="row">
+            <div class="sf-categories-hero-actions">
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Все товары
+                </a>
+            </div>
+        </div>
+
+        {% if categories %}
+            <div class="row g-4">
                 {% for category in categories %}
-                    <div class="col-12 col-md-6 col-lg-4 mb-4">
-                        <div class="sf-surface p-3 h-100">
-                            <h3><a href="{% url 'store:category_detail' category.pk %}" class="sf-link">{{ category.name }}</a></h3>
-                            {% if category.description %}
-                                <p class="text-muted">{{ category.description|truncatewords:20 }}</p>
-                            {% endif %}
-                            <div class="mt-auto">
-                                <small class="text-muted">Товаров: {{ category.products.count }}</small>
-                                {% if user_permissions.is_moderator %}
-                                    <div class="mt-2">
-                                        <a href="{% url 'store:category_edit' category.pk %}" class="btn btn-sm btn-outline-primary me-2">Редактировать</a>
-                                        <a href="{% url 'store:category_delete' category.pk %}" class="btn btn-sm btn-outline-danger">Удалить</a>
-                                    </div>
+                    <div class="col-12 col-sm-6 col-xl-4">
+                        <a href="{% url 'store:category_detail' pk=category.pk %}" class="sf-category-card">
+                            <div class="sf-category-card-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <path d="M20.5 5.5 12 2 3.5 5.5"></path>
+                                    <path d="M4 6v6c0 4.5 8 10 8 10s8-5.5 8-10V6"></path>
+                                </svg>
+                            </div>
+
+                            <div class="sf-category-card-body">
+                                <h2 class="sf-category-card-title">
+                                    {{ category.name|default:"Категория" }}
+                                </h2>
+
+                                {% if category.description %}
+                                    <p class="sf-category-card-text">
+                                        {{ category.description|striptags|truncatechars:120 }}
+                                    </p>
+                                {% else %}
+                                    <p class="sf-category-card-text">
+                                        Перейти к товарам категории и посмотреть доступные позиции.
+                                    </p>
                                 {% endif %}
                             </div>
-                        </div>
-                    </div>
-                {% empty %}
-                    <div class="col-12">
-                        <div class="text-center text-muted">
-                            <p>Категории пока не созданы</p>
-                            {% if user_permissions.is_moderator %}
-                                <a href="{% url 'store:category_create' %}" class="btn btn-primary">Создать первую категорию</a>
-                            {% endif %}
-                        </div>
+
+                            <div class="sf-category-card-footer">
+                                <span class="sf-link">Открыть категорию</span>
+                            </div>
+                        </a>
                     </div>
                 {% endfor %}
             </div>
-
-            {% if is_paginated %}
-                <nav aria-label="Пагинация категорий">
-                    <ul class="pagination justify-content-center">
-                        {% if page_obj.has_previous %}
-                            <li class="page-item">
-                                <a class="page-link" href="?page=1">&laquo; Первая</a>
-                            </li>
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Предыдущая</a>
-                            </li>
-                        {% endif %}
-
-                        <li class="page-item active">
-                            <span class="page-link">
-                                Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}
-                            </span>
-                        </li>
-
-                        {% if page_obj.has_next %}
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Следующая</a>
-                            </li>
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Последняя &raquo;</a>
-                            </li>
-                        {% endif %}
-                    </ul>
-                </nav>
-            {% endif %}
-        </div>
-    </section>
+        {% else %}
+            <div class="sf-empty-state sf-empty-state-lg">
+                <div class="sf-empty-state-title">Категории пока не добавлены</div>
+                <p class="sf-empty-state-text">
+                    Когда категории появятся, здесь будет удобный вход в структуру каталога.
+                </p>
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Перейти к товарам
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</section>
 {% endblock %}

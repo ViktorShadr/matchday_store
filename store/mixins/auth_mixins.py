@@ -15,27 +15,6 @@ def is_moderator_user(user):
     return user.groups.filter(name__in=MODERATOR_GROUP_NAMES).exists()
 
 
-class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    """
-    Миксин для ограничения доступа только для персонала.
-
-    Требует, чтобы пользователь был:
-    1. Аутентифицирован (LoginRequiredMixin)
-    2. Являлся сотрудником (is_staff=True)
-
-    Использование:
-        class MyView(StaffRequiredMixin, View):
-            # только staff могут получить доступ
-
-    Raises:
-        PermissionDenied: Если пользователь не является сотрудником
-    """
-
-    def test_func(self):
-        """Проверяет доступ пользователя к представлению."""
-        return self.request.user.is_staff
-
-
 class ModeratorRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     """
     Миксин для ограничения доступа только для модераторов.

@@ -1,84 +1,102 @@
 {% extends 'main_page/base.html' %}
 
-{% block title %}Заказ оформлен{% endblock %}
+{% block title %}Заказ оформлен — ФК «Шинник»{% endblock %}
+{% block meta_description %}Заказ успешно оформлен в официальном магазине атрибутики ФК «Шинник».{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
-        <div class="container">
-            <div class="sf-surface p-5">
-                <h1 class="sf-section-title mb-3">Заказ оформлен</h1>
-                <p class="mb-4">Номер заказа: <strong>{{ order.number }}</strong></p>
+<section class="sf-success-page">
+    <div class="container">
+        <div class="sf-success-card">
+            <div class="sf-success-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <path d="M20 6 9 17l-5-5"></path>
+                </svg>
+            </div>
 
-                <h5 class="mb-3">Состав заказа</h5>
-                <div class="table-responsive mb-4">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Товар</th>
-                                <th>Вариант</th>
-                                <th class="text-center">Кол-во</th>
-                                <th class="text-end">Цена</th>
-                                <th class="text-end">Сумма</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in order.items.all %}
-                            <tr>
-                                <td class="fw-bold">{{ item.product_name_snapshot }}</td>
-                                <td class="text-muted">
-                                    {% if item.size_snapshot %}{{ item.size_snapshot }}{% endif %}
-                                    {% if item.size_snapshot and item.color_snapshot %} / {% endif %}
-                                    {% if item.color_snapshot %}{{ item.color_snapshot }}{% endif %}
-                                </td>
-                                <td class="text-center">{{ item.quantity }}</td>
-                                <td class="text-end">{{ item.unit_price }} ₽</td>
-                                <td class="text-end fw-bold">{{ item.line_total }} ₽</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+            <div class="sf-home-eyebrow">Заказ подтверждён</div>
 
-                <div class="row justify-content-end mb-4">
-                    <div class="col-md-5">
-                        <div class="d-flex justify-content-between mb-1">
-                            <span>Товары:</span>
-                            <span>{{ order.subtotal_amount }} ₽</span>
-                        </div>
-                        <div class="d-flex justify-content-between mb-1">
-                            <span>Доставка:</span>
-                            <span>{{ order.delivery_amount|default:"0" }} ₽</span>
-                        </div>
-                        <hr>
-                        <div class="d-flex justify-content-between fs-5 fw-bold">
-                            <span>Итого:</span>
-                            <span>{{ order.total_amount }} ₽</span>
-                        </div>
-                    </div>
-                </div>
+            <h1 class="sf-success-title">Спасибо за заказ</h1>
 
-                <div class="row g-4">
-                    <div class="col-12 col-lg-6">
-                        <h5>Самовывоз</h5>
-                        <div class="fw-bold">{{ pickup_location.name }}</div>
-                        <div>{{ pickup_location.address }}</div>
-                        <div class="text-muted">Часы работы: {{ pickup_location.hours }}</div>
-                        <div class="text-muted">Телефон: {{ pickup_location.phone }}</div>
+            <p class="sf-success-lead">
+                Мы получили ваш заказ и сохранили все данные для дальнейшей обработки.
+                Это уже выглядит как завершённая покупка, а не как случайная техническая страница.
+            </p>
+
+            {% if order %}
+                <div class="sf-success-order-meta">
+                    <div class="sf-success-order-meta-item">
+                        <div class="sf-success-order-meta-label">Номер заказа</div>
+                        <div class="sf-success-order-meta-value">{{ order.number|default:order.id }}</div>
                     </div>
 
-                    <div class="col-12 col-lg-6">
-                        <h5>Оплата</h5>
-                        <p class="mb-2">Оплата производится при получении товара в магазине.</p>
-                        <p class="mb-0 text-muted">Сумма к оплате: {{ order.total_amount }} {{ order.currency }}</p>
-                    </div>
-                </div>
+                    {% if order.created_at %}
+                        <div class="sf-success-order-meta-item">
+                            <div class="sf-success-order-meta-label">Дата оформления</div>
+                            <div class="sf-success-order-meta-value">
+                                {{ order.created_at|date:"d.m.Y H:i" }}
+                            </div>
+                        </div>
+                    {% endif %}
 
-                <div class="mt-4 d-flex gap-2 flex-wrap">
-                    <a href="{% url 'users:order_detail' order.pk %}" class="btn btn-outline-primary">Подробнее о заказе</a>
-                    <a href="{% url 'store:product_list' %}" class="btn btn-primary">Продолжить покупки</a>
-                    <a href="{% url 'store:base' %}" class="btn btn-outline-secondary">На главную</a>
+                    {% if order.total_amount %}
+                        <div class="sf-success-order-meta-item">
+                            <div class="sf-success-order-meta-label">Сумма</div>
+                            <div class="sf-success-order-meta-value">
+                                {{ order.total_amount }} ₽
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
+            {% endif %}
+
+            <div class="sf-success-actions">
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Вернуться в каталог
+                </a>
+
+                {% if user.is_authenticated %}
+                    <a href="{% url 'users:order_list' %}" class="btn btn-secondary">
+                        Мои заказы
+                    </a>
+                {% endif %}
             </div>
         </div>
-    </section>
+
+        {% if order and order.items.all %}
+            <div class="sf-success-order-card">
+                <div class="sf-section-head mb-3">
+                    <div>
+                        <h2 class="sf-section-title mb-2">Состав заказа</h2>
+                        <p class="sf-section-subtitle mb-0">
+                            Пользователь должен сразу видеть, что именно он оформил.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="sf-success-order-items">
+                    {% for item in order.items.all %}
+                        <div class="sf-success-order-item">
+                            <div class="sf-success-order-item-main">
+                                <div class="sf-success-order-item-name">
+                                    {{ item.product_name_snapshot }}
+                                </div>
+                                <div class="sf-success-order-item-meta">
+                                    {{ item.quantity }} шт.
+                                </div>
+                            </div>
+
+                            <div class="sf-success-order-item-price">
+                                {% if item.line_total %}
+                                    {{ item.line_total }} ₽
+                                {% elif item.unit_price %}
+                                    {{ item.unit_price }} ₽
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</section>
 {% endblock %}

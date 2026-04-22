@@ -1,70 +1,220 @@
 {% extends 'main_page/base.html' %}
-{% block title %}{% if selected_category %}{{ selected_category.name }}{% else %}Каталог товаров{% endif %}{% endblock %}
+
+{% block title %}Каталог товаров — ФК «Шинник»{% endblock %}
+{% block meta_description %}Каталог официальной атрибутики ФК «Шинник»: одежда, форма, аксессуары и клубный
+    мерч.{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
+    <section class="sf-catalog-hero">
         <div class="container">
-            <div class="sf-section-head">
-                <h1 class="sf-section-title">{% if selected_category %}{{ selected_category.name }}{% else %}Каталог товаров{% endif %}</h1>
-                <a class="sf-link" href="{% url 'store:base' %}">На главную</a>
-            </div>
+            <div class="sf-catalog-hero-card">
+                <div class="sf-catalog-hero-top">
+                    <div>
+                        <div class="sf-home-eyebrow">Каталог клуба</div>
+                        <h1 class="sf-catalog-title">
+                            {% if selected_category %}
+                                {{ selected_category.name }}
+                            {% else %}
+                                Все товары
+                            {% endif %}
+                        </h1>
+                        <p class="sf-catalog-lead">
+                            Форма, одежда и аксессуары ФК «Шинник»
+                        </p>
+                    </div>
+                </div>
 
-            {% if selected_category %}
-                <div class="mb-4">
-                    <a href="{% url 'store:product_list' %}" class="btn btn-outline-secondary">← Все товары</a>
+                <form method="get" class="sf-catalog-toolbar">
+                    <div class="sf-catalog-toolbar-main">
+                        {% if request.GET.q %}
+                            <input type="hidden" name="q" value="{{ request.GET.q }}">
+                        {% endif %}
+                        {% if request.GET.category_id %}
+                            <input type="hidden" name="category_id" value="{{ request.GET.category_id }}">
+                        {% endif %}
+
+                        {% if categories %}
+                            <div class="sf-catalog-chips">
+                                <a href="{% url 'store:product_list' %}{% if request.GET.sort %}?sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}{% if request.GET.sort %}&{% else %}?{% endif %}q={{ request.GET.q }}{% endif %}"
+                                   class="sf-filter-chip {% if not request.GET.category_id %}active{% endif %}">
+                                    Все
+                                </a>
+
+                                {% for c in categories %}
+                                    <a href="{% url 'store:product_list' %}?category_id={{ c.id }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"
+                                       class="sf-filter-chip {% if request.GET.category_id == c.id|stringformat:'s' %}active{% endif %}">
+                                        {{ c.name }}
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="sf-catalog-toolbar-actions">
+                            <div class="sf-catalog-sort">
+                                <div class="dropdown">
+                                    <button
+                                            class="btn btn-secondary dropdown-toggle sf-sort-toggle"
+                                            type="button"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false"
+                                    >
+                                        {% if request.GET.sort == 'price_asc' %}
+                                            Сначала дешевле
+                                        {% elif request.GET.sort == 'price_desc' %}
+                                            Сначала дороже
+                                        {% elif request.GET.sort == 'name_asc' %}
+                                            По названию А–Я
+                                        {% elif request.GET.sort == 'name_desc' %}
+                                            По названию Я–А
+                                        {% else %}
+                                            Сначала популярные
+                                        {% endif %}
+                                    </button>
+
+                                    <ul class="dropdown-menu dropdown-menu-end sf-dropdown-menu sf-sort-menu">
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value=""
+                                                    class="dropdown-item {% if not request.GET.sort %}active{% endif %}">
+                                                Сначала популярные
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="price_asc"
+                                                    class="dropdown-item {% if request.GET.sort == 'price_asc' %}active{% endif %}">
+                                                Сначала дешевле
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="price_desc"
+                                                    class="dropdown-item {% if request.GET.sort == 'price_desc' %}active{% endif %}">
+                                                Сначала дороже
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="name_asc"
+                                                    class="dropdown-item {% if request.GET.sort == 'name_asc' %}active{% endif %}">
+                                                По названию А–Я
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button type="submit"
+                                                    name="sort"
+                                                    value="name_desc"
+                                                    class="dropdown-item {% if request.GET.sort == 'name_desc' %}active{% endif %}">
+                                                По названию Я–А
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="sf-section pt-0">
+        <div class="container">
+            {% if request.GET.q or request.GET.category_id or request.GET.sort %}
+                <div class="sf-catalog-active-filters">
+                    <div class="sf-catalog-active-filters-label">Активные параметры:</div>
+
+                    <div class="sf-catalog-active-filters-list">
+                        {% if request.GET.q %}
+                            <span class="sf-active-filter">Поиск: {{ request.GET.q }}</span>
+                        {% endif %}
+
+                        {% if selected_category %}
+                            <span class="sf-active-filter">
+                            Категория: {{ selected_category.name }}
+                        </span>
+                        {% endif %}
+
+                        {% if request.GET.sort %}
+                            <span class="sf-active-filter">
+                            Сортировка:
+                                {% if request.GET.sort == 'price_asc' %}сначала дешевле{% endif %}
+                                {% if request.GET.sort == 'price_desc' %}сначала дороже{% endif %}
+                                {% if request.GET.sort == 'name_asc' %}по названию А–Я{% endif %}
+                                {% if request.GET.sort == 'name_desc' %}по названию Я–А{% endif %}
+                        </span>
+                        {% endif %}
+
+                        <a href="{% url 'store:product_list' %}" class="sf-clear-filters">
+                            Сбросить
+                        </a>
+                    </div>
                 </div>
             {% endif %}
 
-            <div class="row g-3 mb-4">
-                <div class="col-6 col-md-4 col-lg-3">
-                    <a class="sf-category-card text-decoration-none {% if not selected_category %}active{% endif %}" href="{% url 'store:product_list' %}">
-                        <div class="sf-category-title text-truncate">Все категории</div>
-                    </a>
+            {% if products %}
+                <div class="row g-4">
+                    {% for product in products %}
+                        <div class="col-12 col-md-6 col-xl-4">
+                            {% include 'main_page/_product_card.html' with product=product %}
+                        </div>
+                    {% endfor %}
                 </div>
-                {% for category in categories %}
-                    <div class="col-6 col-md-4 col-lg-3">
-                        <a class="sf-category-card text-decoration-none {% if selected_category.id == category.id %}active{% endif %}" href="{% url 'store:product_list' %}?category_id={{ category.id }}">
-                            <div class="sf-category-title text-truncate">{{ category.name }}</div>
-                        </a>
-                    </div>
-                {% endfor %}
-            </div>
 
-            <div class="row g-4">
-                {% for product in products %}
-                    <div class="col-12 col-md-6 col-lg-4">
-                        {% include 'main_page/_product_card.html' with product=product %}
-                    </div>
-                {% empty %}
-                    <div class="col-12">
-                        <div class="sf-surface p-4">{% if selected_category %}В этой категории товары пока не добавлены.{% else %}Товары пока не добавлены.{% endif %}</div>
-                    </div>
-                {% endfor %}
-            </div>
-
-            {% if is_paginated %}
-                <div class="d-flex justify-content-center mt-4">
-                    <nav aria-label="Page navigation">
-                        <ul class="pagination">
-                            {% if page_obj.has_previous %}
-                                <li class="page-item"><a class="page-link" href="?page=1{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">Первая</a></li>
-                                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">← Назад</a></li>
-                            {% endif %}
-
-                            {% for num in page_obj.paginator.page_range %}
-                                {% if page_obj.number == num %}
-                                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
-                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-                                    <li class="page-item"><a class="page-link" href="?page={{ num }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">{{ num }}</a></li>
+                {% if is_paginated %}
+                    <div class="sf-pagination-wrap">
+                        <nav aria-label="Навигация по страницам">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=
+                                                {{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
+                                            Назад
+                                        </a>
+                                    </li>
                                 {% endif %}
-                            {% endfor %}
 
-                            {% if page_obj.has_next %}
-                                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">Вперёд →</a></li>
-                                <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_category %}&category_id={{ selected_category.id }}{% endif %}">Последняя</a></li>
-                            {% endif %}
-                        </ul>
-                    </nav>
+                                {% for num in paginator.page_range %}
+                                    {% if page_obj.number == num %}
+                                        <li class="page-item active">
+                                            <span class="page-link">{{ num }}</span>
+                                        </li>
+                                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page=
+                                                    {{ num }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
+                                                {{ num }}
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=
+                                                {{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
+                                            Вперёд
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="sf-empty-state sf-empty-state-lg">
+                    <div class="sf-empty-state-title">Товары не найдены</div>
+                    <p class="sf-empty-state-text">
+                        По выбранным параметрам пока ничего нет. Попробуй изменить поиск,
+                        категорию или сбросить фильтры.
+                    </p>
+                    <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                        Показать все товары
+                    </a>
                 </div>
             {% endif %}
         </div>

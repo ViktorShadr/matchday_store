@@ -6,44 +6,128 @@
     <section class="sf-section">
         <div class="container">
             <div class="sf-section-head">
-                <h1 class="sf-section-title">Склад</h1>
+                <div>
+                    <h1 class="sf-section-title">Склад</h1>
+                    <p class="sf-section-subtitle">Управление товарами, категориями и остатками</p>
+                </div>
                 <div class="d-flex gap-2">
-                    <a class="btn btn-outline-primary" href="{% url 'store:warehouse_category_create' %}">Создать категорию</a>
-                    <a class="btn btn-primary" href="{% url 'store:warehouse_product_create' %}">Добавить товар</a>
+                    <a class="btn btn-outline-primary" href="{% url 'store:warehouse_category_create' %}">+ Создать категорию</a>
+                    <a class="btn btn-primary" href="{% url 'store:warehouse_product_create' %}">+ Добавить товар</a>
                 </div>
             </div>
 
             {% include 'dashboard/_tabs.html' %}
 
+            <div class="sf-surface p-3 p-lg-4 mb-4">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label mb-1" for="warehouseSearch">Поиск</label>
+                        <input
+                            id="warehouseSearch"
+                            type="search"
+                            name="q"
+                            class="form-control"
+                            placeholder="Поиск по названию или SKU"
+                            value="{{ search_query }}"
+                        >
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-2">
+                        <label class="form-label mb-1" for="warehouseCategoryFilter">Категория</label>
+                        <select id="warehouseCategoryFilter" class="form-select" name="category">
+                            <option value="">Все категории</option>
+                            {% for category in categories %}
+                                <option value="{{ category.pk }}" {% if selected_category == category.pk|stringformat:'s' %}selected{% endif %}>
+                                    {{ category.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-2">
+                        <label class="form-label mb-1" for="warehouseStockFilter">Остаток</label>
+                        <select id="warehouseStockFilter" class="form-select" name="stock">
+                            {% for value, label in stock_filter_options %}
+                                <option value="{{ value }}" {% if selected_stock_filter == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-2">
+                        <label class="form-label mb-1" for="warehouseSort">Сортировка</label>
+                        <select id="warehouseSort" class="form-select" name="sort">
+                            {% for value, label in sort_options %}
+                                <option value="{{ value }}" {% if selected_sort == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-2 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1">Применить</button>
+                        {% if has_active_filters %}
+                            <a class="btn btn-outline-primary" href="{% url 'store:warehouse_dashboard' %}">Сброс</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+
             <div class="row g-4">
-                <div class="col-12 col-xl-8">
-                    <div class="sf-surface p-4">
-                        <h2 class="h4 mb-3">Товары на складе</h2>
+                <div class="col-12 col-xxl-9">
+                    <div class="sf-surface p-0 overflow-hidden">
                         <div class="table-responsive">
-                            <table class="table align-middle">
+                            <table class="table align-middle mb-0 sf-dashboard-table">
                                 <thead>
                                 <tr>
-                                    <th>Товар</th>
+                                    <th>Фото</th>
+                                    <th>Название</th>
                                     <th>Категория</th>
                                     <th>Варианты</th>
                                     <th>Остаток</th>
-                                    <th></th>
+                                    <th>Цена</th>
+                                    <th class="text-end">Действия</th>
                                 </tr>
                                 </thead>
                                 <tbody>
                                 {% for product in products %}
                                     <tr>
-                                        <td class="fw-semibold">{{ product.name }}</td>
+                                        <td>
+                                            <div class="sf-product-thumb">
+                                                {% if product.preview_image %}
+                                                    <img src="{{ product.preview_image.image.url }}" alt="{{ product.preview_image.alt_text|default:product.name }}">
+                                                {% else %}
+                                                    <span class="sf-product-thumb-placeholder">—</span>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold">{{ product.name }}</div>
+                                            <div class="small text-muted">{{ product.sku }}</div>
+                                        </td>
                                         <td>{{ product.category.name|default:'Без категории' }}</td>
-                                        <td>{{ product.variant_count }}</td>
-                                        <td>{{ product.stock_total }}</td>
+                                        <td>{{ product.variant_label }}</td>
+                                        <td>
+                                            <span class="sf-stock-badge sf-stock-badge--{{ product.stock_state }}">{{ product.stock_label }}</span>
+                                        </td>
+                                        <td>
+                                            {% if product.variant_count > 0 %}
+                                                {% if product.variant_count > 1 %}от {% endif %}{{ product.min_price|floatformat:"-2" }} ₽
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
                                         <td class="text-end">
-                                            <a class="btn btn-sm btn-outline-primary" href="{% url 'store:warehouse_product_manage' product.pk %}">Управлять</a>
+                                            <a class="btn btn-sm btn-primary" href="{% url 'store:warehouse_product_manage' product.pk %}">Управлять</a>
                                         </td>
                                     </tr>
                                 {% empty %}
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted py-4">На складе пока нет товаров.</td>
+                                        <td colspan="7" class="text-center text-muted py-5">
+                                            {% if has_active_filters %}
+                                                По вашему запросу товары не найдены.
+                                            {% else %}
+                                                На складе пока нет товаров.
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                 {% endfor %}
                                 </tbody>
@@ -52,25 +136,25 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-xl-4">
+                <div class="col-12 col-xxl-3">
                     <div class="sf-surface p-4">
                         <h2 class="h4 mb-3">Категории</h2>
-                        {% for category in categories %}
-                            <div class="border rounded-4 px-3 py-3 mb-2">
-                                <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div class="d-grid gap-2">
+                            {% for category in categories %}
+                                <div class="sf-category-admin-item">
                                     <div>
                                         <div class="fw-semibold">{{ category.name }}</div>
-                                        <div class="small text-muted">Товаров: {{ category.product_count }}</div>
+                                        <div class="small text-muted">{{ category.product_count }} товаров</div>
                                     </div>
-                                    <div class="d-flex gap-2">
-                                        <a class="sf-link small" href="{% url 'store:warehouse_category_edit' category.pk %}">Изменить</a>
-                                        <a class="text-danger small text-decoration-none" href="{% url 'store:warehouse_category_delete' category.pk %}">Удалить</a>
+                                    <div class="d-flex gap-2 mt-2">
+                                        <a class="btn btn-sm btn-outline-primary" href="{% url 'store:warehouse_category_edit' category.pk %}">Изменить</a>
+                                        <a class="btn btn-sm btn-danger" href="{% url 'store:warehouse_category_delete' category.pk %}">Удалить</a>
                                     </div>
                                 </div>
-                            </div>
-                        {% empty %}
-                            <div class="text-muted">Категории ещё не заведены.</div>
-                        {% endfor %}
+                            {% empty %}
+                                <div class="text-muted">Категории ещё не заведены.</div>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
             </div>

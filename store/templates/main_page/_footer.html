@@ -1,36 +1,64 @@
-<!-- _footer.html -->
 {% load static %}
-<footer id="contacts" class="sf-footer text-muted">
+<footer id="contacts" class="sf-footer sf-footer--marketplace">
     <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-4">
-                <div class="d-flex align-items-center gap-2 mb-2">
-                    <img src="{% static 'img/favicon.ico' %}" alt="Шинник" style="width:34px;height:34px;border-radius:12px;object-fit:cover;">
-                    <div>
-                        <h6 class="mb-1">ФК «Шинник»</h6>
-                        <div class="small">Официальный клубный магазин атрибутики</div>
+        <div class="sf-footer-top">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="sf-footer-brand">
+                        <div class="sf-footer-brand-mark">
+                            <img src="{% static 'img/favicon.ico' %}" alt="Логотип ФК Шинник">
+                        </div>
+                        <div>
+                            <h5 class="sf-footer-title mb-2">ФК «Шинник»</h5>
+                            <p class="sf-footer-text mb-3">
+                                Официальный магазин атрибутики клуба. Форма, одежда и аксессуары для болельщиков.
+                            </p>
+                        </div>
                     </div>
                 </div>
-                <div class="small">&copy; {% now "Y" %} Шинник. Все права защищены.</div>
-            </div>
 
-            <div class="col-lg-4">
-                <h6>Информация</h6>
-                <ul class="list-unstyled mb-0">
-                    <li class="mb-2"><a href="{% url 'store:privacy_policy' %}" class="text-muted text-decoration-none">Политика конфиденциальности</a></li>
-                    <li class="mb-2"><a href="{% url 'store:terms_of_service' %}" class="text-muted text-decoration-none">Пользовательское соглашение</a></li>
-                    <li class="mb-2"><a href="{% url 'store:return_policy' %}" class="text-muted text-decoration-none">Условия возврата</a></li>
-                    <li class="mb-2"><a href="{% url 'store:offer' %}" class="text-muted text-decoration-none">Договор оферты</a></li>
-                    <li class="mb-2"><a href="mailto:support@matchday-store.com" class="text-muted text-decoration-none">Поддержка</a></li>
-                </ul>
-            </div>
+                <div class="col-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Покупателям</h6>
+                    <ul class="sf-footer-links">
+                        <li><a href="{% url 'store:product_list' %}">Каталог</a></li>
+                        <li><a href="{% url 'store:cart' %}">Корзина</a></li>
+                        <li><a href="{% url 'users:order_list' %}">Мои заказы</a></li>
+                        <li><a href="{% url 'store:return_policy' %}">Возврат</a></li>
+                    </ul>
+                </div>
 
-            <div class="col-lg-4">
-                <h6>Контакты</h6>
-                <ul class="list-unstyled mb-0">
-                    <li class="mb-2"><span class="text-muted">Email: support@matchday-store.com</span></li>
-                    <li class="mb-2"><span class="text-muted">Ярославль, Россия</span></li>
-                </ul>
+                <div class="col-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Информация</h6>
+                    <ul class="sf-footer-links">
+                        <li><a href="{% url 'store:offer' %}">Оферта</a></li>
+                        <li><a href="{% url 'store:privacy_policy' %}">Конфиденциальность</a></li>
+                        <li><a href="{% url 'store:terms_of_service' %}">Пользовательское соглашение</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Помощь</h6>
+                    <ul class="sf-footer-links">
+                        <li><a href="mailto:support@matchday-store.com">Написать в поддержку</a></li>
+                        <li><a href="{% url 'store:return_policy' %}">Условия возврата</a></li>
+                        <li><a href="{% url 'store:offer' %}">Условия покупки</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Контакты</h6>
+                    <ul class="sf-footer-contacts">
+                        <li>Ярославль, стадион «Шинник»</li>
+                        <li><a href="mailto:support@matchday-store.com">support@matchday-store.com</a></li>
+                        <li>Ежедневно: 10:00 — 19:00</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="sf-footer-bottom">
+            <div class="sf-footer-bottom-row">
+                <div>© {% now "Y" %} ФК «Шинник»</div>
+                <div class="sf-footer-bottom-note">Официальный магазин атрибутики клуба • Ярославль</div>
             </div>
         </div>
     </div>

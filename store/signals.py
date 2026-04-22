@@ -1,10 +1,12 @@
 from django.contrib.auth import user_logged_in
 from django.dispatch import receiver
 
+from store.application import CartContextResolver
 from store.services.cart_service import CartService
 
 # Глобальный экземпляр для обратной совместимости
 cart_service = CartService()
+cart_context_resolver = CartContextResolver()
 
 
 @receiver(user_logged_in)
@@ -29,4 +31,4 @@ def merge_carts_on_login(sender, request, user, **kwargs):
             del request.session["_pre_login_session_key"]
             request.session.modified = True
 
-        cart_service.merge_carts_on_login(user, session_key)
+        cart_context_resolver.merge_on_login(user, session_key)

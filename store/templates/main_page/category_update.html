@@ -1,25 +1,92 @@
 {% extends 'main_page/base.html' %}
-{% block title %}Редактирование категории{% endblock %}
+
+{% block title %}Редактирование категории — ФК «Шинник»{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
-        <div class="container">
-            <div class="sf-section-head">
-                <h1 class="sf-section-title">Редактирование категории</h1>
-                <a class="sf-link" href="{% url 'store:category_detail' category.pk %}">Назад к категории</a>
+<section class="sf-admin-page">
+    <div class="container">
+        <div class="sf-admin-hero">
+            <div>
+                <div class="sf-home-eyebrow">Управление каталогом</div>
+                <h1 class="sf-admin-title">Редактирование категории</h1>
+                <p class="sf-admin-lead">
+                    Обнови данные категории, чтобы структура каталога оставалась чистой и понятной.
+                </p>
             </div>
 
-            <div class="row justify-content-center">
-                <div class="col-12 col-lg-8">
-                    <div class="sf-surface p-4">
-                        <form method="post">
-                            {% csrf_token %}
-                            {{ form.as_p }}
-                            <button type="submit" class="btn btn-primary">Сохранить</button>
-                        </form>
-                    </div>
-                </div>
+            <div class="sf-admin-hero-actions">
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                    Назад в каталог
+                </a>
             </div>
         </div>
-    </section>
+
+        <div class="sf-admin-layout">
+            <div class="sf-admin-main">
+                <div class="sf-admin-card">
+                    <h2 class="sf-admin-section-title">Данные категории</h2>
+
+                    <form method="post" enctype="multipart/form-data" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger sf-alert mb-4">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="row g-4">
+                            {% for field in form %}
+                                <div class="col-12 {% if field.name in 'name,title,is_active,slug' %}col-md-6{% endif %}">
+                                    <div class="sf-form-group">
+                                        <label for="{{ field.id_for_label }}" class="form-label">
+                                            {{ field.label }}
+                                            {% if field.field.required %}
+                                                <span class="sf-required">*</span>
+                                            {% endif %}
+                                        </label>
+
+                                        {{ field }}
+
+                                        {% if field.help_text %}
+                                            <div class="sf-field-help">{{ field.help_text }}</div>
+                                        {% endif %}
+
+                                        {% if field.errors %}
+                                            <div class="sf-field-errors">
+                                                {% for error in field.errors %}
+                                                    <div>{{ error }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="sf-admin-form-actions">
+                            <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                                Отмена
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                Сохранить изменения
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <aside class="sf-admin-sidebar">
+                <div class="sf-admin-card">
+                    <h2 class="sf-admin-section-title">Подсказка</h2>
+                    <p class="sf-admin-note">
+                        Даже служебные CRUD-страницы должны выглядеть аккуратно и профессионально.
+                    </p>
+                </div>
+            </aside>
+        </div>
+    </div>
+</section>
 {% endblock %}

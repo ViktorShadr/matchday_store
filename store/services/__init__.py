@@ -4,7 +4,6 @@ from .template_filters import (
     CategoryService,
     ProductDisplayService,
     CartDisplayService,
-    DateService,
 )
 from .cart_exceptions import (
     CartException,
@@ -14,7 +13,6 @@ from .cart_exceptions import (
     CartOperationError,
 )
 from .cart_validator import CartValidator
-from .cart_service import CartService
 
 __all__ = [
     "get_catalog_queryset",
@@ -24,12 +22,10 @@ __all__ = [
     "CategoryService",
     "ProductDisplayService",
     "CartDisplayService",
-    "DateService",
     "CartException",
     "InsufficientStockError",
     "InvalidQuantityError",
     "ProductVariantNotFoundError",
     "CartOperationError",
     "CartValidator",
-    "CartService",
 ]

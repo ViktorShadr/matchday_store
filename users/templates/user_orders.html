@@ -1,63 +1,123 @@
 {% extends 'main_page/base.html' %}
-{% load static %}
-{% block title %}Мои заказы — Shinnik Fan Shop{% endblock %}
-{% block content %}
-<div class="container mt-5 mb-5">
-    <div class="row justify-content-center">
-        <div class="col-lg-8 col-md-10 col-sm-12">
-            <div class="card shadow-sm border-0 p-4">
-                <h2 class="mb-4">Мои заказы</h2>
 
-                {% if messages %}
-                    <div class="mb-3">
-                        {% for message in messages %}
-                            <div class="alert alert-{{ message.tags|default:'info' }} mb-2" role="alert">
-                                {{ message }}
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-                
-                {% if orders %}
-                    <div class="list-group">
-                        {% for order in orders %}
-                        <div class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h5 class="mb-1"><a href="{% url 'users:order_detail' order.pk %}" class="text-decoration-none">{{ order.number }}</a></h5>
-                                    <p class="mb-1 text-muted">
-                                        <small>Товаров: {{ order.total_items }}</small>
-                                    </p>
-                                    <p class="mb-1">
-                                        <strong>{{ order.total_amount }} ₽</strong>
-                                    </p>
-                                    <p class="mb-0">
-                                        <span class="badge bg-info">{{ order.get_status_display }}</span>
-                                    </p>
-                                </div>
-                                <div class="text-end">
-                                    <small class="text-muted">{{ order.created_at|date:"d.m.Y H:i" }}</small>
-                                    {% if order.can_cancel %}
-                                        <form method="post" action="{% url 'users:order_cancel' order.pk %}" class="mt-2">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Отменить заказ</button>
-                                        </form>
+{% block title %}Мои заказы — ФК «Шинник»{% endblock %}
+{% block meta_description %}История заказов пользователя в официальном магазине атрибутики ФК «Шинник».{% endblock %}
+
+{% block content %}
+<section class="sf-profile-page">
+    <div class="container">
+        <div class="sf-profile-hero">
+            <div>
+                <div class="sf-home-eyebrow">Личный кабинет</div>
+                <h1 class="sf-profile-title">Мои заказы</h1>
+                <p class="sf-profile-lead">
+                    Здесь отображается история ваших покупок и быстрый переход к деталям каждого заказа.
+                </p>
+            </div>
+
+            <div class="sf-profile-hero-actions">
+                <a href="{% url 'users:profile_detail' pk=request.user.pk %}" class="btn btn-secondary">
+                    Профиль
+                </a>
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Перейти в каталог
+                </a>
+            </div>
+        </div>
+
+        {% if orders %}
+            <div class="sf-orders-list">
+                {% for order in orders %}
+                    <article class="sf-order-card">
+                        <div class="sf-order-card-top">
+                            <div>
+                                <div class="sf-order-number">Заказ #{{ order.number|default:order.id }}</div>
+                                <div class="sf-order-date">
+                                    {% if order.created_at %}
+                                        Оформлен {{ order.created_at|date:"d.m.Y H:i" }}
+                                    {% elif order.created %}
+                                        Оформлен {{ order.created|date:"d.m.Y H:i" }}
+                                    {% else %}
+                                        Дата не указана
                                     {% endif %}
                                 </div>
                             </div>
+
+                            <div class="sf-order-status-wrap">
+                                <span class="sf-order-status
+                                    {% if order.status == 'completed' or order.status == 'done' %}
+                                        sf-order-status--success
+                                    {% elif order.status == 'cancelled' %}
+                                        sf-order-status--danger
+                                    {% else %}
+                                        sf-order-status--neutral
+                                    {% endif %}
+                                ">
+                                    {{ order.get_status_display|default:order.status|default:"В обработке" }}
+                                </span>
+                            </div>
                         </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-center text-muted">У вас пока нет заказов.</p>
-                {% endif %}
-                
-                <div class="mt-4">
-                    <a href="{% url 'store:base' %}" class="btn btn-secondary">На главную</a>
-                    <a href="{% url 'users:profile_detail' request.user.pk %}" class="btn btn-primary">В профиль</a>
-                </div>
+
+                        <div class="sf-order-card-body">
+                            <div class="sf-order-summary-grid">
+                                <div class="sf-order-summary-item">
+                                    <div class="sf-order-summary-label">Сумма</div>
+                                    <div class="sf-order-summary-value">
+                                        {% if order.total_amount %}
+                                            {{ order.total_amount }} ₽
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="sf-order-summary-item">
+                                    <div class="sf-order-summary-label">Позиций</div>
+                                    <div class="sf-order-summary-value">
+                                        {{ order.total_items|default:0 }}
+                                    </div>
+                                </div>
+
+                                <div class="sf-order-summary-item">
+                                    <div class="sf-order-summary-label">Получатель</div>
+                                    <div class="sf-order-summary-value">
+                                        {% if order.recipient_name %}
+                                            {{ order.recipient_name }}
+                                        {% elif request.user.get_full_name %}
+                                            {{ request.user.get_full_name }}
+                                        {% else %}
+                                            {{ request.user.email }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sf-order-card-actions">
+                                <a href="{% url 'users:order_detail' pk=order.pk %}" class="btn btn-primary">
+                                    Открыть заказ
+                                </a>
+                                {% if order.can_cancel %}
+                                    <form method="post" action="{% url 'users:order_cancel' pk=order.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-danger">Отменить заказ</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
             </div>
-        </div>
+        {% else %}
+            <div class="sf-empty-state sf-empty-state-lg">
+                <div class="sf-empty-state-title">У вас пока нет заказов</div>
+                <p class="sf-empty-state-text">
+                    Как только вы оформите первую покупку, она появится здесь в истории заказов.
+                </p>
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Перейти в каталог
+                </a>
+            </div>
+        {% endif %}
     </div>
-</div>
+</section>
 {% endblock %}

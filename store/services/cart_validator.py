@@ -65,7 +65,7 @@ class CartValidator:
                 raise ValueError(f"Максимальное количество: {CartValidator.MAX_QUANTITY}")
 
             return quantity
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError):
             raise InvalidQuantityError(
                 f"Количество должно быть числом от {CartValidator.MIN_QUANTITY} до {CartValidator.MAX_QUANTITY}"
             )

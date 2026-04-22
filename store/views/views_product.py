@@ -5,6 +5,7 @@ from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, Moderator
 from store.mixins.cart_mixins import CartContextMixin
 from store.models import Product
 from store.services import enrich_product, enrich_products, ProductDisplayService, PermissionService
+from store.queries import CatalogQueryService
 
 
 class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, TemplateView):
@@ -23,7 +24,7 @@ class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, T
     def get_context_data(self, **kwargs):
         """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
-        context["popular_products"] = enrich_products(self.get_catalog_queryset().order_by("-created_at")[:6])
+        context["popular_products"] = enrich_products(CatalogQueryService.build_popular_products_queryset()[:6])
         return context
 
 
@@ -51,11 +52,10 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
 
     def get_queryset(self):
         """Возвращает queryset для текущего представления."""
-        queryset = self.get_catalog_queryset().order_by("-created_at")
+        query = (self.request.GET.get("q") or "").strip()
         category_id = self.request.GET.get("category_id")
-        if category_id:
-            queryset = queryset.filter(category_id=category_id)
-        return queryset
+        sort = self.request.GET.get("sort")
+        return CatalogQueryService.build_product_list_queryset(query=query, category_id=category_id, sort=sort)
 
     def get_context_data(self, **kwargs):
         """Формирует контекст для шаблона."""
@@ -125,6 +125,7 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
 
         # Variants data
         variants = list(product.variants.all())
+        available_variants = [variant for variant in variants if variant.quantity > 0]
         variant_prices = [v.price for v in variants if v.price]
         variant_quantities = [v.quantity for v in variants if v.quantity > 0]
 
@@ -132,6 +133,7 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
         context["product_details"] = ProductDisplayService.prepare_product_details(product)
         context["product_images"] = product.images.all()
         context["variants"] = variants
+        context["available_variants"] = available_variants
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
 
         # Price range for Schema.org

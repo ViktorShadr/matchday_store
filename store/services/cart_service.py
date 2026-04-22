@@ -1,18 +1,28 @@
 import logging
-from django.db import transaction
 from typing import Optional
+from django.db import transaction
 
-from ..models import Cart, CartItem, ProductVariant
+from ..models import ProductVariant
 from ..repositories import ICartRepository, IProductVariantRepository
 from ..repositories import CartRepository, ProductVariantRepository
+from ..application.cart_context import CartContext
 from .cart_exceptions import (
     InsufficientStockError,
     ProductVariantNotFoundError,
     CartOperationError,
 )
-from .cart_validator import CartValidator
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_variant_value(value) -> str:
+    """Нормализовать значение варианта для отображения в UI."""
+    if value is None:
+        return ""
+    normalized = str(value).strip()
+    if normalized.lower() == "none":
+        return ""
+    return normalized
 
 
 class CartService:
@@ -42,85 +52,8 @@ class CartService:
         self.cart_repository = cart_repository or CartRepository()
         self.product_variant_repository = product_variant_repository or ProductVariantRepository()
 
-    def get_or_create_cart(self, request):
-        """
-        Получить или создать корзину для пользователя или сессии.
-
-        Если пользователь авторизуется с активной сессионной корзиной,
-        автоматически объединяет товары из обеих корзин.
-
-        Args:
-            request: HTTP запрос
-
-        Returns:
-            Cart: Объект корзины
-        """
-        if request.user.is_authenticated:
-            cart = self.cart_repository.get_or_create_cart_by_user(request.user)
-            # Если пользователь авторизовался и у него была корзина по сессии,
-            # переносим товары в корзину пользователя
-            if request.session.session_key:
-                self._merge_session_cart_with_user_cart(cart, request.session.session_key)
-        else:
-            # Для анонимных пользователей используем сессию
-            if not request.session.session_key:
-                request.session.create()
-                request.session.modified = True
-
-            session_key = request.session.session_key
-            cart = self.cart_repository.get_or_create_cart_by_session(session_key)
-
-        return cart
-
     @transaction.atomic
-    def _merge_session_cart_with_user_cart(self, user_cart, session_key):
-        """
-        Объединить сессионную корзину с корзиной пользователя.
-
-        Выполняется в транзакции для обеспечения целостности данных.
-
-        Args:
-            user_cart: Корзина пользователя
-            session_key: Ключ сессии для поиска сессионной корзины
-        """
-        try:
-            session_cart = self.cart_repository.get_cart_by_session_key(session_key)
-            if not session_cart:
-                return
-
-            # Переносим товары из сессионной корзины
-            for item in session_cart.items.select_related("product_variant").all():
-                available_quantity = item.product_variant.quantity
-                if available_quantity < 1:
-                    continue
-
-                cart_item, created = self.cart_repository.get_or_create_cart_item(
-                    user_cart, item.product_variant, {"quantity": item.quantity}
-                )
-
-                if created and cart_item.quantity > available_quantity:
-                    cart_item.quantity = available_quantity
-                    cart_item.save()
-                elif not created:
-                    new_quantity = min(cart_item.quantity + item.quantity, available_quantity)
-                    if cart_item.quantity != new_quantity:
-                        cart_item.quantity = new_quantity
-                        cart_item.save()
-                    logger.info(
-                        f"Merged cart item: user={user_cart.user.id}, "
-                        f"variant={item.product_variant.id}, qty={cart_item.quantity}"
-                    )
-
-            # Удаляем сессионную корзину
-            self.cart_repository.delete_cart(session_cart)
-            logger.info(f"Session cart {session_key[:8]}... merged and deleted")
-
-        except Exception as e:
-            logger.error(f"Error merging carts: {e}", exc_info=True)
-            raise CartOperationError(f"Ошибка при объединении корзин: {str(e)}")
-
-    @transaction.atomic
-    def add_item(self, request, product_variant_id, quantity=1):
+    def add_item(self, cart_context: CartContext, product_variant_id, quantity=1):
         """
         Добавить товар в корзину с защитой от race conditions.
 
@@ -145,10 +78,7 @@ class CartService:
             # Это предотвращает race conditions при одновременных запросах
             product_variant = self.product_variant_repository.get_variant_for_update(product_variant_id)
 
-            logger.info(
-                f"User {request.user.id if request.user.is_authenticated else 'anonymous'} "
-                f"adding variant {product_variant_id} qty {quantity}"
-            )
+            logger.info("User %s adding variant %s qty %s", cart_context.actor_label, product_variant_id, quantity)
 
             # Проверяем наличие товара
             if product_variant.quantity < quantity:
@@ -161,10 +91,8 @@ class CartService:
                     available_quantity=product_variant.quantity,
                 )
 
-            cart = self.get_or_create_cart(request)
-
             cart_item, created = self.cart_repository.get_or_create_cart_item(
-                cart, product_variant, {"quantity": quantity}
+                cart_context.cart, product_variant, {"quantity": quantity}
             )
 
             if not created:
@@ -200,7 +128,7 @@ class CartService:
             raise CartOperationError(f"Ошибка при добавлении товара в корзину: {str(e)}")
 
     @transaction.atomic
-    def update_item_quantity(self, request, product_variant_id, quantity):
+    def update_item_quantity(self, cart_context: CartContext, product_variant_id, quantity):
         """
         Обновить количество товара в корзине с защитой от race conditions.
 
@@ -221,10 +149,7 @@ class CartService:
             # Получаем вариант товара с блокировкой
             product_variant = self.product_variant_repository.get_variant_for_update(product_variant_id)
 
-            logger.info(
-                f"User {request.user.id if request.user.is_authenticated else 'anonymous'} "
-                f"updating variant {product_variant_id} qty to {quantity}"
-            )
+            logger.info("User %s updating variant %s qty to %s", cart_context.actor_label, product_variant_id, quantity)
 
             if quantity < 1:
                 raise ValueError("Количество должно быть больше 0")
@@ -239,10 +164,8 @@ class CartService:
                     available_quantity=product_variant.quantity,
                 )
 
-            cart = self.get_or_create_cart(request)
-
             cart_item, created = self.cart_repository.update_or_create_cart_item(
-                cart, product_variant, {"quantity": quantity}
+                cart_context.cart, product_variant, {"quantity": quantity}
             )
 
             logger.info(f"Cart item {'created' if created else 'updated'}: {cart_item.id}, qty={quantity}")
@@ -252,14 +175,14 @@ class CartService:
         except ProductVariant.DoesNotExist:
             logger.error(f"Product variant not found: {product_variant_id}")
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
-        except (InsufficientStockError, ProductVariantNotFoundError, ValueError) as e:
+        except (InsufficientStockError, ProductVariantNotFoundError, ValueError):
             raise
         except Exception as e:
             logger.error(f"Error updating cart item: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при обновлении товара в корзине: {str(e)}")
 
     @transaction.atomic
-    def remove_item(self, request, product_variant_id):
+    def remove_item(self, cart_context: CartContext, product_variant_id):
         """
         Удалить товар из корзины.
 
@@ -271,74 +194,33 @@ class CartService:
             bool: True если товар удалён, False если товара не было в корзине
         """
         try:
-            cart = self.get_or_create_cart(request)
-
-            success = self.cart_repository.delete_cart_item(cart, product_variant_id)
+            success = self.cart_repository.delete_cart_item(cart_context.cart, product_variant_id)
             if success:
-                logger.info(
-                    f"Cart item removed: {product_variant_id} from user "
-                    f"{request.user.id if request.user.is_authenticated else 'anonymous'}"
-                )
+                logger.info("Cart item removed: %s from user %s", product_variant_id, cart_context.actor_label)
             else:
-                logger.warning(f"Cart item not found: {product_variant_id} in cart {cart.id}")
+                logger.warning("Cart item not found: %s in cart %s", product_variant_id, cart_context.cart.id)
             return success
         except Exception as e:
             logger.error(f"Error removing item from cart: {e}", exc_info=True)
             raise CartOperationError(f"Ошибка при удалении товара из корзины: {str(e)}")
 
-    @transaction.atomic
-    def clear_cart(self, request):
-        """
-        Очистить корзину.
-
-        Args:
-            request: HTTP запрос
-
-        Returns:
-            Cart: Объект корзины
-        """
-        try:
-            cart = self.get_or_create_cart(request)
-            items_count = self.cart_repository.delete_cart_items(cart)
-            logger.info(
-                f"Cart cleared: removed {items_count} items from user "
-                f"{request.user.id if request.user.is_authenticated else 'anonymous'}"
-            )
-            return cart
-        except Exception as e:
-            logger.error(f"Error clearing cart: {e}", exc_info=True)
-            raise CartOperationError(f"Ошибка при очистке корзины: {str(e)}")
-
-    def get_cart_items(self, request):
-        """
-        Получить все товары из корзины.
-
-        Args:
-            request: HTTP запрос
-
-        Returns:
-            QuerySet: Список элементов корзины
-        """
-        cart = self.get_or_create_cart(request)
-        return self.cart_repository.get_cart_items(cart)
-
-    def get_cart_summary(self, request):
+    def get_cart_summary(self, cart_context: CartContext):
         """
         Получить сводку по корзине.
 
         Кэшируется на время одного запроса для избежания множественных
         вызовов get_or_create_cart.
 
-        Args:
-            request: HTTP запрос
-
         Returns:
             dict: Сводка с общей суммой, количеством товаров и списком элементов
         """
-        cart = self.get_or_create_cart(request)
-        items = self.cart_repository.get_cart_items(cart)
+        items = self.cart_repository.get_cart_items(cart_context.cart)
 
-        return {"total_items": cart.total_items, "total_price": cart.total_price, "items": items}
+        return {
+            "total_items": cart_context.cart.total_items,
+            "total_price": cart_context.cart.total_price,
+            "items": items,
+        }
 
     def get_cart_items_with_details(self, cart):
         """
@@ -357,6 +239,10 @@ class CartService:
         ).prefetch_related('product_variant__product__images').all():
             variant = item.product_variant
             product = variant.product
+            size = _clean_variant_value(variant.size)
+            color = _clean_variant_value(variant.color)
+            variant_parts = [part for part in (size, color) if part]
+            variant_label = " / ".join(variant_parts)
 
             # Get product image
             image_url = None
@@ -368,9 +254,11 @@ class CartService:
 
             items.append({
                 'variant_id': variant.id,
+                'product_id': product.id,
                 'product_name': product.name,
-                'size': variant.size,
-                'color': variant.color,
+                'size': size or None,
+                'color': color or None,
+                'variant_label': variant_label,
                 'quantity': item.quantity,
                 'price': variant.price,
                 'total_price': item.total_price,
@@ -379,49 +267,3 @@ class CartService:
                 'max_quantity': variant.quantity,
             })
         return items
-
-    @transaction.atomic
-    def merge_carts_on_login(self, user, session_key):
-        """
-        Объединить корзины при авторизации пользователя.
-
-        Вызывается из сигналов при авторизации пользователя.
-
-        Args:
-            user: Объект пользователя
-            session_key: Ключ сессии
-        """
-        if not session_key:
-            return
-
-        try:
-            session_cart = self.cart_repository.get_cart_by_session_key(session_key)
-            if not session_cart:
-                return
-
-            user_cart = self.cart_repository.get_or_create_cart_by_user(user)
-
-            # Переносим товары из сессионной корзины в корзину пользователя
-            for item in session_cart.items.select_related("product_variant").all():
-                available_quantity = item.product_variant.quantity
-                if available_quantity < 1:
-                    continue
-
-                cart_item, created = self.cart_repository.get_or_create_cart_item(
-                    user_cart, item.product_variant, {"quantity": item.quantity}
-                )
-                if created and cart_item.quantity > available_quantity:
-                    cart_item.quantity = available_quantity
-                    cart_item.save()
-                elif not created:
-                    new_quantity = min(cart_item.quantity + item.quantity, available_quantity)
-                    if cart_item.quantity != new_quantity:
-                        cart_item.quantity = new_quantity
-                        cart_item.save()
-
-            # Удаляем сессионную корзину
-            self.cart_repository.delete_cart(session_cart)
-            logger.info(f"Session cart {session_key[:8]}... merged on login for user {user.id}")
-
-        except Exception as e:
-            logger.error(f"Error merging carts on login: {e}", exc_info=True)

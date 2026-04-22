@@ -1,130 +1,131 @@
 {% extends 'main_page/base.html' %}
 {% load static %}
 
-{% block title %}Редактирование профиля{% endblock %}
-
-{% block breadcrumbs %}
-    {% include 'main_page/_breadcrumbs.html' with breadcrumbs=breadcrumbs only %}
-{% endblock %}
+{% block title %}Редактирование профиля — ФК «Шинник»{% endblock %}
+{% block meta_description %}Редактирование профиля пользователя в официальном магазине атрибутики ФК «Шинник».{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
-        <div class="container">
-            <div class="sf-section-head">
-                <h1 class="sf-section-title">Редактирование профиля</h1>
-                <a class="sf-link" href="{% url 'users:profile_detail' user.pk %}">Назад к профилю</a>
+<section class="sf-profile-page">
+    <div class="container">
+        <div class="sf-profile-hero">
+            <div>
+                <div class="sf-home-eyebrow">Личный кабинет</div>
+                <h1 class="sf-profile-title">Редактирование профиля</h1>
+                <p class="sf-profile-lead">
+                    Обнови личные данные, чтобы оформление заказов оставалось быстрым и удобным.
+                </p>
             </div>
 
-            <div class="row justify-content-center">
-                <div class="col-lg-6 col-md-7 col-sm-10">
-                    <div class="sf-surface p-4">
-                        <form method="post" enctype="multipart/form-data" novalidate>
-                            {% csrf_token %}
+            <div class="sf-profile-hero-actions">
+                <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
+                    Назад в профиль
+                </a>
+                <a href="{% url 'users:order_list' %}" class="btn btn-secondary">
+                    Мои заказы
+                </a>
+            </div>
+        </div>
 
-                            {% if form.non_field_errors %}
-                                <div class="alert alert-danger">
-                                    {% for error in form.non_field_errors %}
-                                        <div>{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
+        <div class="sf-profile-layout">
+            <aside class="sf-profile-sidebar">
+                <div class="sf-profile-card sf-profile-card--accent">
+                    <div class="sf-profile-avatar-wrap">
+                        {% if profile_user.avatar %}
+                            <img src="{{ profile_user.avatar.url }}" alt="Аватар" class="sf-profile-avatar-lg">
+                        {% else %}
+                            <img src="{% static 'img/default_avatar.png' %}" alt="Аватар" class="sf-profile-avatar-lg">
+                        {% endif %}
+                    </div>
 
+                    <div class="sf-profile-name">
+                        {% if profile_user.get_full_name %}
+                            {{ profile_user.get_full_name }}
+                        {% else %}
+                            {{ profile_user.email }}
+                        {% endif %}
+                    </div>
+
+                    <div class="sf-profile-email">
+                        {{ profile_user.email }}
+                    </div>
+
+                    <div class="sf-profile-quick-links">
+                        <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="sf-profile-quick-link">
+                            Вернуться к профилю
+                        </a>
+                        <a href="{% url 'users:order_list' %}" class="sf-profile-quick-link">
+                            История заказов
+                        </a>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="sf-profile-main">
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Изменение данных</h2>
+
+                    <form method="post" enctype="multipart/form-data" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger sf-alert mb-4">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="row g-4">
                             {% for field in form %}
-                                <div class="mb-3">
-                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                    {{ field }}
-                                    {% if field.help_text %}
-                                        <div class="form-text small">{{ field.help_text }}</div>
-                                    {% endif %}
-                                    {% if field.errors %}
-                                        <div class="text-danger small mt-1">{{ field.errors }}</div>
-                                    {% endif %}
+                                <div class="col-12 {% if field.name in 'first_name,last_name,phone,email' %}col-md-6{% endif %}">
+                                    <div class="sf-form-group">
+                                        <label for="{{ field.id_for_label }}" class="form-label">
+                                            {{ field.label }}
+                                            {% if field.field.required %}
+                                                <span class="sf-required">*</span>
+                                            {% endif %}
+                                        </label>
+
+                                        {{ field }}
+
+                                        {% if field.help_text %}
+                                            <div class="sf-field-help">
+                                                {{ field.help_text }}
+                                            </div>
+                                        {% endif %}
+
+                                        {% if field.errors %}
+                                            <div class="sf-field-errors">
+                                                {% for error in field.errors %}
+                                                    <div>{{ error }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             {% endfor %}
+                        </div>
 
-                            {% if user.avatar %}
-                                <div class="mb-3">
-                                    <label class="form-label">Текущий аватар:</label>
-                                    <div>
-                                        <img src="{{ user.avatar.url }}"
-                                             alt="avatar"
-                                             class="rounded-3"
-                                             style="max-width: 150px; max-height: 150px; object-fit: cover;">
-                                    </div>
-                                    {% if form.avatar.field.widget.input_type == "file" %}
-                                        <div class="form-check mt-2">
-                                            <input type="checkbox" name="clear_avatar" id="clear_avatar" class="form-check-input">
-                                            <label for="clear_avatar" class="form-check-label text-danger">
-                                                Удалить текущий аватар
-                                            </label>
-                                        </div>
-                                    {% endif %}
-                                </div>
-                            {% endif %}
+                        <div class="sf-profile-form-actions">
+                            <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
+                                Отмена
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                Сохранить изменения
+                            </button>
+                        </div>
+                    </form>
+                </div>
 
-                            <div class="mb-3" id="previewBlock" style="display: none;">
-                                <label class="form-label">Предпросмотр нового аватара:</label>
-                                <div>
-                                    <img id="preview" class="rounded-3" style="max-width: 150px; max-height: 150px; object-fit: cover;">
-                                </div>
-                                <button type="button" id="clearSelected" class="btn btn-sm btn-outline-danger mt-2">
-                                    Убрать выбранный файл
-                                </button>
-                            </div>
-
-                            <div class="d-flex gap-2 mt-4">
-                                <button type="submit" class="btn btn-primary flex-grow-1">
-                                    Сохранить
-                                </button>
-                                <a href="{% url 'users:profile_detail' user.pk %}" class="btn btn-outline-secondary">
-                                    Отмена
-                                </a>
-                            </div>
-                        </form>
-                    </div>
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Зачем это нужно</h2>
+                    <p class="sf-profile-note">
+                        Хороший кабинет не должен путать пользователя. Редактирование профиля —
+                        это простое действие, которое должно быть быстрым, понятным и аккуратно оформленным.
+                    </p>
                 </div>
             </div>
         </div>
-    </section>
-{% endblock %}
-
-{% block extra_scripts %}
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    const fileInput = document.querySelector('input[type="file"][name="avatar"]');
-    const previewBlock = document.getElementById("previewBlock");
-    const preview = document.getElementById("preview");
-    const clearBtn = document.getElementById("clearSelected");
-    const clearCheckbox = document.getElementById("clear_avatar");
-
-    if (fileInput) {
-        fileInput.addEventListener("change", event => {
-            const file = event.target.files[0];
-
-            if (!file) {
-                previewBlock.style.display = "none";
-                return;
-            }
-
-            if (clearCheckbox) {
-                clearCheckbox.checked = false;
-            }
-
-            const reader = new FileReader();
-            reader.onload = e => {
-                preview.src = e.target.result;
-                previewBlock.style.display = "block";
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-
-    if (clearBtn && fileInput) {
-        clearBtn.addEventListener("click", () => {
-            fileInput.value = "";
-            previewBlock.style.display = "none";
-        });
-    }
-});
-</script>
+    </div>
+</section>
 {% endblock %}

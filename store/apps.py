@@ -8,4 +8,6 @@ class StoreConfig(AppConfig):
 
     def ready(self):
         """Выполняет инициализацию приложения при запуске."""
-        import store.signals
+        from . import signals
+
+        _ = signals

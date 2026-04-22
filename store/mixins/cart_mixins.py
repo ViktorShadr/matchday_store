@@ -1,7 +1,9 @@
+from store.application import CartContextResolver
 from store.services.cart_service import CartService
 
 # Глобальный экземпляр для обратной совместимости
 cart_service = CartService()
+cart_context_resolver = CartContextResolver()
 
 
 class CartContextMixin:
@@ -27,7 +29,8 @@ class CartContextMixin:
         context = super().get_context_data(**kwargs)
 
         # Получаем корзину для текущего запроса (авторизованного или анонимного)
-        cart = cart_service.get_or_create_cart(self.request)
+        cart_context = cart_context_resolver.resolve_request(self.request)
+        cart = cart_context.cart
         context["cart_count"] = cart.total_items
         context["cart_total"] = cart.total_price
 

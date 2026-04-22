@@ -6,7 +6,9 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from orders.application import CheckoutContext
 from orders.models import Order, OrderItem
+from payments.application import PaymentWorkflowService
 from payments.models import Payment
 from store.repositories import IProductVariantRepository
 from store.repositories import ProductVariantRepository
@@ -15,9 +17,6 @@ from orders.repositories import OrderRepository, PaymentRepository
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
 
-# Глобальный экземпляр для обратной совместимости
-cart_service = CartService()
-
 
 class CheckoutError(Exception):
     """Бизнес-ошибка оформления заказа."""
@@ -25,6 +24,10 @@ class CheckoutError(Exception):
 
 class OrderCancellationError(Exception):
     """Бизнес-ошибка отмены заказа."""
+
+
+class ManualPaymentUpdateError(Exception):
+    """Бизнес-ошибка обновления оплаты заказа."""
 
 
 class CheckoutService(ICheckoutService):
@@ -61,25 +64,55 @@ class CheckoutService(ICheckoutService):
         return f"ORD-{timezone.now():%Y%m%d%H%M%S}-{uuid4().hex[:6].upper()}"
 
     @staticmethod
-    def build_checkout_idempotency_key(checkout_token: Optional[str]) -> str:
-        """Собрать idempotency key для checkout."""
+    def _normalize_snapshot_text(value) -> str:
+        """Привести snapshot-поля к строке (OrderItem snapshot поля non-nullable)."""
+        if value is None:
+            return ""
+        return str(value)
+
+    @staticmethod
+    def build_checkout_idempotency_key(checkout_token: Optional[str], user_id: Optional[int] = None) -> str:
+        """Собрать idempotency key для checkout с учетом пользователя."""
         if checkout_token:
+            if user_id is not None:
+                return f"checkout-{user_id}-{checkout_token}"
             return f"checkout-{checkout_token}"
         return uuid4().hex
 
-    def create_order_from_cart(self, request, cleaned_data, checkout_token: Optional[str] = None):
-        """Создать заказ, списать остатки и очистить корзину."""
-        payment_idempotency_key = self.build_checkout_idempotency_key(checkout_token)
+    def _find_existing_checkout_payment(self, checkout_token: Optional[str], user_id: int):
+        """Найти уже созданный payment для checkout (новый и legacy ключи)."""
+        if not checkout_token:
+            return None
 
-        existing_payment = None
-        if checkout_token:
-            existing_payment = self.payment_repository.get_payment_by_idempotency_key(payment_idempotency_key)
-            if existing_payment and existing_payment.order.user_id == request.user.id:
-                return existing_payment.order
+        current_key = self.build_checkout_idempotency_key(checkout_token, user_id=user_id)
+        existing_payment = self.payment_repository.get_payment_by_idempotency_key(current_key)
+        if existing_payment and existing_payment.order.user_id == user_id:
+            return existing_payment
+
+        # Backward compatibility for keys created before user-scoped idempotency.
+        legacy_key = self.build_checkout_idempotency_key(checkout_token)
+        existing_legacy_payment = self.payment_repository.get_payment_by_idempotency_key(legacy_key)
+        if existing_legacy_payment and existing_legacy_payment.order.user_id == user_id:
+            return existing_legacy_payment
+
+        return None
+
+    def create_order_from_cart(
+        self,
+        checkout_context: CheckoutContext,
+        cleaned_data,
+        checkout_token: Optional[str] = None,
+    ):
+        """Создать заказ, списать остатки и очистить корзину."""
+        payment_idempotency_key = self.build_checkout_idempotency_key(checkout_token, user_id=checkout_context.user_id)
+
+        existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
+        if existing_payment:
+            return existing_payment.order
 
         try:
             with transaction.atomic():
-                cart = self.cart_service.get_or_create_cart(request)
+                cart = checkout_context.cart_context.cart
                 cart_items = list(
                     cart.items.select_related("product_variant__product").select_for_update().order_by("pk")
                 )
@@ -88,10 +121,8 @@ class CheckoutService(ICheckoutService):
                     if checkout_token:
                         # Повторно проверяем idempotency после захвата блокировок:
                         # в параллельном submit первый запрос мог уже создать заказ и очистить корзину.
-                        existing_payment = self.payment_repository.get_payment_by_idempotency_key(
-                            payment_idempotency_key
-                        )
-                        if existing_payment and existing_payment.order.user_id == request.user.id:
+                        existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
+                        if existing_payment:
                             return existing_payment.order
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
@@ -122,8 +153,8 @@ class CheckoutService(ICheckoutService):
                             product_variant=variant,
                             product_name_snapshot=variant.product.name,
                             sku_snapshot=str(variant.id),
-                            size_snapshot=variant.size,
-                            color_snapshot=variant.color,
+                            size_snapshot=self._normalize_snapshot_text(variant.size),
+                            color_snapshot=self._normalize_snapshot_text(variant.color),
                             unit_price=variant.price,
                             quantity=cart_item.quantity,
                             line_total=line_total,
@@ -132,7 +163,7 @@ class CheckoutService(ICheckoutService):
 
                 order = self.order_repository.create_order(
                     number=self.build_order_number(),
-                    user=request.user,
+                    user=checkout_context.user,
                     recipient_name=cleaned_data["recipient_name"],
                     email=cleaned_data["email"],
                     phone=cleaned_data["phone"],
@@ -155,7 +186,7 @@ class CheckoutService(ICheckoutService):
                     item.order = order
                 self.order_repository.bulk_create_order_items(order_items)
 
-                self.payment_repository.create_payment(
+                PaymentWorkflowService.create_payment(
                     order=order,
                     provider=Payment.Provider.MANUAL,
                     idempotency_key=payment_idempotency_key,
@@ -177,8 +208,8 @@ class CheckoutService(ICheckoutService):
                 return order
         except IntegrityError as exc:
             if checkout_token:
-                existing_payment = self.payment_repository.get_payment_by_idempotency_key(payment_idempotency_key)
-                if existing_payment and existing_payment.order.user_id == request.user.id:
+                existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
+                if existing_payment:
                     return existing_payment.order
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
 
@@ -288,4 +319,111 @@ class OrderCancellationService:
                 ]
             )
 
+            return order
+
+
+class ManualPaymentUpdateService:
+    """Сервис обновления статуса ручной оплаты для заказа."""
+
+    ALLOWED_PAYMENT_STATUSES = frozenset(
+        {
+            Order.PaymentStatus.PENDING,
+            Order.PaymentStatus.SUCCEEDED,
+            Order.PaymentStatus.FAILED,
+            Order.PaymentStatus.CANCELLED,
+            Order.PaymentStatus.REFUNDED,
+        }
+    )
+    RESET_PAID_AT_STATUSES = frozenset(
+        {
+            Order.PaymentStatus.PENDING,
+            Order.PaymentStatus.FAILED,
+            Order.PaymentStatus.CANCELLED,
+        }
+    )
+
+    @classmethod
+    def _ensure_can_update_payment(cls, order: Order, next_payment_status: str) -> None:
+        if next_payment_status not in cls.ALLOWED_PAYMENT_STATUSES:
+            raise ManualPaymentUpdateError("Недопустимый статус оплаты.")
+
+        if order.delivery_method != Order.DeliveryMethod.PICKUP:
+            raise ManualPaymentUpdateError("Ручное обновление оплаты доступно только для самовывоза.")
+
+        if order.status == Order.Status.CANCELLED and next_payment_status == Order.PaymentStatus.SUCCEEDED:
+            raise ManualPaymentUpdateError("Нельзя отметить оплату успешной для отмененного заказа.")
+
+        if next_payment_status == Order.PaymentStatus.REFUNDED:
+            has_successful_payment = order.payments.filter(status=Payment.Status.SUCCEEDED).exists()
+            if not has_successful_payment and order.payment_status != Order.PaymentStatus.SUCCEEDED:
+                raise ManualPaymentUpdateError("Нельзя выполнить возврат: успешная оплата не найдена.")
+
+    @staticmethod
+    def _build_dashboard_idempotency_key(order_id: int) -> str:
+        return f"dashboard-manual-{order_id}-{uuid4().hex}"
+
+    def update_order_payment_status(self, order_id: int, next_payment_status: str) -> Order:
+        """
+        Обновить статус оплаты заказа через ручной staff-flow.
+
+        Создает платеж manual при его отсутствии и синхронизирует
+        Order.payment_status + Order.paid_at.
+        """
+        with transaction.atomic():
+            try:
+                order = Order.objects.select_for_update().get(pk=order_id)
+            except Order.DoesNotExist as exc:
+                raise ManualPaymentUpdateError("Заказ не найден.") from exc
+
+            self._ensure_can_update_payment(order, next_payment_status)
+            now = timezone.now()
+
+            payment = (
+                Payment.objects.select_for_update()
+                .filter(order=order, provider=Payment.Provider.MANUAL)
+                .order_by("-updated_at", "-created_at", "-pk")
+                .first()
+            )
+
+            if payment is None:
+                payment = PaymentWorkflowService.create_payment(
+                    order=order,
+                    provider=Payment.Provider.MANUAL,
+                    idempotency_key=self._build_dashboard_idempotency_key(order.id),
+                    status=next_payment_status,
+                    amount=order.total_amount,
+                    currency=order.currency,
+                    paid_at=now if next_payment_status == Order.PaymentStatus.SUCCEEDED else None,
+                    raw_request={"payment_method": "pay_on_receipt", "source": "dashboard"},
+                )
+            else:
+                payment.provider = Payment.Provider.MANUAL
+                payment.status = next_payment_status
+                payment.amount = order.total_amount
+                payment.currency = order.currency
+                if next_payment_status == Order.PaymentStatus.SUCCEEDED:
+                    payment.paid_at = now
+                elif next_payment_status in self.RESET_PAID_AT_STATUSES:
+                    payment.paid_at = None
+                PaymentWorkflowService.save_payment(
+                    payment,
+                    update_fields=[
+                        "provider",
+                        "status",
+                        "amount",
+                        "currency",
+                        "paid_at",
+                        "updated_at",
+                    ],
+                )
+
+            if next_payment_status == Order.PaymentStatus.SUCCEEDED:
+                if order.paid_at is None:
+                    order.paid_at = payment.paid_at or now
+                    order.save(update_fields=["paid_at", "updated_at"])
+            elif next_payment_status in self.RESET_PAID_AT_STATUSES and order.paid_at is not None:
+                order.paid_at = None
+                order.save(update_fields=["paid_at", "updated_at"])
+
+            order.refresh_from_db()
             return order

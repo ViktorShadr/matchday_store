@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.contrib.auth.models import Permission
 
 from .models import Category, Product, ProductVariant, ProductImage, Cart, CartItem
 

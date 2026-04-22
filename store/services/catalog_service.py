@@ -1,6 +1,5 @@
-from django.db.models import Prefetch
-
-from store.models import Product, ProductVariant
+from store.presenters.catalog_presenters import ProductCardPresenter
+from store.queries.catalog_queries import CatalogQueryService
 
 
 def get_catalog_queryset():
@@ -15,13 +14,7 @@ def get_catalog_queryset():
     Returns:
         QuerySet: Оптимизированный queryset товаров
     """
-    return Product.objects.select_related("category").prefetch_related(
-        "images",
-        Prefetch(
-            "variants",
-            queryset=ProductVariant.objects.select_related("image").order_by("price", "id"),
-        ),
-    )
+    return CatalogQueryService.base_queryset()
 
 
 def enrich_product(product):
@@ -44,24 +37,7 @@ def enrich_product(product):
     Returns:
         Product: Тот же объект товара с добавленными атрибутами
     """
-    images = list(product.images.all())
-    variants = list(product.variants.all())
-
-    primary_image = next((image for image in images if image.is_primary), None)
-    first_image = primary_image or (images[0] if images else None)
-    first_variant = variants[0] if variants else None
-
-    product.display_image = (
-        first_image.image if first_image else getattr(getattr(first_variant, "image", None), "image", None)
-    )
-    product.display_price = first_variant.price if first_variant else None
-    product.in_stock = any(variant.quantity > 0 for variant in variants)
-
-    # ID первого доступного варианта для кнопки быстрого добавления
-    first_available_variant = next((v for v in variants if v.quantity > 0), None)
-    product.first_available_variant_id = first_available_variant.id if first_available_variant else None
-
-    return product
+    return ProductCardPresenter.enrich(product)
 
 
 def enrich_products(products):
@@ -76,4 +52,4 @@ def enrich_products(products):
     Returns:
         list[Product]: Список обогащённых товаров
     """
-    return [enrich_product(product) for product in products]
+    return ProductCardPresenter.enrich_many(products)

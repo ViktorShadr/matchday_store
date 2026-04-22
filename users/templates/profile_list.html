@@ -1,65 +1,101 @@
 {% extends 'main_page/base.html' %}
 {% load static %}
 
-{% block title %}Пользователи{% endblock %}
-
-{% block breadcrumbs %}
-    {% include 'main_page/_breadcrumbs.html' with breadcrumbs=breadcrumbs only %}
-{% endblock %}
+{% block title %}Пользователи — ФК «Шинник»{% endblock %}
+{% block meta_description %}Список пользователей магазина атрибутики ФК «Шинник».{% endblock %}
 
 {% block content %}
-    <section class="sf-section">
-        <div class="container">
-            <div class="sf-section-head">
-                <h1 class="sf-section-title">Пользователи</h1>
+<section class="sf-admin-page">
+    <div class="container">
+        <div class="sf-admin-hero">
+            <div>
+                <div class="sf-home-eyebrow">Управление пользователями</div>
+                <h1 class="sf-admin-title">Список пользователей</h1>
+                <p class="sf-admin-lead">
+                    Здесь можно просматривать аккаунты пользователей и переходить к нужным действиям по управлению.
+                </p>
             </div>
 
-            <div class="row g-4">
-                {% for listed_user in users %}
-                <div class="col-md-6 col-lg-4">
-                    <div class="sf-surface p-3 h-100">
-                        <div class="d-flex align-items-center mb-3">
-                            {% if listed_user.avatar %}
-                                <img src="{{ listed_user.avatar.url }}"
-                                     alt="avatar"
-                                     class="rounded-circle me-3"
-                                     style="width: 50px; height: 50px; object-fit: cover;">
-                            {% else %}
-                                <img src="{% static 'img/default_avatar.png' %}"
-                                     alt="avatar"
-                                     class="rounded-circle me-3"
-                                     style="width: 50px; height: 50px; object-fit: cover;">
-                            {% endif %}
-                            <div>
-                                <div class="fw-bold">{{ listed_user.email }}</div>
-                                {% if listed_user.first_name or listed_user.last_name %}
-                                    <small class="text-muted">{{ listed_user.first_name }} {{ listed_user.last_name }}</small>
+            <div class="sf-admin-hero-actions">
+                <a href="{% url 'store:base' %}" class="btn btn-secondary">
+                    На главную
+                </a>
+            </div>
+        </div>
+
+        {% if users %}
+            <div class="sf-users-grid">
+                {% for profile_user in users %}
+                    <article class="sf-user-card">
+                        <div class="sf-user-card-top">
+                            <div class="sf-user-avatar-wrap">
+                                {% if profile_user.avatar %}
+                                    <img src="{{ profile_user.avatar.url }}" alt="Аватар" class="sf-user-avatar">
+                                {% else %}
+                                    <img src="{% static 'img/default_avatar.png' %}" alt="Аватар" class="sf-user-avatar">
                                 {% endif %}
+                            </div>
+
+                            <div class="sf-user-main">
+                                <h2 class="sf-user-name">
+                                    {% if profile_user.get_full_name %}
+                                        {{ profile_user.get_full_name }}
+                                    {% else %}
+                                        {{ profile_user.email }}
+                                    {% endif %}
+                                </h2>
+                                <div class="sf-user-email">{{ profile_user.email }}</div>
                             </div>
                         </div>
 
-                        <div class="small mb-3">
-                            {% if listed_user.phone %}
-                                <div class="text-muted">{{ listed_user.phone }}</div>
+                        <div class="sf-user-meta">
+                            <div class="sf-user-meta-item">
+                                <div class="sf-user-meta-label">ID</div>
+                                <div class="sf-user-meta-value">{{ profile_user.pk }}</div>
+                            </div>
+
+                            {% if profile_user.phone %}
+                                <div class="sf-user-meta-item">
+                                    <div class="sf-user-meta-label">Телефон</div>
+                                    <div class="sf-user-meta-value">{{ profile_user.phone }}</div>
+                                </div>
                             {% endif %}
-                            {% if listed_user.is_staff %}
-                                <span class="badge bg-primary">Администратор</span>
+
+                            {% if profile_user.date_joined %}
+                                <div class="sf-user-meta-item">
+                                    <div class="sf-user-meta-label">Регистрация</div>
+                                    <div class="sf-user-meta-value">
+                                        {{ profile_user.date_joined|date:"d.m.Y" }}
+                                    </div>
+                                </div>
                             {% endif %}
                         </div>
 
-                        <a href="{% url 'users:profile_detail' listed_user.pk %}" class="btn btn-outline-primary btn-sm w-100">
-                            Просмотреть профиль
-                        </a>
-                    </div>
-                </div>
-                {% empty %}
-                <div class="col-12 text-center">
-                    <div class="sf-surface p-5">
-                        <p class="text-muted mb-0">Нет пользователей для отображения.</p>
-                    </div>
-                </div>
+                        <div class="sf-user-card-actions">
+                            <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-primary">
+                                Открыть профиль
+                            </a>
+                            {% if profile_user.pk == request.user.pk %}
+                                <a href="{% url 'users:profile_delete' %}" class="btn btn-secondary">
+                                    Удаление
+                                </a>
+                            {% else %}
+                                <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
+                                    Удаление недоступно
+                                </a>
+                            {% endif %}
+                        </div>
+                    </article>
                 {% endfor %}
             </div>
-        </div>
-    </section>
+        {% else %}
+            <div class="sf-empty-state sf-empty-state-lg">
+                <div class="sf-empty-state-title">Пользователи не найдены</div>
+                <p class="sf-empty-state-text">
+                    Когда в системе появятся аккаунты, они будут отображаться здесь.
+                </p>
+            </div>
+        {% endif %}
+    </div>
+</section>
 {% endblock %}
