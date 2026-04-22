@@ -677,6 +677,51 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertIsNotNone(self.order.cancelled_at)
         self.assertEqual(self.variant.quantity, 10)
 
+    def test_cancelled_order_cannot_be_reopened_from_dashboard(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+        self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "cancelled"},
+        )
+
+        response = self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "new"},
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertContains(response, "Нельзя изменить заказ после отмены или выдачи.")
+
+    def test_delivered_order_cannot_move_back_to_processing_from_dashboard(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+        self.client.post(
+            reverse("store:dashboard_order_payment_status_update", kwargs={"pk": self.order.pk}),
+            data={"payment_status": Order.PaymentStatus.SUCCEEDED},
+        )
+        self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "issued"},
+        )
+
+        response = self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "processing"},
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.DELIVERED)
+        self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+        self.assertContains(response, "Нельзя изменить заказ после отмены или выдачи.")
+
     def test_orders_dashboard_forbidden_for_regular_user(self):
         self.client.login(email="dashboard-user@example.com", password="userpass123")
 

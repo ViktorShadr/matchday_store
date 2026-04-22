@@ -1,4 +1,5 @@
 import logging
+import secrets
 
 from django.conf import settings
 from django.contrib import messages
@@ -165,13 +166,14 @@ class ResendOwnConfirmationEmailView(LoginRequiredMixin, View):
                 messages.info(request, f"Повторная отправка будет доступна через {seconds_left} сек.")
                 return redirect("users:profile_detail", pk=user.pk)
 
-        confirmation_token = user.generate_email_token()
+        confirmation_token = secrets.token_urlsafe(32)
         if not _send_confirmation_email_with_fallback(user.email, confirmation_token):
             messages.error(request, "Не удалось отправить письмо подтверждения. Попробуйте позже.")
             return redirect("users:profile_detail", pk=user.pk)
 
+        user.email_token = confirmation_token
         user.confirmation_email_last_sent_at = now
-        user.save(update_fields=["confirmation_email_last_sent_at"])
+        user.save(update_fields=["email_token", "confirmation_email_last_sent_at"])
         messages.success(request, "Письмо отправлено. Проверьте почту.")
         return redirect("users:profile_detail", pk=user.pk)
 

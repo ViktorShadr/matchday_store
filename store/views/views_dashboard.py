@@ -64,6 +64,7 @@ DASHBOARD_ORDER_STATUS_META = {
 }
 
 DASHBOARD_ORDER_STATUS_KEYS = {choice[0] for choice in DASHBOARD_ORDER_STATUS_CHOICES}
+FINAL_DASHBOARD_ORDER_STATUS_KEYS = frozenset({"issued", "cancelled"})
 
 DASHBOARD_PAYMENT_STATUS_CHOICES = (
     (Order.PaymentStatus.PENDING, "Ожидает оплаты"),
@@ -370,6 +371,11 @@ class DashboardOrderStatusUpdateView(ModeratorRequiredMixin, View):
         order = get_object_or_404(Order, pk=self.kwargs["pk"])
         next_status = request.POST.get("status", "").strip()
         if next_status not in DASHBOARD_ORDER_STATUS_KEYS:
+            return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
+        current_status = _get_dashboard_order_status_key(order)
+        if current_status in FINAL_DASHBOARD_ORDER_STATUS_KEYS and next_status != current_status:
+            messages.error(request, "Нельзя изменить заказ после отмены или выдачи.")
             return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
         if next_status == "cancelled":

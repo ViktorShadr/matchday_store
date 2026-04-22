@@ -221,6 +221,23 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Email уже подтвержден")
         mock_confirmation_email.delay.assert_not_called()
 
+    def test_resend_confirmation_email_failure_keeps_existing_token(self):
+        old_token = self.user.generate_email_token()
+        self.client.login(email="user@example.com", password="userpass123")
+
+        with patch("users.views.send_confirmation_email") as mock_confirmation_email:
+            with patch("users.views.send_confirmation_email_sync", return_value=False) as mock_confirmation_email_sync:
+                mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
+                response = self.client.post(reverse("users:resend_confirmation"), follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Не удалось отправить письмо подтверждения. Попробуйте позже.")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email_token, old_token)
+        self.assertIsNone(self.user.confirmation_email_last_sent_at)
+        mock_confirmation_email.delay.assert_called_once()
+        mock_confirmation_email_sync.assert_called_once()
+
     def test_registration_view_failure(self):
         """Проверяет сценарий 'registration view failure'."""
         form_data = {"email": "user@example.com", "password1": "pass123", "password2": "different"}  # Already exists
