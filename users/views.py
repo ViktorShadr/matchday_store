@@ -1,5 +1,4 @@
 import logging
-import secrets
 
 from django.conf import settings
 from django.contrib import messages
@@ -26,23 +25,10 @@ from users.forms import (
 )
 from users.models import User
 from store.mixins.cart_mixins import CartContextMixin
+from users.application import EmailConfirmationService
 from users.tasks import send_confirmation_email, send_confirmation_email_sync, send_welcome_email
 
 logger = logging.getLogger(__name__)
-CONFIRMATION_EMAIL_RESEND_COOLDOWN_SECONDS = 60
-
-
-def _send_confirmation_email_with_fallback(user_email: str, confirmation_token: str) -> bool:
-    """Попробовать отправить письмо через Celery и откатиться на синхронную отправку."""
-    try:
-        send_confirmation_email.delay(user_email, confirmation_token)
-        return True
-    except Exception:
-        logger.exception(
-            "Ошибка постановки задачи отправки подтверждения для %s, используем sync fallback",
-            user_email,
-        )
-        return send_confirmation_email_sync(user_email, confirmation_token)
 
 
 class CustomLoginView(CartContextMixin, LoginView):
@@ -123,15 +109,7 @@ class CustomRegistrationView(CartContextMixin, CreateView):
                 user.is_active = True
                 user.save(update_fields=["is_active"])
             self.object = user
-            confirmation_token = user.generate_email_token()
-
-            def _dispatch_confirmation_email():
-                is_sent = _send_confirmation_email_with_fallback(user.email, confirmation_token)
-                send_result["success"] = is_sent
-                if is_sent:
-                    User.objects.filter(pk=user.pk).update(confirmation_email_last_sent_at=timezone.now())
-
-            transaction.on_commit(_dispatch_confirmation_email)
+            EmailConfirmationService.schedule_confirmation_for_new_user(user, send_result)
 
         if send_result["success"]:
             messages.success(
@@ -157,23 +135,15 @@ class ResendOwnConfirmationEmailView(LoginRequiredMixin, View):
             messages.info(request, "Email уже подтвержден.")
             return redirect("users:profile_detail", pk=user.pk)
 
-        now = timezone.now()
-        last_sent = user.confirmation_email_last_sent_at
-        if last_sent is not None:
-            elapsed_seconds = int((now - last_sent).total_seconds())
-            if elapsed_seconds < CONFIRMATION_EMAIL_RESEND_COOLDOWN_SECONDS:
-                seconds_left = CONFIRMATION_EMAIL_RESEND_COOLDOWN_SECONDS - elapsed_seconds
-                messages.info(request, f"Повторная отправка будет доступна через {seconds_left} сек.")
-                return redirect("users:profile_detail", pk=user.pk)
+        can_resend, seconds_left = EmailConfirmationService.can_resend(user)
+        if not can_resend:
+            messages.info(request, f"Повторная отправка будет доступна через {seconds_left} сек.")
+            return redirect("users:profile_detail", pk=user.pk)
 
-        confirmation_token = secrets.token_urlsafe(32)
-        if not _send_confirmation_email_with_fallback(user.email, confirmation_token):
+        if not EmailConfirmationService.resend_confirmation(user):
             messages.error(request, "Не удалось отправить письмо подтверждения. Попробуйте позже.")
             return redirect("users:profile_detail", pk=user.pk)
 
-        user.email_token = confirmation_token
-        user.confirmation_email_last_sent_at = now
-        user.save(update_fields=["email_token", "confirmation_email_last_sent_at"])
         messages.success(request, "Письмо отправлено. Проверьте почту.")
         return redirect("users:profile_detail", pk=user.pk)
 

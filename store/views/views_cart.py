@@ -8,10 +8,12 @@ from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 
+from store.application import CartContextResolver
 from store.services.cart_service import CartService
 
 # Глобальный экземпляр для обратной совместимости
 cart_service = CartService()
+cart_context_resolver = CartContextResolver()
 from store.services.cart_validator import CartValidator
 from store.services.cart_exceptions import (
     CartException,
@@ -98,6 +100,7 @@ class AddToCartView(View):
         """Обрабатывает POST-запрос."""
         wants_json = should_return_json(request)
         try:
+            cart_context = cart_context_resolver.resolve_request(request)
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
             quantity_str = request.POST.get("quantity", "1")
@@ -105,8 +108,8 @@ class AddToCartView(View):
             variant_id, quantity = CartValidator.validate_add_to_cart_input(variant_id, quantity_str)
 
             # Добавляем товар в корзину
-            cart_item = cart_service.add_item(request, variant_id, quantity)
-            cart = cart_service.get_or_create_cart(request)
+            cart_item = cart_service.add_item(cart_context, variant_id, quantity)
+            cart = cart_context.cart
             success_message = f'Товар "{cart_item.product_variant.product.name}" добавлен в корзину'
 
             if wants_json:
@@ -169,6 +172,7 @@ class UpdateCartView(View):
         """Обрабатывает POST-запрос."""
         wants_json = should_return_json(request)
         try:
+            cart_context = cart_context_resolver.resolve_request(request)
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
             quantity_str = request.POST.get("quantity", "1")
@@ -176,8 +180,8 @@ class UpdateCartView(View):
             variant_id, quantity = CartValidator.validate_update_quantity_input(variant_id, quantity_str)
 
             # Обновляем товар в корзине
-            cart_item = cart_service.update_item_quantity(request, variant_id, quantity)
-            cart = cart_service.get_or_create_cart(request)
+            cart_item = cart_service.update_item_quantity(cart_context, variant_id, quantity)
+            cart = cart_context.cart
             success_message = "Количество товара обновлено"
 
             if wants_json:
@@ -241,15 +245,16 @@ class RemoveFromCartView(View):
         """Обрабатывает POST-запрос."""
         wants_json = should_return_json(request)
         try:
+            cart_context = cart_context_resolver.resolve_request(request)
             # Валидируем входные данные
             variant_id = request.POST.get("variant_id")
             variant_id = CartValidator.validate_remove_item_input(variant_id)
 
             # Удаляем товар из корзины
-            success = cart_service.remove_item(request, variant_id)
+            success = cart_service.remove_item(cart_context, variant_id)
 
             if success:
-                cart = cart_service.get_or_create_cart(request)
+                cart = cart_context.cart
                 success_message = "Товар удален из корзины"
                 if wants_json:
                     return JsonResponse(

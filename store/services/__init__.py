@@ -13,7 +13,6 @@ from .cart_exceptions import (
     CartOperationError,
 )
 from .cart_validator import CartValidator
-from .cart_service import CartService
 
 __all__ = [
     "get_catalog_queryset",
@@ -29,5 +28,4 @@ __all__ = [
     "ProductVariantNotFoundError",
     "CartOperationError",
     "CartValidator",
-    "CartService",
 ]

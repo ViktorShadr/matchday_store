@@ -6,9 +6,3 @@ class PaymentsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "payments"
-
-    def ready(self):
-        """Инициализация приложения при запуске."""
-        from . import signals
-
-        _ = signals

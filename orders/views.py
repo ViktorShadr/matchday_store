@@ -1,16 +1,15 @@
-from uuid import uuid4
-
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.conf import settings
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import FormView, TemplateView
 
+from orders.application import CheckoutContext, CheckoutSessionService
 from orders.forms import CheckoutForm
 from orders.models import Order
 from orders.services import CheckoutError, CheckoutService
+from store.application import CartContextResolver
 
 # Глобальный экземпляр для обратной совместимости
 checkout_service = CheckoutService()
@@ -19,6 +18,7 @@ from store.services.cart_service import CartService
 
 # Глобальный экземпляр для обратной совместимости
 cart_service = CartService()
+cart_context_resolver = CartContextResolver()
 
 
 class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
@@ -26,26 +26,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
 
     template_name = "orders/checkout.html"
     form_class = CheckoutForm
-    checkout_token_session_key = "_checkout_token"
-    checkout_processed_session_key = "_checkout_processed"
-
-    def _get_processed_order_for_token(self, request, submitted_token: str):
-        """Вернуть уже созданный заказ для повторного submit с тем же токеном."""
-        if not submitted_token:
-            return None
-
-        processed_checkout = request.session.get(self.checkout_processed_session_key) or {}
-        if processed_checkout.get("token") != submitted_token:
-            return None
-
-        order_id = processed_checkout.get("order_id")
-        if not order_id:
-            return None
-
-        try:
-            return Order.objects.get(pk=order_id, user=request.user)
-        except Order.DoesNotExist:
-            return None
+    checkout_session_service = CheckoutSessionService()
 
     def dispatch(self, request, *args, **kwargs):
         """Не допускать оформление с пустой корзиной."""
@@ -60,17 +41,19 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
             )
             return redirect(reverse("users:profile_detail", kwargs={"pk": request.user.pk}))
 
-        cart_summary = cart_service.get_cart_summary(request)
+        cart_context = cart_context_resolver.resolve_request(request)
+        cart_summary = cart_service.get_cart_summary(cart_context)
         if not cart_summary["items"]:
             if request.method == "POST":
                 submitted_token = (request.POST.get("checkout_token") or "").strip()
-                processed_order = self._get_processed_order_for_token(request, submitted_token)
+                processed_order = self.checkout_session_service.get_processed_order_for_token(request, submitted_token)
                 if processed_order:
                     return redirect(reverse("orders:checkout_success", kwargs={"pk": processed_order.pk}))
 
             messages.warning(request, "Корзина пуста. Добавьте товары перед оформлением заказа.")
             return redirect("store:cart")
         self.cart_summary = cart_summary
+        self.cart_context = cart_context
         return super().dispatch(request, *args, **kwargs)
 
     def get_initial(self):
@@ -86,30 +69,16 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
         """Сформировать контекст страницы оформления."""
         context = super().get_context_data(**kwargs)
         context.update(self.cart_summary)
-        context["checkout_token"] = self._get_or_create_checkout_token()
-        context["pickup_location"] = {
-            "code": settings.STORE_PICKUP_LOCATION_CODE,
-            "name": settings.STORE_PICKUP_LOCATION_NAME,
-            "address": settings.STORE_PICKUP_ADDRESS,
-            "hours": settings.STORE_PICKUP_HOURS,
-            "phone": settings.STORE_PICKUP_PHONE,
-        }
+        context["checkout_token"] = self.checkout_session_service.get_or_create_checkout_token(self.request)
+        context["pickup_location"] = self.checkout_session_service.build_pickup_location()
         return context
-
-    def _get_or_create_checkout_token(self):
-        token = self.request.session.get(self.checkout_token_session_key)
-        if not token:
-            token = uuid4().hex
-            self.request.session[self.checkout_token_session_key] = token
-            self.request.session.modified = True
-        return token
 
     def form_valid(self, form):
         """Создать заказ из корзины."""
-        session_token = self._get_or_create_checkout_token()
+        session_token = self.checkout_session_service.get_or_create_checkout_token(self.request)
         submitted_token = (self.request.POST.get("checkout_token") or session_token).strip()
 
-        processed_order = self._get_processed_order_for_token(self.request, submitted_token)
+        processed_order = self.checkout_session_service.get_processed_order_for_token(self.request, submitted_token)
         if processed_order:
             return redirect(reverse("orders:checkout_success", kwargs={"pk": processed_order.pk}))
 
@@ -119,18 +88,15 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
 
         try:
             order = checkout_service.create_order_from_cart(
-                self.request, form.cleaned_data, checkout_token=submitted_token
+                CheckoutContext(user=self.request.user, cart_context=self.cart_context),
+                form.cleaned_data,
+                checkout_token=submitted_token,
             )
         except CheckoutError as exc:
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 
-        self.request.session[self.checkout_processed_session_key] = {
-            "token": submitted_token,
-            "order_id": order.pk,
-        }
-        self.request.session.pop(self.checkout_token_session_key, None)
-        self.request.session.modified = True
+        self.checkout_session_service.mark_checkout_processed(self.request, submitted_token, order.pk)
         return redirect(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
 
 
@@ -148,10 +114,5 @@ class CheckoutSuccessView(LoginRequiredMixin, CartContextMixin, TemplateView):
             raise Http404 from exc
 
         context["order"] = order
-        context["pickup_location"] = {
-            "name": settings.STORE_PICKUP_LOCATION_NAME,
-            "address": settings.STORE_PICKUP_ADDRESS,
-            "hours": settings.STORE_PICKUP_HOURS,
-            "phone": settings.STORE_PICKUP_PHONE,
-        }
+        context["pickup_location"] = CheckoutSessionService.build_pickup_location()
         return context

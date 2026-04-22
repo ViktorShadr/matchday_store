@@ -1,6 +1,5 @@
-from django.db.models import Prefetch
-
-from store.models import Product, ProductVariant
+from store.presenters.catalog_presenters import ProductCardPresenter
+from store.queries.catalog_queries import CatalogQueryService
 
 
 def get_catalog_queryset():
@@ -15,13 +14,7 @@ def get_catalog_queryset():
     Returns:
         QuerySet: Оптимизированный queryset товаров
     """
-    return Product.objects.select_related("category").prefetch_related(
-        "images",
-        Prefetch(
-            "variants",
-            queryset=ProductVariant.objects.select_related("image").order_by("price", "id"),
-        ),
-    )
+    return CatalogQueryService.base_queryset()
 
 
 def enrich_product(product):
@@ -44,32 +37,7 @@ def enrich_product(product):
     Returns:
         Product: Тот же объект товара с добавленными атрибутами
     """
-    images = list(product.images.all())
-    variants = list(product.variants.all())
-    available_variants = [variant for variant in variants if variant.quantity > 0]
-
-    primary_image = next((image for image in images if image.is_primary), None)
-    first_image = primary_image or (images[0] if images else None)
-    first_variant = variants[0] if variants else None
-
-    product.display_image = (
-        first_image.image if first_image else getattr(getattr(first_variant, "image", None), "image", None)
-    )
-    price_source = available_variants if available_variants else variants
-    if price_source:
-        prices = [variant.price for variant in price_source if variant.price is not None]
-        product.display_price = min(prices) if prices else None
-    else:
-        product.display_price = None
-
-    product.in_stock = bool(available_variants)
-    product.available_variant_count = len(available_variants)
-
-    # ID первого доступного варианта для кнопки быстрого добавления
-    first_available_variant = available_variants[0] if available_variants else None
-    product.first_available_variant_id = first_available_variant.id if first_available_variant else None
-
-    return product
+    return ProductCardPresenter.enrich(product)
 
 
 def enrich_products(products):
@@ -84,4 +52,4 @@ def enrich_products(products):
     Returns:
         list[Product]: Список обогащённых товаров
     """
-    return [enrich_product(product) for product in products]
+    return ProductCardPresenter.enrich_many(products)

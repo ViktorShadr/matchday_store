@@ -6,7 +6,7 @@ class ICheckoutService(ABC):
 
     @abstractmethod
     def create_order_from_cart(
-        self, request, cleaned_data: Dict[str, Any], checkout_token: Optional[str] = None
+        self, checkout_context, cleaned_data: Dict[str, Any], checkout_token: Optional[str] = None
     ):
         """Создать заказ из корзины."""
         pass

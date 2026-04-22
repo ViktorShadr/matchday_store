@@ -1,12 +1,11 @@
 from django.urls import reverse_lazy
-from django.db.models import Min, Q, Sum, Value
-from django.db.models.functions import Coalesce
 from django.views.generic import DeleteView, DetailView, ListView, TemplateView, UpdateView, CreateView
 
 from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, ModeratorRequiredMixin
 from store.mixins.cart_mixins import CartContextMixin
 from store.models import Product
 from store.services import enrich_product, enrich_products, ProductDisplayService, PermissionService
+from store.queries import CatalogQueryService
 
 
 class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, TemplateView):
@@ -25,7 +24,7 @@ class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, T
     def get_context_data(self, **kwargs):
         """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
-        context["popular_products"] = enrich_products(self.get_catalog_queryset().order_by("-created_at")[:6])
+        context["popular_products"] = enrich_products(CatalogQueryService.build_popular_products_queryset()[:6])
         return context
 
 
@@ -53,39 +52,10 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
 
     def get_queryset(self):
         """Возвращает queryset для текущего представления."""
-        queryset = self.get_catalog_queryset()
-
         query = (self.request.GET.get("q") or "").strip()
-        if query:
-            queryset = queryset.filter(Q(name__icontains=query) | Q(description__icontains=query))
-
         category_id = self.request.GET.get("category_id")
-        if category_id:
-            queryset = queryset.filter(category_id=category_id)
-
         sort = self.request.GET.get("sort")
-        if sort in {"price_asc", "price_desc"}:
-            queryset = queryset.annotate(
-                min_available_variant_price=Min("variants__price", filter=Q(variants__quantity__gt=0)),
-                min_variant_price=Coalesce(
-                    "min_available_variant_price",
-                    Min("variants__price"),
-                ),
-            )
-
-        if sort == "price_asc":
-            return queryset.order_by("min_variant_price", "name", "id")
-        if sort == "price_desc":
-            return queryset.order_by("-min_variant_price", "name", "id")
-        if sort == "name_asc":
-            return queryset.order_by("name", "id")
-        if sort == "name_desc":
-            return queryset.order_by("-name", "id")
-
-        queryset = queryset.annotate(
-            popularity_score=Coalesce(Sum("variants__order_items__quantity"), Value(0)),
-        )
-        return queryset.order_by("-popularity_score", "-created_at", "id")
+        return CatalogQueryService.build_product_list_queryset(query=query, category_id=category_id, sort=sort)
 
     def get_context_data(self, **kwargs):
         """Формирует контекст для шаблона."""

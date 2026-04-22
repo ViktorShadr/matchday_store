@@ -5,7 +5,7 @@
 
 from typing import List, Dict, Any
 
-from store.mixins import is_moderator_user
+from store.presenters import CartItemPresenter, CategoryPresenter, PermissionPresenter, ProductDetailsPresenter
 
 
 class PermissionService:
@@ -22,7 +22,7 @@ class PermissionService:
         Returns:
             bool: True если пользователь модератор, False иначе
         """
-        return is_moderator_user(user)
+        return PermissionPresenter.is_moderator(user)
 
     @staticmethod
     def is_staff(user) -> bool:
@@ -35,7 +35,7 @@ class PermissionService:
         Returns:
             bool: True если пользователь персонал, False иначе
         """
-        return user.is_authenticated and user.is_staff
+        return PermissionPresenter.is_staff(user)
 
     @staticmethod
     def get_user_permissions(user) -> Dict[str, bool]:
@@ -48,11 +48,7 @@ class PermissionService:
         Returns:
             Dict[str, bool]: Словарь с правами
         """
-        return {
-            "is_moderator": PermissionService.is_moderator(user),
-            "is_staff": PermissionService.is_staff(user),
-            "is_authenticated": user.is_authenticated,
-        }
+        return PermissionPresenter.present(user)
 
 
 class CategoryService:
@@ -70,20 +66,7 @@ class CategoryService:
         Returns:
             Dict[str, Any]: Словарь с обогащёнными данными
         """
-        data = {
-            "category": category,
-            "name": category.name,
-            "description": category.description,
-            "product_count": category.products.count(),
-            "products_exist": category.products.exists(),
-            "created_at": category.created_at,
-            "updated_at": category.updated_at,
-        }
-
-        if user:
-            data["user_permissions"] = PermissionService.get_user_permissions(user)
-
-        return data
+        return CategoryPresenter.present(category, user=user)
 
 class ProductDisplayService:
     """Сервис для подготовки данных товаров к отображению в шаблонах"""
@@ -99,21 +82,7 @@ class ProductDisplayService:
         Returns:
             Dict[str, Any]: Словарь с детальными данными
         """
-        variants = list(product.variants.all()) if hasattr(product, "variants") else []
-        images = list(product.images.all()) if hasattr(product, "images") else []
-
-        return {
-            "id": product.pk,
-            "name": product.name,
-            "category": product.category.name if product.category else "Без категории",
-            "description": product.description or "Описание пока не добавлено.",
-            "price": getattr(product, "display_price", None),
-            "image": getattr(product, "display_image", None),
-            "images": images,
-            "variants": [ProductDisplayService.prepare_variant_data(v) for v in variants],
-            "variants_exist": len(variants) > 0,
-            "images_exist": len(images) > 0,
-        }
+        return ProductDetailsPresenter.present(product)
 
     @staticmethod
     def prepare_variant_data(variant) -> Dict[str, Any]:
@@ -126,16 +95,7 @@ class ProductDisplayService:
         Returns:
             Dict[str, Any]: Словарь с данными варианта
         """
-        return {
-            "id": variant.id,
-            "size": variant.size,
-            "color": variant.color,
-            "price": variant.price,
-            "price_formatted": f"{variant.price} ₽",
-            "quantity": variant.quantity,
-            "in_stock": variant.quantity > 0,
-            "product_name": variant.product.name if variant.product else "",
-        }
+        return ProductDetailsPresenter.present_variant(variant)
 
     @staticmethod
     def prepare_category_product(product) -> Dict[str, Any]:
@@ -176,36 +136,11 @@ class CartDisplayService:
         Returns:
             Dict[str, Any]: Словарь с данными товара в корзине
         """
-        variant = cart_item.product_variant
-        product = variant.product
-        size = CartDisplayService._clean_variant_value(variant.size)
-        color = CartDisplayService._clean_variant_value(variant.color)
-        variant_parts = [part for part in (size, color) if part]
-
-        return {
-            "variant_id": variant.id,
-            "product_id": product.id,
-            "product_name": product.name,
-            "size": size or None,
-            "color": color or None,
-            "variant_label": " / ".join(variant_parts),
-            "price": variant.price,
-            "price_formatted": f"{variant.price} ₽",
-            "quantity": cart_item.quantity,
-            "max_quantity": variant.quantity,
-            "total_price": cart_item.total_price,
-            "total_price_formatted": f"{cart_item.total_price} ₽",
-            "image": getattr(variant.image.image if variant.image else None, "url", None),
-        }
+        return CartItemPresenter.present(cart_item)
 
     @staticmethod
     def _clean_variant_value(value: Any) -> str:
-        if value is None:
-            return ""
-        normalized = str(value).strip()
-        if normalized.lower() == "none":
-            return ""
-        return normalized
+        return CartItemPresenter.clean_variant_value(value)
 
     @staticmethod
     def prepare_cart_items(items) -> List[Dict[str, Any]]:
@@ -218,4 +153,4 @@ class CartDisplayService:
         Returns:
             List[Dict[str, Any]]: Список обогащённых данных товаров
         """
-        return [CartDisplayService.prepare_cart_item(item) for item in items]
+        return CartItemPresenter.present_many(items)
