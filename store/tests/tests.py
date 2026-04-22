@@ -235,6 +235,33 @@ class ProductListViewTest(TestCase):
         prices = [product.display_price for product in response.context["products"]]
         self.assertEqual(prices, sorted(prices, reverse=True))
 
+    def test_product_list_price_sort_uses_in_stock_display_price(self):
+        """Сортировка по цене должна учитывать ту же доступную цену, что и карточка товара."""
+        lower_priced_product = Product.objects.get(name="Футболка 1")
+        conflicted_product = Product.objects.get(name="Футболка 0")
+
+        conflicted_variant = conflicted_product.variants.get()
+        conflicted_variant.quantity = 0
+        conflicted_variant.save(update_fields=["quantity", "updated_at"])
+
+        ProductVariant.objects.create(
+            product=conflicted_product,
+            size="XL",
+            color="Синий",
+            price=Decimal("1005.00"),
+            quantity=10,
+            image=conflicted_variant.image,
+        )
+
+        response = self.client.get(reverse("store:product_list"), {"sort": "price_asc"})
+
+        self.assertEqual(response.status_code, 200)
+        products = list(response.context["products"])
+        lower_priced_index = next(index for index, product in enumerate(products) if product.pk == lower_priced_product.pk)
+        conflicted_index = next(index for index, product in enumerate(products) if product.pk == conflicted_product.pk)
+        self.assertLess(lower_priced_index, conflicted_index)
+        self.assertEqual(next(product.display_price for product in products if product.pk == conflicted_product.pk), Decimal("1005.00"))
+
     def test_product_list_sort_by_name_asc(self):
         """Список должен сортироваться по названию А-Я."""
         response = self.client.get(reverse("store:product_list"), {"sort": "name_asc"})

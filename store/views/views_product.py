@@ -65,7 +65,13 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
 
         sort = self.request.GET.get("sort")
         if sort in {"price_asc", "price_desc"}:
-            queryset = queryset.annotate(min_variant_price=Min("variants__price"))
+            queryset = queryset.annotate(
+                min_available_variant_price=Min("variants__price", filter=Q(variants__quantity__gt=0)),
+                min_variant_price=Coalesce(
+                    "min_available_variant_price",
+                    Min("variants__price"),
+                ),
+            )
 
         if sort == "price_asc":
             return queryset.order_by("min_variant_price", "name", "id")
