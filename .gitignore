@@ -6,6 +6,7 @@
 /venv/
 /env/
 /.env/
+/.env.prod
 
 # Python cache and build files
 __pycache__/
