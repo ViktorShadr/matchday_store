@@ -226,14 +226,14 @@ img {
 
 .sf-logo img,
 .sf-logo-mark img {
-    width: 52px;
-    height: 52px;
+    width: clamp(56px, 6vw, 68px);
+    height: clamp(56px, 6vw, 68px);
     object-fit: contain;
 }
 
 .sf-logo-mark {
-    width: 60px;
-    height: 60px;
+    width: clamp(66px, 7vw, 78px);
+    height: clamp(66px, 7vw, 78px);
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -1201,7 +1201,7 @@ textarea.form-control:focus {
     border-radius: 28px;
     padding: 36px;
     background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.18), transparent 28%),
-    linear-gradient(135deg, #0b1220 0%, #111827 50%, #15356d 100%);
+    linear-gradient(135deg, #0b1220 0%, #111827 50%, #1b4aa3 100%);
     color: #fff;
     box-shadow: var(--sf-shadow-lg);
 }
