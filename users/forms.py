@@ -14,6 +14,11 @@ class UserRegistrationForm(UserCreationForm):
             attrs={
                 "class": "form-control",
                 "placeholder": "Введите ваш email",
+                "autocomplete": "email",
+                "inputmode": "email",
+                "autocapitalize": "off",
+                "spellcheck": "false",
+                "autofocus": True,
             }
         ),
     )
@@ -23,6 +28,7 @@ class UserRegistrationForm(UserCreationForm):
             attrs={
                 "class": "form-control",
                 "placeholder": "Введите пароль",
+                "autocomplete": "new-password",
             }
         ),
     )
@@ -32,6 +38,7 @@ class UserRegistrationForm(UserCreationForm):
             attrs={
                 "class": "form-control",
                 "placeholder": "Повторите пароль",
+                "autocomplete": "new-password",
             }
         ),
     )
@@ -59,6 +66,11 @@ class UserLoginForm(AuthenticationForm):
             attrs={
                 "class": "form-control",
                 "placeholder": "Введите ваш email",
+                "autocomplete": "username email",
+                "inputmode": "email",
+                "autocapitalize": "off",
+                "spellcheck": "false",
+                "autofocus": True,
             }
         ),
     )
@@ -68,6 +80,7 @@ class UserLoginForm(AuthenticationForm):
             attrs={
                 "class": "form-control",
                 "placeholder": "Введите пароль",
+                "autocomplete": "current-password",
             }
         ),
     )
@@ -87,18 +100,21 @@ class UserProfileForm(forms.ModelForm):
                 attrs={
                     "class": "form-control",
                     "placeholder": "Введите имя",
+                    "autocomplete": "given-name",
                 }
             ),
             "last_name": forms.TextInput(
                 attrs={
                     "class": "form-control",
                     "placeholder": "Введите фамилию",
+                    "autocomplete": "family-name",
                 }
             ),
             "city": forms.TextInput(
                 attrs={
                     "class": "form-control",
                     "placeholder": "Введите город",
+                    "autocomplete": "address-level2",
                 }
             ),
             "avatar": forms.FileInput(attrs={"class": "form-control"}),
@@ -106,6 +122,9 @@ class UserProfileForm(forms.ModelForm):
                 attrs={
                     "class": "form-control",
                     "placeholder": "Введите номер телефона",
+                    "type": "tel",
+                    "autocomplete": "tel",
+                    "inputmode": "tel",
                 }
             ),
         }
@@ -120,6 +139,7 @@ class ProfileDeleteConfirmForm(forms.Form):
             attrs={
                 "class": "form-control",
                 "placeholder": "Введите ваш текущий пароль",
+                "autocomplete": "current-password",
             }
         ),
     )
