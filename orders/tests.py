@@ -20,7 +20,13 @@ from orders.services import (
     OrderCancellationError,
     OrderCancellationService,
 )
-from orders.tasks import send_staff_new_order_notification_sync
+from orders.tasks import (
+    NotificationDeliveryError,
+    send_order_notification,
+    send_order_notification_sync,
+    send_staff_new_order_notification,
+    send_staff_new_order_notification_sync,
+)
 from payments.models import Payment
 from store.application import CartContextResolver
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
@@ -1033,3 +1039,60 @@ class OrderStaffNotificationTaskTest(TestCase):
 
         self.assertFalse(result)
         mock_send_mail.assert_not_called()
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com"],
+    )
+    @patch("orders.tasks.logger.exception")
+    @patch("orders.tasks.send_mail", side_effect=RuntimeError("smtp unavailable"))
+    def test_send_staff_new_order_notification_sync_logs_error_context(
+        self,
+        mock_send_mail,
+        mock_logger_exception,
+    ):
+        result = send_staff_new_order_notification_sync(self.order.id)
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_exception.assert_called_once()
+        log_extra = mock_logger_exception.call_args.kwargs["extra"]
+        self.assertEqual(log_extra["order_id"], self.order.id)
+        self.assertEqual(log_extra["event_key"], "staff_created")
+        self.assertEqual(log_extra["reason"], "send_mail_failed")
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.exception")
+    @patch("orders.tasks.send_mail", side_effect=RuntimeError("smtp unavailable"))
+    def test_send_order_notification_sync_logs_error_context(
+        self,
+        mock_send_mail,
+        mock_logger_exception,
+    ):
+        result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_exception.assert_called_once()
+        log_extra = mock_logger_exception.call_args.kwargs["extra"]
+        self.assertEqual(log_extra["order_id"], self.order.id)
+        self.assertEqual(log_extra["event_key"], "created")
+        self.assertEqual(log_extra["reason"], "send_mail_failed")
+
+
+class OrderNotificationTaskRetryConfigurationTest(SimpleTestCase):
+    def _assert_retry_settings(self, task):
+        self.assertEqual(task.autoretry_for, (NotificationDeliveryError,))
+        self.assertTrue(task.retry_backoff)
+        self.assertEqual(task.retry_backoff_max, 300)
+        self.assertTrue(task.retry_jitter)
+        self.assertEqual(task.retry_kwargs, {"max_retries": 5})
+
+    def test_send_order_notification_has_retry_backoff(self):
+        self._assert_retry_settings(send_order_notification)
+
+    def test_send_staff_new_order_notification_has_retry_backoff(self):
+        self._assert_retry_settings(send_staff_new_order_notification)

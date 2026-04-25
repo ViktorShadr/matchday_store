@@ -6,3 +6,7 @@ class PaymentsConfig(AppConfig):
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "payments"
+
+    def ready(self):
+        # Регистрируем signal handlers для синхронизации Order.payment_status
+        import payments.signals  # noqa: F401

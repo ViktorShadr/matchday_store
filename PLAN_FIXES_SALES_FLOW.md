@@ -5,17 +5,17 @@
 
 ## 1) Критичный блок (сделать первым, 1-2 дня)
 
-1. Исправить Celery-регистрацию задач заказов.
+1. [x] Исправить Celery-регистрацию задач заказов.
    - `config/celery.py`: включить autodiscover для `orders` (предпочтительно по `INSTALLED_APPS`).
    - Критерий: worker видит `orders.tasks.send_order_notification`.
 
-2. Добавить уведомление сотруднику о новом заказе.
+2. [x] Добавить уведомление сотруднику о новом заказе.
    - `orders/tasks.py`, `orders/application/order_notification_service.py`.
    - Добавить `STAFF_ORDER_NOTIFICATION_EMAILS` в settings.
    - В уведомлении: номер заказа, сумма, контакты клиента, ссылка на dashboard.
    - Критерий: при создании заказа сотрудник получает уведомление.
 
-3. Привести `docker-compose` к рабочему состоянию.
+3. [ ] Привести `docker-compose` к рабочему состоянию.
    - Развести env для docker и локального запуска.
    - В docker-режиме использовать `DB_HOST=db`.
    - Актуализировать README по запуску.
@@ -23,15 +23,15 @@
 
 ## 2) Высокий приоритет (2-4 дня)
 
-4. Закрыть race condition на смене статусов заказа в dashboard.
+4. [x] Закрыть race condition на смене статусов заказа в dashboard.
    - `orders/application/dashboard_order_flow.py`: `transaction.atomic` + `select_for_update` по `Order`.
    - Добавить тест на параллельные изменения статуса.
 
-5. Подключить сигналы payments.
+5. [x] Подключить сигналы payments.
    - `payments/apps.py`: импорт `payments.signals` в `ready()`.
    - Критерий: любые изменения `Payment` корректно синхронизируют `Order.payment_status`.
 
-6. Повысить надежность уведомлений.
+6. [x] Повысить надежность уведомлений.
    - Добавить retries/backoff для celery task уведомлений.
    - Расширить логирование ошибок отправки (`order_id`, `event_key`, причина).
 

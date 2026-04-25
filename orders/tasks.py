@@ -8,6 +8,23 @@ from django.urls import reverse
 from orders.models import Order
 
 logger = logging.getLogger(__name__)
+STAFF_NEW_ORDER_EVENT_KEY = "staff_created"
+
+
+class NotificationDeliveryError(Exception):
+    """Ошибка отправки уведомления, которую Celery может безопасно ретраить."""
+
+
+def _log_notification_error(order_id: int, event_key: str, reason: str, *, with_traceback: bool = False) -> None:
+    extra = {
+        "order_id": order_id,
+        "event_key": event_key,
+        "reason": reason,
+    }
+    if with_traceback:
+        logger.exception("Ошибка отправки уведомления", extra=extra)
+        return
+    logger.error("Ошибка отправки уведомления", extra=extra)
 
 
 def _build_order_detail_url(order: Order) -> str:
@@ -125,9 +142,9 @@ def _build_staff_new_order_notification_content(order: Order) -> tuple[str, str]
     return subject, message
 
 
-def send_order_notification_sync(order_id: int, event_key: str) -> bool:
+def send_order_notification_sync(order_id: int, event_key: str, *, raise_on_error: bool = False) -> bool:
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
-        logger.error("Ошибка отправки уведомления по заказу: не настроен DEFAULT_FROM_EMAIL")
+        _log_notification_error(order_id, event_key, "invalid_default_from_email")
         return False
 
     try:
@@ -152,14 +169,16 @@ def send_order_notification_sync(order_id: int, event_key: str) -> bool:
         )
         logger.info("Уведомление %s отправлено для заказа %s", event_key, order_id)
         return True
-    except Exception:
-        logger.exception("Ошибка отправки уведомления %s для заказа %s", event_key, order_id)
+    except Exception as exc:
+        _log_notification_error(order_id, event_key, "send_mail_failed", with_traceback=True)
+        if raise_on_error:
+            raise NotificationDeliveryError("Не удалось отправить email-уведомление по заказу") from exc
         return False
 
 
-def send_staff_new_order_notification_sync(order_id: int) -> bool:
+def send_staff_new_order_notification_sync(order_id: int, *, raise_on_error: bool = False) -> bool:
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
-        logger.error("Ошибка отправки staff-уведомления: не настроен DEFAULT_FROM_EMAIL")
+        _log_notification_error(order_id, STAFF_NEW_ORDER_EVENT_KEY, "invalid_default_from_email")
         return False
 
     recipient_list = _get_staff_order_notification_recipients()
@@ -185,16 +204,30 @@ def send_staff_new_order_notification_sync(order_id: int) -> bool:
         )
         logger.info("Staff-уведомление о новом заказе %s отправлено", order_id)
         return True
-    except Exception:
-        logger.exception("Ошибка отправки staff-уведомления о новом заказе %s", order_id)
+    except Exception as exc:
+        _log_notification_error(order_id, STAFF_NEW_ORDER_EVENT_KEY, "send_mail_failed", with_traceback=True)
+        if raise_on_error:
+            raise NotificationDeliveryError("Не удалось отправить staff email-уведомление по заказу") from exc
         return False
 
 
-@shared_task
+@shared_task(
+    autoretry_for=(NotificationDeliveryError,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 5},
+)
 def send_order_notification(order_id: int, event_key: str) -> bool:
-    return send_order_notification_sync(order_id, event_key)
+    return send_order_notification_sync(order_id, event_key, raise_on_error=True)
 
 
-@shared_task
+@shared_task(
+    autoretry_for=(NotificationDeliveryError,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 5},
+)
 def send_staff_new_order_notification(order_id: int) -> bool:
-    return send_staff_new_order_notification_sync(order_id)
+    return send_staff_new_order_notification_sync(order_id, raise_on_error=True)
