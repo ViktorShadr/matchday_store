@@ -71,3 +71,10 @@ volumes:
   postgres_data:
   static_data:
   media_data:
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 100.96.10.0/24
