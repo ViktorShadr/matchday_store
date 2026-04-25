@@ -69,6 +69,7 @@ docker compose --profile worker up --build
 - `DEFAULT_FROM_EMAIL`
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
+- `STAFF_ORDER_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых заказах)
 
 ## Проверка перед деплоем
 

@@ -2,7 +2,12 @@ import logging
 
 from django.db import transaction
 
-from orders.tasks import send_order_notification, send_order_notification_sync
+from orders.tasks import (
+    send_order_notification,
+    send_order_notification_sync,
+    send_staff_new_order_notification,
+    send_staff_new_order_notification_sync,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +32,26 @@ class OrderNotificationService:
     def schedule(cls, order_id: int, event_key: str) -> None:
         transaction.on_commit(lambda: cls.send_with_fallback(order_id, event_key))
 
+    @staticmethod
+    def send_staff_new_order_with_fallback(order_id: int) -> bool:
+        try:
+            send_staff_new_order_notification.delay(order_id)
+            return True
+        except Exception:
+            logger.exception(
+                "Ошибка постановки staff-задачи уведомления о новом заказе %s, используем sync fallback",
+                order_id,
+            )
+            return send_staff_new_order_notification_sync(order_id)
+
+    @classmethod
+    def schedule_staff_created(cls, order_id: int) -> None:
+        transaction.on_commit(lambda: cls.send_staff_new_order_with_fallback(order_id))
+
     @classmethod
     def schedule_created(cls, order_id: int) -> None:
         cls.schedule(order_id, "created")
+        cls.schedule_staff_created(order_id)
 
     @classmethod
     def schedule_cancelled(cls, order_id: int) -> None:

@@ -2,9 +2,9 @@ from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import close_old_connections
+from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from unittest.mock import patch
@@ -18,6 +18,7 @@ from orders.services import (
     OrderCancellationError,
     OrderCancellationService,
 )
+from orders.tasks import send_staff_new_order_notification_sync
 from payments.models import Payment
 from store.application import CartContextResolver
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
@@ -349,7 +350,9 @@ class CheckoutFlowTest(TestCase):
             Payment.objects.filter(order=first_order, idempotency_key=f"checkout-{self.user.id}-shared-token").exists()
         )
         self.assertTrue(
-            Payment.objects.filter(order=second_order, idempotency_key=f"checkout-{second_user.id}-shared-token").exists()
+            Payment.objects.filter(
+                order=second_order, idempotency_key=f"checkout-{second_user.id}-shared-token"
+            ).exists()
         )
 
 
@@ -778,8 +781,13 @@ class OrderNotificationServiceIntegrationTest(TestCase):
             image=self.image,
         )
 
+    @patch("orders.application.order_notification_service.send_staff_new_order_notification")
     @patch("orders.application.order_notification_service.send_order_notification")
-    def test_checkout_schedules_created_notification(self, mock_send_order_notification):
+    def test_checkout_schedules_created_notification(
+        self,
+        mock_send_order_notification,
+        mock_send_staff_new_order_notification,
+    ):
         cart = Cart.objects.create(user=self.user)
         CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=1)
         service = CheckoutService()
@@ -802,6 +810,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
             )
 
         mock_send_order_notification.delay.assert_called_once_with(order.id, "created")
+        mock_send_staff_new_order_notification.delay.assert_called_once_with(order.id)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_cancellation_schedules_cancelled_notification(self, mock_send_order_notification):
@@ -882,3 +891,92 @@ class OrderNotificationServiceIntegrationTest(TestCase):
             ManualPaymentUpdateService().update_order_payment_status(order.id, Order.PaymentStatus.SUCCEEDED)
 
         mock_send_order_notification.delay.assert_called_once_with(order.id, "paid")
+
+
+class OrderStaffNotificationTaskTest(TestCase):
+    """Тесты staff-уведомления о новом заказе."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="staff-notify-buyer@example.com",
+            password="testpass123",
+            first_name="Игорь",
+            last_name="Петров",
+            phone="+79990000001",
+            is_active=True,
+            is_email_confirmed=True,
+        )
+        self.category = Category.objects.create(name="Staff уведомления")
+        self.product = Product.objects.create(name="Толстовка клуба", category=self.category)
+        self.image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("hoodie.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Синий",
+            price=Decimal("3500.00"),
+            quantity=8,
+            image=self.image,
+        )
+        self.order = Order.objects.create(
+            number="ORD-STAFF-1",
+            user=self.user,
+            recipient_name="Игорь Петров",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("7000.00"),
+            total_amount=Decimal("7000.00"),
+            customer_comment="Позвоните за час до готовности",
+            confirmed_at=timezone.now(),
+        )
+        OrderItem.objects.create(
+            order=self.order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=2,
+            line_total=Decimal("7000.00"),
+        )
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com", "staff2@example.com"],
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail")
+    def test_send_staff_new_order_notification_sync_sends_detailed_email(self, mock_send_mail):
+        result = send_staff_new_order_notification_sync(self.order.id)
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        kwargs = mock_send_mail.call_args.kwargs
+        self.assertEqual(kwargs["recipient_list"], ["staff1@example.com", "staff2@example.com"])
+        self.assertIn(self.order.number, kwargs["subject"])
+        self.assertIn("Номер заказа", kwargs["message"])
+        self.assertIn("Сумма заказа", kwargs["message"])
+        self.assertIn(self.order.email, kwargs["message"])
+        self.assertIn(self.order.phone, kwargs["message"])
+        self.assertIn(self.product.name, kwargs["message"])
+        self.assertIn(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}), kwargs["message"])
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        STAFF_ORDER_NOTIFICATION_EMAILS=[],
+    )
+    @patch("orders.tasks.send_mail")
+    def test_send_staff_new_order_notification_sync_skips_when_staff_list_is_empty(self, mock_send_mail):
+        result = send_staff_new_order_notification_sync(self.order.id)
+
+        self.assertFalse(result)
+        mock_send_mail.assert_not_called()
