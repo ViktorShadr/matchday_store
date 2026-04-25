@@ -47,7 +47,6 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
-    profiles: ["worker"]
     ports:
       - "6379:6379"
 
@@ -55,7 +54,6 @@ services:
     build:
       context: .
     restart: unless-stopped
-    profiles: ["worker"]
     env_file:
       - .env
     command: ["celery", "-A", "config", "worker", "-l", "info"]
