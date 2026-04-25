@@ -1,10 +1,12 @@
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from time import sleep
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import close_old_connections
-from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings, skipUnlessDBFeature
 from django.urls import reverse
 from django.utils import timezone
 from unittest.mock import patch
@@ -22,6 +24,7 @@ from orders.tasks import send_staff_new_order_notification_sync
 from payments.models import Payment
 from store.application import CartContextResolver
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
+from store.presenters import DashboardOrderPresenter
 from users.models import User
 
 
@@ -594,6 +597,21 @@ class OrderConcurrencyTest(TransactionTestCase):
         finally:
             close_old_connections()
 
+    def _run_dashboard_status_once(self, order_id: int, next_status: str):
+        close_old_connections()
+        try:
+            service = DashboardOrderFlowService(
+                cancellation_service=OrderCancellationService(),
+                payment_service=ManualPaymentUpdateService(),
+            )
+            order = Order.objects.get(pk=order_id)
+            result = service.update_order_status(order, next_status)
+            return ("ok", next_status, result.message)
+        except Exception as exc:
+            return ("error", next_status, str(exc))
+        finally:
+            close_old_connections()
+
     def test_parallel_checkout_with_same_token_creates_single_order(self):
         """Два параллельных checkout с одним токеном должны вернуть один заказ."""
         token = "parallel-checkout-token"
@@ -630,6 +648,41 @@ class OrderConcurrencyTest(TransactionTestCase):
         self.assertEqual(order.status, Order.Status.CANCELLED)
         self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(self.variant.quantity, 5)
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_parallel_dashboard_status_updates_are_serialized(self):
+        """Параллельные staff-обновления статуса не должны нарушать flow."""
+        order = self._create_cancellable_order()
+        processing_started = Event()
+        original_apply_status = DashboardOrderPresenter.apply_status
+
+        def delayed_apply_status(order_obj, status_key):
+            if status_key == "processing":
+                processing_started.set()
+                sleep(0.2)
+            return original_apply_status(order_obj, status_key)
+
+        with patch(
+            "orders.application.dashboard_order_flow.DashboardOrderPresenter.apply_status",
+            side_effect=delayed_apply_status,
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                processing_future = executor.submit(self._run_dashboard_status_once, order.id, "processing")
+                self.assertTrue(processing_started.wait(timeout=2), "Обновление до processing не стартовало вовремя.")
+                cancelled_future = executor.submit(self._run_dashboard_status_once, order.id, "cancelled")
+                processing_result = processing_future.result()
+                cancelled_result = cancelled_future.result()
+
+        self.assertEqual(processing_result[0], "ok", (processing_result, cancelled_result))
+        self.assertEqual(cancelled_result[0], "error", (processing_result, cancelled_result))
+        self.assertIn("нельзя отменить", cancelled_result[2].lower())
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PROCESSING)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.PACKING)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
         self.assertEqual(self.variant.quantity, 5)
 
 
