@@ -239,6 +239,27 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(self.variant.quantity, 1)
         self.assertEqual(self.cart.items.count(), 1)
 
+    def test_checkout_fails_when_product_is_not_on_sale(self):
+        """Если товар снят с продажи, checkout должен завершаться ошибкой."""
+        self.client.login(email="buyer@example.com", password="testpass123")
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "снят с продажи")
+        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.assertEqual(self.cart.items.count(), 1)
+
     def test_checkout_service_is_idempotent_with_same_token(self):
         """Повторный checkout с тем же токеном должен вернуть уже созданный заказ."""
         service = CheckoutService()

@@ -9,6 +9,7 @@ from ..application.cart_context import CartContext
 from .cart_exceptions import (
     InsufficientStockError,
     ProductVariantNotFoundError,
+    ProductNotOnSaleError,
     CartOperationError,
 )
 
@@ -80,6 +81,9 @@ class CartService:
 
             logger.info("User %s adding variant %s qty %s", cart_context.actor_label, product_variant_id, quantity)
 
+            if not product_variant.product.is_on_sale:
+                raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
+
             # Проверяем наличие товара
             if product_variant.quantity < quantity:
                 logger.warning(
@@ -120,7 +124,7 @@ class CartService:
         except ProductVariant.DoesNotExist:
             logger.error(f"Product variant not found: {product_variant_id}")
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
-        except (InsufficientStockError, ProductVariantNotFoundError):
+        except (InsufficientStockError, ProductVariantNotFoundError, ProductNotOnSaleError):
             # Пробрасываем свои исключения дальше
             raise
         except Exception as e:
@@ -151,6 +155,9 @@ class CartService:
 
             logger.info("User %s updating variant %s qty to %s", cart_context.actor_label, product_variant_id, quantity)
 
+            if not product_variant.product.is_on_sale:
+                raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
+
             if quantity < 1:
                 raise ValueError("Количество должно быть больше 0")
 
@@ -175,7 +182,7 @@ class CartService:
         except ProductVariant.DoesNotExist:
             logger.error(f"Product variant not found: {product_variant_id}")
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
-        except (InsufficientStockError, ProductVariantNotFoundError, ValueError):
+        except (InsufficientStockError, ProductVariantNotFoundError, ProductNotOnSaleError, ValueError):
             raise
         except Exception as e:
             logger.error(f"Error updating cart item: {e}", exc_info=True)

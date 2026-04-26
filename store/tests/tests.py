@@ -51,6 +51,7 @@ class ProductModelTest(TestCase):
         """Проверяет сценарий 'product creation'."""
         self.assertEqual(self.product.name, "Футболка Manchester United")
         self.assertEqual(self.product.category, self.category)
+        self.assertTrue(self.product.is_on_sale)
         self.assertTrue(self.product.created_at)
         self.assertTrue(self.product.updated_at)
 
@@ -171,6 +172,22 @@ class MainViewTest(TestCase):
         self.assertEqual(len(response.context["categories"]), 1)
         self.assertEqual(len(response.context["popular_products"]), 1)
 
+    def test_main_view_uses_primary_image_in_product_card(self):
+        """Карточка на главной должна использовать основное изображение товара."""
+        self.image.is_primary = False
+        self.image.save(update_fields=["is_primary"])
+        primary_image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("main-primary-image.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+
+        response = self.client.get(reverse("store:base"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, primary_image.image.url)
+        self.assertNotContains(response, self.image.image.url)
+
 
 class ProductListViewTest(TestCase):
     """Тесты для ProductListViewTest."""
@@ -288,6 +305,33 @@ class ProductListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Нет в наличии")
 
+    def test_product_list_hides_products_not_on_sale(self):
+        """Товары со снятой продажей не должны отображаться в каталоге."""
+        hidden_product = Product.objects.create(
+            name="Скрытый товар",
+            description="Не должен быть виден на витрине",
+            category=self.category,
+            is_on_sale=False,
+        )
+        hidden_image = ProductImage.objects.create(
+            product=hidden_product,
+            image=SimpleUploadedFile("hidden.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        ProductVariant.objects.create(
+            product=hidden_product,
+            size="L",
+            color="Черный",
+            price=Decimal("1999.00"),
+            quantity=10,
+            image=hidden_image,
+        )
+
+        response = self.client.get(reverse("store:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Скрытый товар")
+
 
 class ProductDetailsViewTest(TestCase):
     """Тесты для ProductDetailsViewTest."""
@@ -338,6 +382,30 @@ class ProductDetailsViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Нет в наличии")
+
+    def test_product_detail_uses_primary_image_as_main(self):
+        """Детальная страница должна показывать основное изображение в главном блоке."""
+        self.image.is_primary = False
+        self.image.save(update_fields=["is_primary"])
+        primary_image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("details-primary-image.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, primary_image.image.url, count=2)
+
+    def test_product_detail_view_404_when_product_not_on_sale(self):
+        """Снятый с продажи товар не должен открываться на витрине."""
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 404)
 
 
 class ProductUpdateViewTest(TestCase):
@@ -556,6 +624,55 @@ class WarehouseStockManagementTest(TestCase):
         self.assertEqual(self.product.name, "Обновленный шарф")
         self.assertEqual(self.product.category_id, new_category.pk)
         self.assertEqual(self.product.description, "Новое описание")
+
+    def test_warehouse_create_product_is_not_on_sale_by_default(self):
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:warehouse_product_create"),
+            data={
+                "name": "Новый складской товар",
+                "category": self.category.pk,
+                "description": "Пока без публикации",
+            },
+        )
+
+        created_product = Product.objects.get(name="Новый складской товар")
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": created_product.pk}))
+        self.assertFalse(created_product.is_on_sale)
+
+    def test_publish_product_available_for_moderator(self):
+        self.client.login(email="mod2@example.com", password="modpass123")
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.post(reverse("store:warehouse_product_publish", kwargs={"pk": self.product.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.product.refresh_from_db()
+        self.assertTrue(self.product.is_on_sale)
+
+    def test_unpublish_product_available_for_moderator(self):
+        self.client.login(email="mod2@example.com", password="modpass123")
+        self.product.is_on_sale = True
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.post(reverse("store:warehouse_product_unpublish", kwargs={"pk": self.product.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.product.refresh_from_db()
+        self.assertFalse(self.product.is_on_sale)
+
+    def test_publish_product_forbidden_for_regular_user(self):
+        self.client.login(email="regular@example.com", password="regularpass123")
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.post(reverse("store:warehouse_product_publish", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        self.product.refresh_from_db()
+        self.assertFalse(self.product.is_on_sale)
 
 
 class DashboardOrdersManagementTest(TestCase):
@@ -844,6 +961,42 @@ class ProductDeleteViewTest(TestCase):
         response = self.client.post(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
         self.assertEqual(Product.objects.count(), initial_count - 1)
         self.assertEqual(response.status_code, 302)
+
+
+class AddToCartSaleStateTest(TestCase):
+    """Тесты недоступности снятых с продажи товаров в корзине."""
+
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name="Аксессуары")
+        self.product = Product.objects.create(name="Тестовый шарф", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Красный",
+            price=Decimal("1999.99"),
+            quantity=10,
+        )
+
+    def test_add_to_cart_rejects_product_not_on_sale(self):
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.post(
+            reverse("store:add_to_cart"),
+            {"variant_id": self.variant.id, "quantity": 1},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertJSONEqual(
+            response.content,
+            {
+                "success": False,
+                "error": "Товар снят с продажи и недоступен для заказа.",
+            },
+        )
+        self.assertFalse(CartItem.objects.filter(product_variant=self.variant).exists())
 
 
 class RemoveFromCartViewTest(TestCase):

@@ -58,7 +58,7 @@ class CategoryDetailView(DetailView):
     def get_context_data(self, **kwargs):
         """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
-        products = self.object.products.all().order_by("-created_at")
+        products = self.object.products.filter(is_on_sale=True).order_by("-created_at")
 
         context["products"] = enrich_products(products)
         context["products_prepared"] = [ProductDisplayService.prepare_category_product(p) for p in products]

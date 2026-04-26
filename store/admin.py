@@ -16,8 +16,8 @@ class CategoryAdmin(admin.ModelAdmin):
 class ProductAdmin(admin.ModelAdmin):
     """Настройки админ-интерфейса для Product."""
 
-    list_display = ["name", "category", "created_at", "updated_at"]
-    list_filter = ["category", "created_at"]
+    list_display = ["name", "category", "is_on_sale", "created_at", "updated_at"]
+    list_filter = ["category", "is_on_sale", "created_at"]
     search_fields = ["name", "description"]
     ordering = ["name"]
 

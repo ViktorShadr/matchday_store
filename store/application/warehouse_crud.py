@@ -5,11 +5,26 @@ class WarehouseCrudService:
     """Application-сервис CRUD-операций модераторского склада."""
 
     @staticmethod
+    def save_product(form, is_on_sale=None):
+        product = form.save(commit=False)
+        if is_on_sale is not None:
+            product.is_on_sale = bool(is_on_sale)
+        product.save()
+        form.save_m2m()
+        return product
+
+    @staticmethod
     def update_product(product, data):
         form = ProductForm(data, instance=product)
         if form.is_valid():
             form.save()
         return form
+
+    @staticmethod
+    def set_product_sale_state(product, is_on_sale: bool):
+        product.is_on_sale = bool(is_on_sale)
+        product.save(update_fields=["is_on_sale", "updated_at"])
+        return product
 
     @staticmethod
     def save_variant(form, product=None):

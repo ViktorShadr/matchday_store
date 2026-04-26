@@ -33,6 +33,12 @@ class ProductVariantNotFoundError(CartException):
     http_status = 404
 
 
+class ProductNotOnSaleError(CartException):
+    """Товар снят с продажи"""
+
+    http_status = 400
+
+
 class CartOperationError(CartException):
     """Ошибка при операции с корзиной"""
 

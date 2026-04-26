@@ -186,11 +186,16 @@ class WarehouseProductCreateView(ModeratorRequiredMixin, CreateView):
     model = Product
     form_class = ProductForm
     template_name = "dashboard/product_form.html"
+    crud_service = WarehouseCrudService()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(WarehouseUiPresenter.product_create_context())
         return context
+
+    def form_valid(self, form):
+        self.object = self.crud_service.save_product(form, is_on_sale=False)
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse("store:warehouse_product_manage", kwargs={"pk": self.object.pk})
@@ -276,6 +281,26 @@ class WarehouseProductManageView(ModeratorRequiredMixin, DetailView):
             )
         )
         return context
+
+
+class WarehouseProductPublishView(ModeratorRequiredMixin, View):
+    crud_service = WarehouseCrudService()
+
+    def post(self, request, *args, **kwargs):
+        product = get_object_or_404(Product, pk=self.kwargs["pk"])
+        self.crud_service.set_product_sale_state(product, is_on_sale=True)
+        messages.success(request, "Товар выставлен на продажу.")
+        return HttpResponseRedirect(reverse("store:warehouse_product_manage", kwargs={"pk": product.pk}))
+
+
+class WarehouseProductUnpublishView(ModeratorRequiredMixin, View):
+    crud_service = WarehouseCrudService()
+
+    def post(self, request, *args, **kwargs):
+        product = get_object_or_404(Product, pk=self.kwargs["pk"])
+        self.crud_service.set_product_sale_state(product, is_on_sale=False)
+        messages.success(request, "Товар снят с продажи.")
+        return HttpResponseRedirect(reverse("store:warehouse_product_manage", kwargs={"pk": product.pk}))
 
 
 class WarehouseVariantCreateView(ModeratorRequiredMixin, CreateView):

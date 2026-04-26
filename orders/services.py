@@ -141,6 +141,12 @@ class CheckoutService(ICheckoutService):
                     if variant is None:
                         raise CheckoutError("Один из товаров больше недоступен. Обновите корзину.")
 
+                    if not variant.product.is_on_sale:
+                        raise CheckoutError(
+                            f'Товар "{variant.product.name}" снят с продажи. '
+                            "Удалите его из корзины и повторите оформление."
+                        )
+
                     if variant.quantity < cart_item.quantity:
                         raise CheckoutError(
                             f'Недостаточно товара "{variant.product.name}" на складе. '

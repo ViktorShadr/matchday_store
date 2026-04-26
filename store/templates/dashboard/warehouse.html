@@ -83,6 +83,7 @@
                                     <th>Категория</th>
                                     <th>Варианты</th>
                                     <th>Остаток</th>
+                                    <th>Продажа</th>
                                     <th>Цена</th>
                                     <th class="text-end">Действия</th>
                                 </tr>
@@ -109,6 +110,13 @@
                                             <span class="sf-stock-badge sf-stock-badge--{{ product.stock_state }}">{{ product.stock_label }}</span>
                                         </td>
                                         <td>
+                                            {% if product.is_on_sale %}
+                                                <span class="badge text-bg-success">В продаже</span>
+                                            {% else %}
+                                                <span class="badge text-bg-secondary">Снято</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
                                             {% if product.variant_count > 0 %}
                                                 {% if product.variant_count > 1 %}от {% endif %}{{ product.min_price|floatformat:"-2" }} ₽
                                             {% else %}
@@ -121,7 +129,7 @@
                                     </tr>
                                 {% empty %}
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-5">
+                                        <td colspan="8" class="text-center text-muted py-5">
                                             {% if has_active_filters %}
                                                 По вашему запросу товары не найдены.
                                             {% else %}
