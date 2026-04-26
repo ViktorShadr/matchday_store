@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from orders.models import Address, Order, OrderItem
+from orders.models import Address, Order, OrderItem, OrderStatusTransition
 
 
 class OrderItemInline(admin.TabularInline):
@@ -9,6 +9,18 @@ class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
     autocomplete_fields = ("product_variant",)
+
+
+class OrderStatusTransitionInline(admin.TabularInline):
+    model = OrderStatusTransition
+    extra = 0
+    can_delete = False
+    fields = ("transition_type", "from_value", "to_value", "changed_by", "created_at")
+    readonly_fields = fields
+    ordering = ("-created_at", "-id")
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Address)
@@ -36,7 +48,7 @@ class AddressAdmin(admin.ModelAdmin):
 class OrderAdmin(admin.ModelAdmin):
     """Настройки админ-интерфейса для Order."""
 
-    inlines = (OrderItemInline,)
+    inlines = (OrderItemInline, OrderStatusTransitionInline)
     list_display = (
         "id",
         "number",
@@ -50,6 +62,7 @@ class OrderAdmin(admin.ModelAdmin):
         "delivery_method",
         "total_amount",
         "currency",
+        "issued_at",
         "created_at",
     )
     list_filter = (
@@ -62,7 +75,7 @@ class OrderAdmin(admin.ModelAdmin):
     )
     search_fields = ("number", "recipient_name", "email", "phone", "user__email", "pickup_point_code")
     ordering = ("-created_at",)
-    readonly_fields = ("created_at", "updated_at", "confirmed_at", "paid_at", "cancelled_at")
+    readonly_fields = ("created_at", "updated_at", "confirmed_at", "paid_at", "issued_at", "cancelled_at")
 
 
 @admin.register(OrderItem)
@@ -83,3 +96,12 @@ class OrderItemAdmin(admin.ModelAdmin):
     search_fields = ("order__number", "product_name_snapshot", "sku_snapshot")
     ordering = ("order", "id")
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(OrderStatusTransition)
+class OrderStatusTransitionAdmin(admin.ModelAdmin):
+    list_display = ("id", "order", "transition_type", "from_value", "to_value", "changed_by", "created_at")
+    list_filter = ("transition_type", "created_at")
+    search_fields = ("order__number", "from_value", "to_value", "changed_by__email")
+    ordering = ("-created_at", "-id")
+    readonly_fields = ("order", "transition_type", "from_value", "to_value", "changed_by", "created_at")

@@ -122,7 +122,7 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
     context_object_name = "order"
 
     def get_queryset(self):
-        return Order.objects.select_related("user").prefetch_related("items")
+        return Order.objects.select_related("user").prefetch_related("items", "status_transitions__changed_by")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -140,6 +140,10 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         context["current_payment_status_label"] = payment_status_meta["label"]
         context["current_payment_status_badge"] = payment_status_meta["badge_class"]
         context["staff_guidance"] = DashboardOrderPresenter.build_staff_guidance(self.object)
+        context["status_transitions"] = self.object.status_transitions.select_related("changed_by").order_by(
+            "-created_at",
+            "-id",
+        )
         return context
 
 
@@ -153,7 +157,7 @@ class DashboardOrderStatusUpdateView(ModeratorRequiredMixin, View):
             return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
         try:
-            result = self.dashboard_order_flow_service.update_order_status(order, next_status)
+            result = self.dashboard_order_flow_service.update_order_status(order, next_status, actor=request.user)
         except DashboardOrderFlowError as exc:
             messages.error(request, str(exc))
         else:
@@ -172,7 +176,11 @@ class DashboardOrderPaymentStatusUpdateView(ModeratorRequiredMixin, View):
             return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
         try:
-            result = self.dashboard_order_flow_service.update_payment_status(order, next_payment_status)
+            result = self.dashboard_order_flow_service.update_payment_status(
+                order,
+                next_payment_status,
+                actor=request.user,
+            )
         except DashboardOrderFlowError as exc:
             messages.error(request, str(exc))
         else:

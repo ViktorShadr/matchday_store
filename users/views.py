@@ -371,7 +371,7 @@ class UserOrderCancelView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
         try:
-            self.cancellation_service.cancel_order(order_id=pk, user_id=request.user.id)
+            self.cancellation_service.cancel_order(order_id=pk, user_id=request.user.id, actor=request.user)
         except OrderCancellationError as exc:
             messages.error(request, str(exc))
         else:

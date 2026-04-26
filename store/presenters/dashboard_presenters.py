@@ -145,26 +145,32 @@ class DashboardOrderPresenter:
         if status_key == "new":
             order.fulfillment_status = Order.FulfillmentStatus.NEW
             order.status = Order.Status.PLACED
+            order.issued_at = None
             order.cancelled_at = None
             return
         if status_key == "processing":
             order.fulfillment_status = Order.FulfillmentStatus.PACKING
             order.status = Order.Status.PROCESSING
+            order.issued_at = None
             order.cancelled_at = None
             return
         if status_key == "ready":
             order.fulfillment_status = Order.FulfillmentStatus.RESERVED
             order.status = Order.Status.PROCESSING
+            order.issued_at = None
             order.cancelled_at = None
             return
         if status_key == "issued":
             order.fulfillment_status = Order.FulfillmentStatus.DELIVERED
             order.status = Order.Status.DELIVERED
+            if order.issued_at is None:
+                order.issued_at = timezone.now()
             order.cancelled_at = None
             return
         if status_key == "cancelled":
             order.fulfillment_status = Order.FulfillmentStatus.CANCELLED
             order.status = Order.Status.CANCELLED
+            order.issued_at = None
             if order.cancelled_at is None:
                 order.cancelled_at = timezone.now()
             return

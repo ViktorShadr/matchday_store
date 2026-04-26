@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
-from orders.models import Order, OrderItem
+from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
 from store.repositories import IProductVariantRepository
@@ -276,7 +276,7 @@ class OrderCancellationService:
             return False
         return True
 
-    def cancel_order(self, order_id: int, user_id: Optional[int] = None) -> Order:
+    def cancel_order(self, order_id: int, user_id: Optional[int] = None, actor=None) -> Order:
         """
         Отменить заказ и вернуть остатки на склад.
 
@@ -313,6 +313,10 @@ class OrderCancellationService:
                 variant.quantity += order_item.quantity
                 variant.save(update_fields=["quantity", "updated_at"])
 
+            previous_order_status = order.status
+            previous_fulfillment_status = order.fulfillment_status
+            previous_payment_status = order.payment_status
+
             order.status = Order.Status.CANCELLED
             order.fulfillment_status = Order.FulfillmentStatus.CANCELLED
             order.payment_status = Order.PaymentStatus.CANCELLED
@@ -325,6 +329,27 @@ class OrderCancellationService:
                     "cancelled_at",
                     "updated_at",
                 ]
+            )
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.ORDER_STATUS,
+                from_value=previous_order_status,
+                to_value=order.status,
+                changed_by=actor,
+            )
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.FULFILLMENT_STATUS,
+                from_value=previous_fulfillment_status,
+                to_value=order.fulfillment_status,
+                changed_by=actor,
+            )
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.PAYMENT_STATUS,
+                from_value=previous_payment_status,
+                to_value=order.payment_status,
+                changed_by=actor,
             )
             OrderNotificationService.schedule_cancelled(order.id)
 
@@ -371,7 +396,7 @@ class ManualPaymentUpdateService:
     def _build_dashboard_idempotency_key(order_id: int) -> str:
         return f"dashboard-manual-{order_id}-{uuid4().hex}"
 
-    def update_order_payment_status(self, order_id: int, next_payment_status: str) -> Order:
+    def update_order_payment_status(self, order_id: int, next_payment_status: str, actor=None) -> Order:
         """
         Обновить статус оплаты заказа через ручной staff-flow.
 
@@ -436,6 +461,13 @@ class ManualPaymentUpdateService:
                 order.save(update_fields=["paid_at", "updated_at"])
 
             order.refresh_from_db()
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.PAYMENT_STATUS,
+                from_value=previous_payment_status,
+                to_value=order.payment_status,
+                changed_by=actor,
+            )
             if (
                 previous_payment_status != Order.PaymentStatus.SUCCEEDED
                 and order.payment_status == Order.PaymentStatus.SUCCEEDED

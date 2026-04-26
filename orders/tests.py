@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService
 from orders.forms import CheckoutForm
-from orders.models import Order, OrderItem
+from orders.models import Order, OrderItem, OrderStatusTransition
 from orders.services import (
     CheckoutService,
     ManualPaymentUpdateService,
@@ -484,6 +484,47 @@ class OrderCancellationServiceTest(TestCase):
         self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertIsNotNone(order.cancelled_at)
 
+    def test_cancel_order_creates_status_transition_audit(self):
+        order = self._create_order_with_item()
+
+        self.service.cancel_order(order_id=order.id, user_id=self.user.id, actor=self.user)
+
+        transitions = {
+            transition.transition_type: transition
+            for transition in OrderStatusTransition.objects.filter(order=order)
+        }
+        self.assertIn(OrderStatusTransition.TransitionType.ORDER_STATUS, transitions)
+        self.assertIn(OrderStatusTransition.TransitionType.FULFILLMENT_STATUS, transitions)
+        self.assertIn(OrderStatusTransition.TransitionType.PAYMENT_STATUS, transitions)
+        self.assertEqual(
+            transitions[OrderStatusTransition.TransitionType.ORDER_STATUS].from_value,
+            Order.Status.PLACED,
+        )
+        self.assertEqual(
+            transitions[OrderStatusTransition.TransitionType.ORDER_STATUS].to_value,
+            Order.Status.CANCELLED,
+        )
+        self.assertEqual(
+            transitions[OrderStatusTransition.TransitionType.FULFILLMENT_STATUS].from_value,
+            Order.FulfillmentStatus.NEW,
+        )
+        self.assertEqual(
+            transitions[OrderStatusTransition.TransitionType.FULFILLMENT_STATUS].to_value,
+            Order.FulfillmentStatus.CANCELLED,
+        )
+        self.assertEqual(
+            transitions[OrderStatusTransition.TransitionType.PAYMENT_STATUS].from_value,
+            Order.PaymentStatus.PENDING,
+        )
+        self.assertEqual(
+            transitions[OrderStatusTransition.TransitionType.PAYMENT_STATUS].to_value,
+            Order.PaymentStatus.CANCELLED,
+        )
+        self.assertTrue(
+            all(transition.changed_by_id == self.user.id for transition in transitions.values()),
+            transitions,
+        )
+
     def test_repeated_cancellation_does_not_duplicate_stock_return(self):
         order = self._create_order_with_item()
 
@@ -796,12 +837,31 @@ class DashboardOrderFlowServiceTest(TestCase):
         self.order.status = Order.Status.PROCESSING
         self.order.save(update_fields=["payment_status", "fulfillment_status", "status", "updated_at"])
 
-        result = self.service.update_order_status(self.order, "issued")
+        result = self.service.update_order_status(self.order, "issued", actor=self.user)
 
         self.order.refresh_from_db()
         self.assertTrue(result.changed)
         self.assertEqual(self.order.status, Order.Status.DELIVERED)
         self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
+        self.assertIsNotNone(self.order.issued_at)
+
+    def test_status_update_creates_dashboard_transition_audit(self):
+        result = self.service.update_order_status(self.order, "processing", actor=self.user)
+
+        self.order.refresh_from_db()
+        self.assertTrue(result.changed)
+        transitions = list(OrderStatusTransition.objects.filter(order=self.order).order_by("id"))
+        self.assertEqual(len(transitions), 3)
+        self.assertEqual(transitions[0].transition_type, OrderStatusTransition.TransitionType.DASHBOARD_STATUS)
+        self.assertEqual(transitions[0].from_value, "new")
+        self.assertEqual(transitions[0].to_value, "processing")
+        self.assertEqual(transitions[1].transition_type, OrderStatusTransition.TransitionType.ORDER_STATUS)
+        self.assertEqual(transitions[1].from_value, Order.Status.PLACED)
+        self.assertEqual(transitions[1].to_value, Order.Status.PROCESSING)
+        self.assertEqual(transitions[2].transition_type, OrderStatusTransition.TransitionType.FULFILLMENT_STATUS)
+        self.assertEqual(transitions[2].from_value, Order.FulfillmentStatus.NEW)
+        self.assertEqual(transitions[2].to_value, Order.FulfillmentStatus.PACKING)
+        self.assertTrue(all(transition.changed_by_id == self.user.id for transition in transitions), transitions)
 
     def test_noop_status_update_returns_non_changed_result(self):
         result = self.service.update_order_status(self.order, "new")
@@ -824,12 +884,19 @@ class DashboardOrderFlowServiceTest(TestCase):
         self.assertEqual(self.variant.quantity, 5)
 
     def test_payment_status_update_returns_success_message(self):
-        result = self.service.update_payment_status(self.order, Order.PaymentStatus.SUCCEEDED)
+        result = self.service.update_payment_status(self.order, Order.PaymentStatus.SUCCEEDED, actor=self.user)
 
         self.order.refresh_from_db()
         self.assertTrue(result.changed)
         self.assertEqual(result.message, "Статус оплаты обновлен.")
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+        transition = OrderStatusTransition.objects.get(
+            order=self.order,
+            transition_type=OrderStatusTransition.TransitionType.PAYMENT_STATUS,
+        )
+        self.assertEqual(transition.from_value, Order.PaymentStatus.PENDING)
+        self.assertEqual(transition.to_value, Order.PaymentStatus.SUCCEEDED)
+        self.assertEqual(transition.changed_by_id, self.user.id)
 
 
 class OrderNotificationServiceIntegrationTest(TestCase):

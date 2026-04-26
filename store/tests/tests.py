@@ -6,7 +6,7 @@ from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import Group
 
-from orders.models import Order, OrderItem
+from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.models import Payment
 from store.models import Cart, CartItem, Category, Product, ProductVariant, ProductImage
 
@@ -805,6 +805,7 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
         self.assertEqual(self.order.status, Order.Status.DELIVERED)
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+        self.assertIsNotNone(self.order.issued_at)
 
     def test_order_cancel_from_dashboard_uses_cancellation_service(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
@@ -873,6 +874,30 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
         self.assertContains(response, "Нельзя изменить заказ после отмены или выдачи.")
+
+    def test_order_detail_displays_status_transition_history(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
+            data={"status": "processing"},
+        )
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertTrue(
+            OrderStatusTransition.objects.filter(
+                order=self.order,
+                transition_type=OrderStatusTransition.TransitionType.DASHBOARD_STATUS,
+                from_value="new",
+                to_value="processing",
+            ).exists()
+        )
+        detail_response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.assertContains(detail_response, "История изменений")
+        self.assertContains(detail_response, "Статус dashboard")
+        self.assertContains(detail_response, "new")
+        self.assertContains(detail_response, "processing")
+        self.assertContains(detail_response, self.moderator.email)
 
     def test_orders_dashboard_forbidden_for_regular_user(self):
         self.client.login(email="dashboard-user@example.com", password="userpass123")

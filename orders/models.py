@@ -81,6 +81,7 @@ class Order(models.Model):
         source_cart_id (int): ID корзины-источника
         confirmed_at (datetime): Дата подтверждения
         paid_at (datetime): Дата оплаты
+        issued_at (datetime): Дата выдачи заказа
         cancelled_at (datetime): Дата отмены
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
@@ -165,6 +166,7 @@ class Order(models.Model):
     source_cart_id = models.PositiveBigIntegerField(null=True, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    issued_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -179,6 +181,60 @@ class Order(models.Model):
     def __str__(self):
         """Возвращает строковое представление объекта."""
         return f"Заказ {self.number}"
+
+
+class OrderStatusTransition(models.Model):
+    """Журнал переходов статусов заказа."""
+
+    class TransitionType(models.TextChoices):
+        DASHBOARD_STATUS = "dashboard_status", "Статус dashboard"
+        ORDER_STATUS = "order_status", "Статус заказа"
+        FULFILLMENT_STATUS = "fulfillment_status", "Статус исполнения"
+        PAYMENT_STATUS = "payment_status", "Статус оплаты"
+
+    order = models.ForeignKey("orders.Order", on_delete=models.CASCADE, related_name="status_transitions")
+    transition_type = models.CharField(max_length=32, choices=TransitionType.choices)
+    from_value = models.CharField(max_length=64)
+    to_value = models.CharField(max_length=64)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="order_status_transitions",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Переход статуса заказа"
+        verbose_name_plural = "Переходы статусов заказа"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.order.number}: {self.transition_type} {self.from_value} -> {self.to_value}"
+
+    @classmethod
+    def log_if_changed(
+        cls,
+        *,
+        order: "Order",
+        transition_type: str,
+        from_value: str | None,
+        to_value: str | None,
+        changed_by=None,
+    ):
+        normalized_from = "" if from_value is None else str(from_value)
+        normalized_to = "" if to_value is None else str(to_value)
+        if normalized_from == normalized_to:
+            return None
+
+        return cls.objects.create(
+            order=order,
+            transition_type=transition_type,
+            from_value=normalized_from,
+            to_value=normalized_to,
+            changed_by=changed_by,
+        )
 
 
 class OrderItem(models.Model):
