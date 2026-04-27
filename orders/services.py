@@ -111,6 +111,9 @@ class CheckoutService(ICheckoutService):
         if existing_payment:
             return existing_payment.order
 
+        order = None
+        unavailable_only_error = None
+
         try:
             with transaction.atomic():
                 cart = checkout_context.cart_context.cart
@@ -176,65 +179,72 @@ class CheckoutService(ICheckoutService):
                     cart.items.filter(pk__in=skipped_cart_item_ids).delete()
 
                 if not order_items:
-                    raise CheckoutError(
+                    unavailable_only_error = (
                         "В корзине не осталось доступных товаров. "
                         "Недоступные позиции удалены."
                     )
+                else:
+                    order = self.order_repository.create_order(
+                        number=self.build_order_number(),
+                        user=checkout_context.user,
+                        recipient_name=cleaned_data["recipient_name"],
+                        email=cleaned_data["email"],
+                        phone=cleaned_data["phone"],
+                        status=Order.Status.PLACED,
+                        payment_status=Order.PaymentStatus.PENDING,
+                        fulfillment_status=Order.FulfillmentStatus.NEW,
+                        delivery_method=Order.DeliveryMethod.PICKUP,
+                        delivery_address=None,
+                        pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+                        subtotal_amount=subtotal_amount,
+                        delivery_amount=Decimal("0.00"),
+                        discount_amount=Decimal("0.00"),
+                        total_amount=subtotal_amount,
+                        customer_comment=cleaned_data.get("customer_comment", "").strip(),
+                        source_cart_id=cart.id,
+                        confirmed_at=timezone.now(),
+                    )
 
-                order = self.order_repository.create_order(
-                    number=self.build_order_number(),
-                    user=checkout_context.user,
-                    recipient_name=cleaned_data["recipient_name"],
-                    email=cleaned_data["email"],
-                    phone=cleaned_data["phone"],
-                    status=Order.Status.PLACED,
-                    payment_status=Order.PaymentStatus.PENDING,
-                    fulfillment_status=Order.FulfillmentStatus.NEW,
-                    delivery_method=Order.DeliveryMethod.PICKUP,
-                    delivery_address=None,
-                    pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
-                    subtotal_amount=subtotal_amount,
-                    delivery_amount=Decimal("0.00"),
-                    discount_amount=Decimal("0.00"),
-                    total_amount=subtotal_amount,
-                    customer_comment=cleaned_data.get("customer_comment", "").strip(),
-                    source_cart_id=cart.id,
-                    confirmed_at=timezone.now(),
-                )
+                    for item in order_items:
+                        item.order = order
+                    self.order_repository.bulk_create_order_items(order_items)
 
-                for item in order_items:
-                    item.order = order
-                self.order_repository.bulk_create_order_items(order_items)
+                    PaymentWorkflowService.create_payment(
+                        order=order,
+                        provider=Payment.Provider.MANUAL,
+                        idempotency_key=payment_idempotency_key,
+                        status=Payment.Status.PENDING,
+                        amount=subtotal_amount,
+                        currency=order.currency,
+                        raw_request={
+                            "payment_method": "pay_on_receipt",
+                            "pickup_location_code": settings.STORE_PICKUP_LOCATION_CODE,
+                        },
+                    )
 
-                PaymentWorkflowService.create_payment(
-                    order=order,
-                    provider=Payment.Provider.MANUAL,
-                    idempotency_key=payment_idempotency_key,
-                    status=Payment.Status.PENDING,
-                    amount=subtotal_amount,
-                    currency=order.currency,
-                    raw_request={
-                        "payment_method": "pay_on_receipt",
-                        "pickup_location_code": settings.STORE_PICKUP_LOCATION_CODE,
-                    },
-                )
+                    for cart_item in processable_cart_items:
+                        variant = locked_variants[cart_item.product_variant_id]
+                        variant.quantity -= cart_item.quantity
+                        variant.save(update_fields=["quantity", "updated_at"])
 
-                for cart_item in processable_cart_items:
-                    variant = locked_variants[cart_item.product_variant_id]
-                    variant.quantity -= cart_item.quantity
-                    variant.save(update_fields=["quantity", "updated_at"])
-
-                processable_cart_item_ids = [item.pk for item in processable_cart_items]
-                if processable_cart_item_ids:
-                    cart.items.filter(pk__in=processable_cart_item_ids).delete()
-                OrderNotificationService.schedule_created(order.id)
-                return order
+                    processable_cart_item_ids = [item.pk for item in processable_cart_items]
+                    if processable_cart_item_ids:
+                        cart.items.filter(pk__in=processable_cart_item_ids).delete()
+                    OrderNotificationService.schedule_created(order.id)
         except IntegrityError as exc:
             if checkout_token:
                 existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
                 if existing_payment:
                     return existing_payment.order
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
+
+        if order:
+            return order
+
+        if unavailable_only_error:
+            raise CheckoutError(unavailable_only_error)
+
+        raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
 
 class OrderCancellationService:

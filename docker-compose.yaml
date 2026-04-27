@@ -34,8 +34,6 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -47,16 +45,16 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    profiles: ["worker"]
 
   worker:
     build:
       context: .
     restart: unless-stopped
+    profiles: ["worker"]
     env_file:
       - .env
-    command: ["celery", "-A", "config", "worker", "-l", "info"]
+    command: ["celery", "-A", "config", "worker", "-l", "info", "--uid=nobody", "--gid=nogroup"]
     depends_on:
       db:
         condition: service_healthy
