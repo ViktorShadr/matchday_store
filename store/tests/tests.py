@@ -1100,6 +1100,32 @@ class CartPageRenderingTest(TestCase):
         self.assertNotContains(response, "None /")
         self.assertNotContains(response, "позиций в корзине")
 
+    def test_cart_page_shows_unavailable_status_for_product_not_on_sale(self):
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.get(reverse("store:cart"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Данный товар закончился")
+        self.assertNotContains(
+            response,
+            reverse("store:product_detail", kwargs={"pk": self.product.pk}),
+        )
+
+    def test_cart_page_shows_unavailable_status_for_out_of_stock_product(self):
+        self.variant.quantity = 0
+        self.variant.save(update_fields=["quantity"])
+
+        response = self.client.get(reverse("store:cart"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Данный товар закончился")
+        self.assertNotContains(
+            response,
+            reverse("store:product_detail", kwargs={"pk": self.product.pk}),
+        )
+
 
 class WarehouseImageDeleteDetachVariantTest(TestCase):
     """Тесты безопасного удаления изображения, привязанного к варианту."""

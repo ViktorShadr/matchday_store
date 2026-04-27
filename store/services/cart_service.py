@@ -246,6 +246,8 @@ class CartService:
         ).prefetch_related('product_variant__product__images').all():
             variant = item.product_variant
             product = variant.product
+            in_stock = variant.quantity > 0
+            is_available = bool(product.is_on_sale and in_stock)
             size = _clean_variant_value(variant.size)
             color = _clean_variant_value(variant.color)
             variant_parts = [part for part in (size, color) if part]
@@ -261,7 +263,7 @@ class CartService:
 
             items.append({
                 'variant_id': variant.id,
-                'product_id': product.id,
+                'product_id': product.id if is_available else None,
                 'product_name': product.name,
                 'size': size or None,
                 'color': color or None,
@@ -271,6 +273,10 @@ class CartService:
                 'total_price': item.total_price,
                 'total_price_formatted': f"{item.total_price:,}".replace(",", " "),
                 'image': image_url,
-                'max_quantity': variant.quantity,
+                'max_quantity': variant.quantity if is_available else 0,
+                'is_available': is_available,
+                'is_on_sale': product.is_on_sale,
+                'in_stock': in_stock,
+                'availability_message': "" if is_available else "Данный товар закончился",
             })
         return items

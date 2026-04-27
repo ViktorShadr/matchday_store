@@ -240,8 +240,39 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(self.cart.items.count(), 1)
 
     def test_checkout_fails_when_product_is_not_on_sale(self):
-        """Если товар снят с продажи, checkout должен завершаться ошибкой."""
+        """Если в корзине только снятый товар, он удаляется и checkout не создается."""
         self.client.login(email="buyer@example.com", password="testpass123")
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale", "updated_at"])
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "В корзине не осталось доступных товаров")
+        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.assertEqual(self.cart.items.count(), 0)
+
+    def test_checkout_skips_not_on_sale_item_and_creates_order_from_available_items(self):
+        self.client.login(email="buyer@example.com", password="testpass123")
+        second_product = Product.objects.create(name="Шорты Jaco", category=self.category)
+        second_variant = ProductVariant.objects.create(
+            product=second_product,
+            size="M",
+            color="Синий",
+            price=Decimal("3000.00"),
+            quantity=4,
+        )
+        CartItem.objects.create(cart=self.cart, product_variant=second_variant, quantity=1)
+
         self.product.is_on_sale = False
         self.product.save(update_fields=["is_on_sale", "updated_at"])
 
@@ -255,10 +286,54 @@ class CheckoutFlowTest(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "снят с продажи")
-        self.assertFalse(Order.objects.filter(user=self.user).exists())
-        self.assertEqual(self.cart.items.count(), 1)
+        order = Order.objects.get(user=self.user)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.assertEqual(order.items.count(), 1)
+        self.assertEqual(order.total_amount, Decimal("3000.00"))
+        self.assertEqual(order.items.first().product_variant_id, second_variant.id)
+
+        self.variant.refresh_from_db()
+        second_variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(second_variant.quantity, 3)
+        self.assertEqual(self.cart.items.count(), 0)
+
+    def test_checkout_skips_out_of_stock_item_and_creates_order_from_available_items(self):
+        self.client.login(email="buyer@example.com", password="testpass123")
+        second_product = Product.objects.create(name="Футболка гостевая", category=self.category)
+        second_variant = ProductVariant.objects.create(
+            product=second_product,
+            size="L",
+            color="Белый",
+            price=Decimal("2500.00"),
+            quantity=3,
+        )
+        CartItem.objects.create(cart=self.cart, product_variant=second_variant, quantity=2)
+
+        self.variant.quantity = 0
+        self.variant.save(update_fields=["quantity"])
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user=self.user)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.assertEqual(order.items.count(), 1)
+        self.assertEqual(order.total_amount, Decimal("5000.00"))
+        self.assertEqual(order.items.first().product_variant_id, second_variant.id)
+
+        self.variant.refresh_from_db()
+        second_variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 0)
+        self.assertEqual(second_variant.quantity, 1)
+        self.assertEqual(self.cart.items.count(), 0)
 
     def test_checkout_service_is_idempotent_with_same_token(self):
         """Повторный checkout с тем же токеном должен вернуть уже созданный заказ."""

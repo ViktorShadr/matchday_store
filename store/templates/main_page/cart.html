@@ -30,21 +30,7 @@
                     {% for item in cart_items %}
                         <article class="sf-cart-item">
                             <div class="sf-cart-item-media">
-                                {% if item.product_id %}
-                                    <a href="{% url 'store:product_detail' pk=item.product_id %}">
-                                        {% if item.image %}
-                                            <img src="{{ item.image }}" alt="{{ item.product_name }}">
-                                        {% else %}
-                                            <div class="sf-cart-item-placeholder">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                                                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                                                    <circle cx="8.5" cy="9.5" r="1.5"></circle>
-                                                    <path d="M21 15l-5-5L5 20"></path>
-                                                </svg>
-                                            </div>
-                                        {% endif %}
-                                    </a>
-                                {% else %}
+                                {% if item.product_id %}<a href="{% url 'store:product_detail' pk=item.product_id %}">{% else %}<div class="sf-cart-item-media-static">{% endif %}
                                     {% if item.image %}
                                         <img src="{{ item.image }}" alt="{{ item.product_name }}">
                                     {% else %}
@@ -56,7 +42,7 @@
                                             </svg>
                                         </div>
                                     {% endif %}
-                                {% endif %}
+                                {% if item.product_id %}</a>{% else %}</div>{% endif %}
                             </div>
 
                             <div class="sf-cart-item-body">
@@ -76,22 +62,34 @@
                                     {% endif %}
                                 </h2>
 
+                                {% if not item.is_available %}
+                                    <span class="sf-stock-badge sf-stock-badge--muted">
+                                        {{ item.availability_message }}
+                                    </span>
+                                {% endif %}
+
                                 <div class="sf-cart-item-controls">
                                     <div class="sf-cart-qty-wrap">
                                         <span class="sf-cart-qty-label">Количество</span>
 
-                                        <form method="post" action="{% url 'store:update_cart' %}" class="sf-cart-qty-form">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="variant_id" value="{{ item.variant_id }}">
-                                            <input type="number"
-                                                   name="quantity"
-                                                   min="1"
-                                                   value="{{ item.quantity }}"
-                                                   class="form-control sf-cart-qty-input">
-                                            <button type="submit" class="btn btn-outline-primary">
-                                                Обновить
-                                            </button>
-                                        </form>
+                                        {% if item.is_available %}
+                                            <form method="post" action="{% url 'store:update_cart' %}" class="sf-cart-qty-form">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="variant_id" value="{{ item.variant_id }}">
+                                                <input type="number"
+                                                       name="quantity"
+                                                       min="1"
+                                                       value="{{ item.quantity }}"
+                                                       class="form-control sf-cart-qty-input">
+                                                <button type="submit" class="btn btn-outline-primary">
+                                                    Обновить
+                                                </button>
+                                            </form>
+                                        {% else %}
+                                            <div class="small text-muted">
+                                                Удалите товар из корзины, чтобы оформить заказ.
+                                            </div>
+                                        {% endif %}
                                     </div>
 
                                     <form method="post" action="{% url 'store:remove_from_cart' %}">

@@ -93,6 +93,11 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
                 checkout_token=submitted_token,
             )
         except CheckoutError as exc:
+            # Корзина могла измениться в checkout-сервисе (например, недоступные позиции удалены).
+            self.cart_summary = cart_service.get_cart_summary(self.cart_context)
+            if not self.cart_summary["items"]:
+                messages.warning(self.request, str(exc))
+                return redirect("store:cart")
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 

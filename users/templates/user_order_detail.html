@@ -44,17 +44,34 @@
                         </div>
 
                         <div class="sf-order-status-wrap">
-                            <span class="sf-order-status
-                                {% if order.status == 'completed' or order.status == 'done' %}
-                                    sf-order-status--success
-                                {% elif order.status == 'cancelled' %}
-                                    sf-order-status--danger
-                                {% else %}
-                                    sf-order-status--neutral
-                                {% endif %}
-                            ">
-                                {{ order.get_status_display|default:order.status|default:"В обработке" }}
-                            </span>
+                            <div class="sf-order-badges">
+                                <span class="sf-order-status sf-order-status--compact
+                                    {% if order.user_work_status_tone == 'success' %}
+                                        sf-order-status--success
+                                    {% elif order.user_work_status_tone == 'danger' %}
+                                        sf-order-status--danger
+                                    {% elif order.user_work_status_tone == 'warning' %}
+                                        sf-order-status--warning
+                                    {% else %}
+                                        sf-order-status--neutral
+                                    {% endif %}
+                                ">
+                                    {{ order.user_work_status_label|default:order.get_status_display|default:order.status|default:"В обработке" }}
+                                </span>
+                                <span class="sf-order-status sf-order-status--compact
+                                    {% if order.user_payment_status_tone == 'success' %}
+                                        sf-order-status--success
+                                    {% elif order.user_payment_status_tone == 'danger' %}
+                                        sf-order-status--danger
+                                    {% elif order.user_payment_status_tone == 'warning' %}
+                                        sf-order-status--warning
+                                    {% else %}
+                                        sf-order-status--neutral
+                                    {% endif %}
+                                ">
+                                    {{ order.user_payment_status_label|default:order.get_payment_status_display|default:"Ожидает оплаты" }}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -113,7 +130,7 @@
 
                         <div class="sf-order-detail-summary-row">
                             <span>Статус</span>
-                            <strong>{{ order.get_status_display|default:order.status|default:"В обработке" }}</strong>
+                            <strong>{{ order.user_work_status_label|default:order.get_status_display|default:order.status|default:"В обработке" }}</strong>
                         </div>
 
                         <div class="sf-order-detail-summary-row">

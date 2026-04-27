@@ -135,17 +135,20 @@ class CheckoutService(ICheckoutService):
 
                 subtotal_amount = Decimal("0.00")
                 order_items = []
+                processable_cart_items = []
+                skipped_cart_item_ids = []
 
                 for cart_item in cart_items:
                     variant = locked_variants.get(cart_item.product_variant_id)
                     if variant is None:
-                        raise CheckoutError("Один из товаров больше недоступен. Обновите корзину.")
+                        skipped_cart_item_ids.append(cart_item.pk)
+                        continue
 
-                    if not variant.product.is_on_sale:
-                        raise CheckoutError(
-                            f'Товар "{variant.product.name}" снят с продажи. '
-                            "Удалите его из корзины и повторите оформление."
-                        )
+                    # Позиции, которые нельзя оформить (сняты с продажи или нулевой остаток),
+                    # исключаем из checkout и удаляем из корзины в этой же транзакции.
+                    if not variant.product.is_on_sale or variant.quantity <= 0:
+                        skipped_cart_item_ids.append(cart_item.pk)
+                        continue
 
                     if variant.quantity < cart_item.quantity:
                         raise CheckoutError(
@@ -166,6 +169,16 @@ class CheckoutService(ICheckoutService):
                             quantity=cart_item.quantity,
                             line_total=line_total,
                         )
+                    )
+                    processable_cart_items.append(cart_item)
+
+                if skipped_cart_item_ids:
+                    cart.items.filter(pk__in=skipped_cart_item_ids).delete()
+
+                if not order_items:
+                    raise CheckoutError(
+                        "В корзине не осталось доступных товаров. "
+                        "Недоступные позиции удалены."
                     )
 
                 order = self.order_repository.create_order(
@@ -206,12 +219,14 @@ class CheckoutService(ICheckoutService):
                     },
                 )
 
-                for cart_item in cart_items:
+                for cart_item in processable_cart_items:
                     variant = locked_variants[cart_item.product_variant_id]
                     variant.quantity -= cart_item.quantity
                     variant.save(update_fields=["quantity", "updated_at"])
 
-                cart.items.all().delete()
+                processable_cart_item_ids = [item.pk for item in processable_cart_items]
+                if processable_cart_item_ids:
+                    cart.items.filter(pk__in=processable_cart_item_ids).delete()
                 OrderNotificationService.schedule_created(order.id)
                 return order
         except IntegrityError as exc:
