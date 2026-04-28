@@ -1,8 +1,10 @@
 from django.views.generic import TemplateView
 from django.urls import reverse_lazy
 
+from store.mixins.cart_mixins import CartContextMixin
 
-class LegalPageMixin:
+
+class LegalPageMixin(CartContextMixin):
     """Миксин для добавления breadcrumbs на юридические страницы"""
 
     def get_context_data(self, **kwargs):

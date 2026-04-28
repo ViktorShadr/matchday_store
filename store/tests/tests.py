@@ -1127,6 +1127,42 @@ class CartPageRenderingTest(TestCase):
         )
 
 
+class LegalPagesCartCounterTest(TestCase):
+    """Тесты отображения количества товаров в корзине на legal-страницах."""
+
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name="Юридический мерч")
+        self.product = Product.objects.create(name="Тестовый шарф", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("999.99"),
+            quantity=10,
+        )
+
+        session = self.client.session
+        session.save()
+        cart = Cart.objects.create(session_key=session.session_key)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=3)
+
+    def test_legal_pages_use_actual_cart_counter(self):
+        legal_routes = [
+            "store:privacy_policy",
+            "store:terms_of_service",
+            "store:return_policy",
+            "store:offer",
+        ]
+
+        for route_name in legal_routes:
+            with self.subTest(route=route_name):
+                response = self.client.get(reverse(route_name))
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("cart_count", response.context)
+                self.assertEqual(response.context["cart_count"], 3)
+
+
 class WarehouseImageDeleteDetachVariantTest(TestCase):
     """Тесты безопасного удаления изображения, привязанного к варианту."""
 
