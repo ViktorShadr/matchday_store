@@ -27,6 +27,7 @@ class EmailConfirmationService:
             logger.exception(
                 "Ошибка постановки задачи отправки подтверждения для %s, используем sync fallback",
                 user_email,
+                extra={"event": "confirmation_email_dispatch_failed"},
             )
             return user_views.send_confirmation_email_sync(user_email, confirmation_token)
 

@@ -13,7 +13,10 @@ def send_welcome_email(user_email):
     Отправка приветственного письма пользователю
     """
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
-        print("Ошибка отправки email: не настроен DEFAULT_FROM_EMAIL")
+        logger.error(
+            "Ошибка отправки email: не настроен DEFAULT_FROM_EMAIL",
+            extra={"event": "email_default_sender_not_configured", "email_type": "welcome"},
+        )
         return False
 
     subject = "Добро пожаловать в наш магазин"
@@ -28,10 +31,18 @@ def send_welcome_email(user_email):
             recipient_list=recipient_list,
             fail_silently=False,
         )
-        print(f"Письмо успешно отправлено на {user_email}")
+        logger.info(
+            "Письмо успешно отправлено на %s",
+            user_email,
+            extra={"event": "welcome_email_sent", "email_type": "welcome"},
+        )
         return True
-    except Exception as e:
-        print(f"Ошибка отправки email: {e}")
+    except Exception:
+        logger.exception(
+            "Ошибка отправки email на %s",
+            user_email,
+            extra={"event": "welcome_email_send_failed", "email_type": "welcome"},
+        )
         return False
 
 
@@ -44,7 +55,10 @@ def send_confirmation_email_sync(user_email, confirmation_token):
         confirmation_token (str): Токен подтверждения
     """
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
-        print("Ошибка отправки email: не настроен DEFAULT_FROM_EMAIL")
+        logger.error(
+            "Ошибка отправки email: не настроен DEFAULT_FROM_EMAIL",
+            extra={"event": "email_default_sender_not_configured", "email_type": "confirmation"},
+        )
         return False
 
     # Формируем ссылку подтверждения
@@ -69,10 +83,18 @@ def send_confirmation_email_sync(user_email, confirmation_token):
             recipient_list=recipient_list,
             fail_silently=False,
         )
-        logger.info("Письмо с подтверждением отправлено на %s", user_email)
+        logger.info(
+            "Письмо с подтверждением отправлено на %s",
+            user_email,
+            extra={"event": "confirmation_email_sent", "email_type": "confirmation"},
+        )
         return True
     except Exception:
-        logger.exception("Ошибка отправки email с подтверждением на %s", user_email)
+        logger.exception(
+            "Ошибка отправки email с подтверждением на %s",
+            user_email,
+            extra={"event": "confirmation_email_send_failed", "email_type": "confirmation"},
+        )
         return False
 
 

@@ -451,8 +451,12 @@ class EmailConfirmationView(View):
             auth_login(request, user, backend=auth_backend)
             try:
                 send_welcome_email.delay(user.email)
-            except Exception as e:
-                logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
+            except Exception:
+                logger.exception(
+                    "Ошибка при отправке приветственного письма пользователю %s",
+                    user.email,
+                    extra={"event": "welcome_email_dispatch_failed", "user_id": user.id},
+                )
             messages.success(request, "Email подтвержден. Вы автоматически вошли в аккаунт.")
             return redirect("users:profile_detail", pk=user.pk)
         except User.DoesNotExist:

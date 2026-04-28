@@ -4,6 +4,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from config.logging_utils import build_logging_config
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -52,6 +54,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "config.middleware.RequestIdMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -140,6 +143,7 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 CELERY_EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
@@ -178,6 +182,10 @@ CSRF_COOKIE_SAMESITE = "Lax"
 
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_JSON = env_bool("LOG_JSON", not DEBUG)
+LOGGING = build_logging_config(debug=DEBUG, log_level=LOG_LEVEL, json_logs=LOG_JSON)
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True

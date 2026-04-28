@@ -71,6 +71,14 @@ docker compose --profile worker up --build
 - `EMAIL_HOST_PASSWORD`
 - `STAFF_ORDER_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых заказах)
 
+Для логирования:
+
+- `LOG_LEVEL` (`INFO` по умолчанию)
+- `LOG_JSON` (`True` в production, `False` в debug)
+- `GUNICORN_LOG_LEVEL` (`info` по умолчанию)
+
+В production каждый ответ включает `X-Request-ID`; тот же идентификатор прокидывается в Celery-задачи и попадает в логи.
+
 ## Проверка перед деплоем
 
 - создать суперпользователя

@@ -2,6 +2,11 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     depends_on:
       - web
     ports:
@@ -15,6 +20,11 @@ services:
     build:
       context: .
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "7"
     env_file:
       - .env
     command: ["sh", "/app/docker/web-entrypoint.sh"]
@@ -28,6 +38,11 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     env_file:
       - .env
     environment:
@@ -45,12 +60,22 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     profiles: ["worker"]
 
   worker:
     build:
       context: .
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "7"
     profiles: ["worker"]
     env_file:
       - .env
