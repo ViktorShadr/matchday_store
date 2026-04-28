@@ -27,7 +27,7 @@ def env_list(name: str) -> list[str]:
     return [item.strip() for item in os.getenv(name, "").split(",") if item.strip()]
 
 
-DEBUG = env_bool("DEBUG", True)
+DEBUG = env_bool("DEBUG", False)
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "").split(",") if host.strip()]
 
@@ -157,6 +157,7 @@ DEFAULT_FROM_EMAIL = os.getenv(
 )
 STAFF_ORDER_NOTIFICATION_EMAILS = env_list("STAFF_ORDER_NOTIFICATION_EMAILS")
 SITE_URL = os.getenv("SITE_URL", "http://localhost:8000")
+EMAIL_CONFIRMATION_TOKEN_TTL_HOURS = int(os.getenv("EMAIL_CONFIRMATION_TOKEN_TTL_HOURS", "24"))
 
 STORE_PICKUP_LOCATION_CODE = os.getenv("STORE_PICKUP_LOCATION_CODE", "main-store")
 STORE_PICKUP_LOCATION_NAME = os.getenv(

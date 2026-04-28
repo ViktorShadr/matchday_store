@@ -446,6 +446,10 @@ class EmailConfirmationView(View):
         """
         try:
             user = User.objects.get(email_token=token)
+            if EmailConfirmationService.is_token_expired(user):
+                User.objects.filter(pk=user.pk).update(email_token=None, email_token_created_at=None)
+                messages.error(request, "Недействительная ссылка подтверждения или срок действия ссылки истек.")
+                return redirect("users:login")
             user.confirm_email()
             auth_backend = getattr(user, "backend", None) or settings.AUTHENTICATION_BACKENDS[0]
             auth_login(request, user, backend=auth_backend)

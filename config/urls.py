@@ -2,8 +2,10 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from config.health import healthz_view
 
 urlpatterns = [
+    path("healthz/", healthz_view, name="healthz"),
     path("admin/", admin.site.urls),
     path("", include("store.urls", namespace="store")),
     path("", include("orders.urls", namespace="orders")),

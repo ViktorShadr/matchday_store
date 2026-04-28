@@ -1,6 +1,8 @@
 import logging
 import secrets
+from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -35,6 +37,17 @@ class EmailConfirmationService:
     def generate_token() -> str:
         return secrets.token_urlsafe(32)
 
+    @staticmethod
+    def token_ttl() -> timedelta:
+        ttl_hours = max(getattr(settings, "EMAIL_CONFIRMATION_TOKEN_TTL_HOURS", 24), 1)
+        return timedelta(hours=ttl_hours)
+
+    @classmethod
+    def is_token_expired(cls, user: User) -> bool:
+        if not user.email_token_created_at:
+            return True
+        return timezone.now() >= user.email_token_created_at + cls.token_ttl()
+
     @classmethod
     def can_resend(cls, user) -> tuple[bool, int]:
         last_sent = user.confirmation_email_last_sent_at
@@ -66,6 +79,7 @@ class EmailConfirmationService:
             return False
 
         user.email_token = confirmation_token
+        user.email_token_created_at = timezone.now()
         user.confirmation_email_last_sent_at = timezone.now()
-        user.save(update_fields=["email_token", "confirmation_email_last_sent_at"])
+        user.save(update_fields=["email_token", "email_token_created_at", "confirmation_email_last_sent_at"])
         return True

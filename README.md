@@ -66,6 +66,7 @@ docker compose --profile worker up --build
 - `ALLOWED_HOSTS`
 - `CSRF_TRUSTED_ORIGINS`
 - `SITE_URL`
+- `EMAIL_CONFIRMATION_TOKEN_TTL_HOURS`
 - `DEFAULT_FROM_EMAIL`
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
@@ -86,3 +87,5 @@ docker compose --profile worker up --build
 - проверить отправку email
 - проверить, что `nginx` отдает `/static/` и проксирует запросы в `web`
 - пройти сценарий: checkout -> ready -> paid -> issued
+
+Подробный production runbook: [RUNBOOK.md](/home/viktor-shadrin/PycharmProjects/matchday_store/RUNBOOK.md:1)

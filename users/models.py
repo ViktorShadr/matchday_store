@@ -1,6 +1,7 @@
 import secrets
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -84,6 +85,7 @@ class User(AbstractUser):
     is_superuser = models.BooleanField(default=False)
     is_email_confirmed = models.BooleanField(default=False)
     email_token = models.CharField(max_length=64, blank=True, null=True)
+    email_token_created_at = models.DateTimeField(blank=True, null=True)
     confirmation_email_last_sent_at = models.DateTimeField(blank=True, null=True)
 
     USERNAME_FIELD = "email"
@@ -98,7 +100,8 @@ class User(AbstractUser):
     def generate_email_token(self):
         """Генерирует токен для подтверждения email."""
         self.email_token = secrets.token_urlsafe(32)
-        self.save()
+        self.email_token_created_at = timezone.now()
+        self.save(update_fields=["email_token", "email_token_created_at"])
         return self.email_token
 
     def confirm_email(self):
@@ -106,7 +109,8 @@ class User(AbstractUser):
         self.is_email_confirmed = True
         self.is_active = True
         self.email_token = None
-        self.save()
+        self.email_token_created_at = None
+        self.save(update_fields=["is_email_confirmed", "is_active", "email_token", "email_token_created_at"])
 
     class Meta:
         """Мета-настройки класса."""

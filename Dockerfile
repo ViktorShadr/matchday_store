@@ -18,7 +18,12 @@ RUN poetry install --only main --no-interaction --no-ansi --no-root
 
 COPY . .
 
-RUN mkdir -p logs
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home /home/app --shell /usr/sbin/nologin app \
+    && mkdir -p /app/logs /app/staticfiles /app/media \
+    && chown -R app:app /app
+
+USER app
 
 EXPOSE 8000
 

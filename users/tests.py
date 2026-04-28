@@ -1,8 +1,9 @@
+from datetime import timedelta
 from unittest.mock import patch, ANY
 
 from django.contrib.auth import get_user_model
 from django.db.models.deletion import ProtectedError
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -51,6 +52,15 @@ class UserModelTest(TestCase):
         """Проверяет сценарий 'user str method'."""
         user = User.objects.create_user(**self.user_data)
         self.assertEqual(str(user), "test@example.com")
+
+    def test_generate_email_token_sets_created_at(self):
+        user = User.objects.create_user(**self.user_data)
+
+        token = user.generate_email_token()
+        user.refresh_from_db()
+
+        self.assertEqual(user.email_token, token)
+        self.assertIsNotNone(user.email_token_created_at)
 
     def test_email_normalization(self):
         """Проверяет сценарий 'email normalization'."""
@@ -164,6 +174,7 @@ class UserViewsTest(TestCase):
         new_user = User.objects.get(email="newuser@example.com")
         self.assertTrue(new_user.is_active)
         self.assertIsNotNone(new_user.email_token)
+        self.assertIsNotNone(new_user.email_token_created_at)
         mock_confirmation_email.delay.assert_called_once_with("newuser@example.com", ANY)
         mock_welcome_email.delay.assert_not_called()
 
@@ -181,6 +192,7 @@ class UserViewsTest(TestCase):
         new_user = User.objects.get(email="fallback@example.com")
         self.assertTrue(new_user.is_active)
         self.assertIsNotNone(new_user.email_token)
+        self.assertIsNotNone(new_user.email_token_created_at)
         self.assertIsNotNone(new_user.confirmation_email_last_sent_at)
         mock_confirmation_email.delay.assert_called_once_with("fallback@example.com", ANY)
         mock_confirmation_email_sync.assert_called_once_with("fallback@example.com", ANY)
@@ -195,6 +207,7 @@ class UserViewsTest(TestCase):
         self.user.refresh_from_db()
         self.assertIsNotNone(self.user.confirmation_email_last_sent_at)
         self.assertIsNotNone(self.user.email_token)
+        self.assertIsNotNone(self.user.email_token_created_at)
         mock_confirmation_email.delay.assert_called_once_with("user@example.com", ANY)
 
     @patch("users.views.send_confirmation_email")
@@ -234,6 +247,7 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Не удалось отправить письмо подтверждения. Попробуйте позже.")
         self.user.refresh_from_db()
         self.assertEqual(self.user.email_token, old_token)
+        self.assertIsNotNone(self.user.email_token_created_at)
         self.assertIsNone(self.user.confirmation_email_last_sent_at)
         mock_confirmation_email.delay.assert_called_once()
         mock_confirmation_email_sync.assert_called_once()
@@ -267,6 +281,12 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, reverse("users:resend_confirmation"))
 
+    def test_healthz_endpoint(self):
+        response = self.client.get("/healthz/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "ok")
+
     @patch("users.views.send_welcome_email")
     def test_confirm_email_logs_user_in_and_redirects_to_profile(self, mock_welcome_email):
         confirm_user = User.objects.create_user(
@@ -283,8 +303,31 @@ class UserViewsTest(TestCase):
         self.assertRedirects(response, reverse("users:profile_detail", kwargs={"pk": confirm_user.pk}))
         self.assertTrue(confirm_user.is_email_confirmed)
         self.assertTrue(confirm_user.is_active)
+        self.assertIsNone(confirm_user.email_token_created_at)
         self.assertEqual(int(self.client.session["_auth_user_id"]), confirm_user.pk)
         mock_welcome_email.delay.assert_called_once_with("confirm-flow@example.com")
+
+    @override_settings(EMAIL_CONFIRMATION_TOKEN_TTL_HOURS=1)
+    @patch("users.views.send_welcome_email")
+    def test_confirm_email_with_expired_token_fails(self, mock_welcome_email):
+        confirm_user = User.objects.create_user(
+            email="expired-token@example.com",
+            password="confirmpass123",
+            is_active=True,
+            is_email_confirmed=False,
+        )
+        token = confirm_user.generate_email_token()
+        confirm_user.email_token_created_at = timezone.now() - timedelta(hours=2)
+        confirm_user.save(update_fields=["email_token_created_at"])
+
+        response = self.client.get(reverse("users:confirm_email", kwargs={"token": token}))
+
+        confirm_user.refresh_from_db()
+        self.assertRedirects(response, reverse("users:login"))
+        self.assertFalse(confirm_user.is_email_confirmed)
+        self.assertIsNone(confirm_user.email_token)
+        self.assertIsNone(confirm_user.email_token_created_at)
+        mock_welcome_email.delay.assert_not_called()
 
     def test_logout_view(self):
         """Проверяет сценарий 'logout view'."""
