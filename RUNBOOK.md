@@ -12,7 +12,7 @@
 - настроены SMTP-переменные (`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`)
 - настроен `CACHE_URL` (общий Redis cache, чтобы rate limits работали консистентно между web-процессами)
 - настроены `RATELIMIT_*` и корректный `RATELIMIT_IP_META_KEY` для reverse proxy
-- задана CSP-стратегия (`CSP_ENFORCE=False` на rollout, затем `True`)
+- включен enforce-режим CSP (`CSP_ENFORCE=True`)
 - задан `SENTRY_DSN` и окружение `SENTRY_ENVIRONMENT`
 - внешний reverse proxy/ingress терминирует TLS
 - есть регулярный backup PostgreSQL и проверка восстановления

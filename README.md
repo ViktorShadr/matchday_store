@@ -74,7 +74,7 @@ docker compose --profile worker up --build
 - `STAFF_ORDER_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых заказах)
 - `CACHE_URL` (shared Redis cache для rate limiting между несколькими worker-процессами)
 - `RATELIMIT_*` (лимиты для login/registration/resend/checkout)
-- `CSP_ENFORCE` (`False` на этапе отчётов, `True` после валидации политики)
+- `CSP_ENFORCE` (`True` для production, `False` только для временной диагностики)
 - `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`
 
 Для логирования:
