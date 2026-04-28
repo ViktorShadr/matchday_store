@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch, ANY
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, Client, override_settings
 from django.urls import reverse
@@ -275,6 +276,25 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.wsgi_request.user.is_authenticated)
 
+    @override_settings(
+        RATELIMIT_LOGIN_IP_RATE="1/m",
+        RATELIMIT_LOGIN_CREDENTIAL_RATE="1/m",
+    )
+    def test_login_view_rate_limited(self):
+        cache.clear()
+        login_url = reverse("users:login")
+        payload = {"username": "user@example.com", "password": "wrongpassword"}
+
+        first_response = self.client.post(login_url, payload)
+        second_response = self.client.post(login_url, payload)
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertContains(
+            second_response,
+            "Слишком много попыток входа. Подождите и попробуйте снова.",
+            status_code=429,
+        )
+
     def test_login_view_hides_resend_confirmation_link_by_default(self):
         response = self.client.get(reverse("users:login"))
 
@@ -306,6 +326,43 @@ class UserViewsTest(TestCase):
         self.assertIsNone(confirm_user.email_token_created_at)
         self.assertEqual(int(self.client.session["_auth_user_id"]), confirm_user.pk)
         mock_welcome_email.delay.assert_called_once_with("confirm-flow@example.com")
+
+    @override_settings(
+        RATELIMIT_REGISTRATION_IP_RATE="1/m",
+        RATELIMIT_REGISTRATION_EMAIL_RATE="1/m",
+    )
+    @patch("users.views.send_confirmation_email")
+    def test_registration_view_rate_limited(self, mock_confirmation_email):
+        cache.clear()
+        form_data = {"email": "new-rate-limit@example.com", "password1": "complexpass123", "password2": "complexpass123"}
+
+        with self.captureOnCommitCallbacks(execute=True):
+            first_response = self.client.post(reverse("users:registration"), data=form_data)
+        second_response = self.client.post(reverse("users:registration"), data=form_data)
+
+        self.assertEqual(first_response.status_code, 302)
+        self.assertContains(
+            second_response,
+            "Слишком много попыток регистрации. Попробуйте позже.",
+            status_code=429,
+        )
+        mock_confirmation_email.delay.assert_called_once()
+
+    @override_settings(
+        RATELIMIT_CONFIRM_RESEND_IP_RATE="1/m",
+        RATELIMIT_CONFIRM_RESEND_USER_RATE="1/m",
+    )
+    @patch("users.views.send_confirmation_email")
+    def test_resend_confirmation_email_rate_limited(self, mock_confirmation_email):
+        cache.clear()
+        self.client.login(email="user@example.com", password="userpass123")
+
+        first_response = self.client.post(reverse("users:resend_confirmation"))
+        second_response = self.client.post(reverse("users:resend_confirmation"), follow=True)
+
+        self.assertEqual(first_response.status_code, 302)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertContains(second_response, "Слишком много запросов на повторную отправку. Попробуйте позже.")
 
     @override_settings(EMAIL_CONFIRMATION_TOKEN_TTL_HOURS=1)
     @patch("users.views.send_welcome_email")

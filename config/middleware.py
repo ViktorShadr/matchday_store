@@ -4,6 +4,11 @@ from uuid import uuid4
 
 from config.logging_context import reset_request_id, set_request_id
 
+try:
+    import sentry_sdk
+except Exception:  # pragma: no cover - sentry optional at runtime
+    sentry_sdk = None
+
 
 class RequestIdMiddleware:
     """Прокидывает request id в контекст логирования и в response header."""
@@ -19,6 +24,8 @@ class RequestIdMiddleware:
         request.request_id = request_id
 
         token = set_request_id(request_id)
+        if sentry_sdk is not None:
+            sentry_sdk.set_tag("request_id", request_id)
         try:
             response = self.get_response(request)
         finally:
@@ -26,4 +33,3 @@ class RequestIdMiddleware:
 
         response[self.response_header_name] = request_id
         return response
-

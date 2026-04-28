@@ -10,6 +10,10 @@
 - корректные `CSRF_TRUSTED_ORIGINS` c `https://...`
 - `SITE_URL` указывает на боевой HTTPS-домен
 - настроены SMTP-переменные (`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`)
+- настроен `CACHE_URL` (общий Redis cache, чтобы rate limits работали консистентно между web-процессами)
+- настроены `RATELIMIT_*` и корректный `RATELIMIT_IP_META_KEY` для reverse proxy
+- задана CSP-стратегия (`CSP_ENFORCE=False` на rollout, затем `True`)
+- задан `SENTRY_DSN` и окружение `SENTRY_ENVIRONMENT`
 - внешний reverse proxy/ingress терминирует TLS
 - есть регулярный backup PostgreSQL и проверка восстановления
 - определены ответственные за релиз и rollback
@@ -67,14 +71,16 @@ docker compose up -d --build
 
 Минимум: ежедневный backup PostgreSQL + периодическая проверка восстановления.
 
-Пример backup:
+Использовать скрипты проекта:
 
 ```bash
-docker compose exec -T db pg_dump -U "$DB_USER" "$DB_NAME" > backup.sql
+./ops/db/backup.sh
 ```
 
-Пример restore (в отдельной среде проверки):
+Проверка восстановления на временную БД:
 
 ```bash
-cat backup.sql | docker compose exec -T db psql -U "$DB_USER" "$DB_NAME"
+./ops/db/restore_verify.sh /path/to/postgres_YYYYMMDDTHHMMSSZ.sql.gz
 ```
+
+Шаблон cron для automation: [ops/db/cron.example](/home/viktor-shadrin/PycharmProjects/matchday_store/ops/db/cron.example:1)

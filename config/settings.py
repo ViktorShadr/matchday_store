@@ -2,9 +2,11 @@ import os
 import sys
 from pathlib import Path
 
+from csp.constants import NONE, NONCE, SELF
 from dotenv import load_dotenv
 
 from config.logging_utils import build_logging_config
+from config.sentry import init_sentry
 
 load_dotenv()
 
@@ -45,6 +47,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "csp",
     "djcelery_email",
     "orders.apps.OrdersConfig",
     "payments.apps.PaymentsConfig",
@@ -55,6 +58,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "config.middleware.RequestIdMiddleware",
+    "csp.middleware.CSPMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -177,12 +181,61 @@ STORE_PICKUP_PHONE = os.getenv(
     "+7 (4852) 00-00-00",
 )
 
+CACHE_URL = (os.getenv("CACHE_URL") or "").strip()
+if CACHE_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": CACHE_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "matchday-store-default",
+        }
+    }
+
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = os.getenv("SECURE_REFERRER_POLICY", "same-origin")
+SECURE_CROSS_ORIGIN_OPENER_POLICY = os.getenv("SECURE_CROSS_ORIGIN_OPENER_POLICY", "same-origin")
+
+RATELIMIT_ENABLE = env_bool("RATELIMIT_ENABLE", True)
+RATELIMIT_USE_CACHE = os.getenv("RATELIMIT_USE_CACHE", "default")
+RATELIMIT_IP_META_KEY = os.getenv("RATELIMIT_IP_META_KEY") or None
+RATELIMIT_LOGIN_IP_RATE = os.getenv("RATELIMIT_LOGIN_IP_RATE", "20/10m")
+RATELIMIT_LOGIN_CREDENTIAL_RATE = os.getenv("RATELIMIT_LOGIN_CREDENTIAL_RATE", "10/10m")
+RATELIMIT_REGISTRATION_IP_RATE = os.getenv("RATELIMIT_REGISTRATION_IP_RATE", "12/1h")
+RATELIMIT_REGISTRATION_EMAIL_RATE = os.getenv("RATELIMIT_REGISTRATION_EMAIL_RATE", "5/1h")
+RATELIMIT_CONFIRM_RESEND_IP_RATE = os.getenv("RATELIMIT_CONFIRM_RESEND_IP_RATE", "8/1h")
+RATELIMIT_CONFIRM_RESEND_USER_RATE = os.getenv("RATELIMIT_CONFIRM_RESEND_USER_RATE", "5/1h")
+RATELIMIT_CHECKOUT_IP_RATE = os.getenv("RATELIMIT_CHECKOUT_IP_RATE", "20/10m")
+RATELIMIT_CHECKOUT_USER_RATE = os.getenv("RATELIMIT_CHECKOUT_USER_RATE", "10/10m")
+
+_CSP_DIRECTIVES = {
+    "default-src": [SELF],
+    "base-uri": [SELF],
+    "form-action": [SELF],
+    "frame-ancestors": [SELF],
+    "img-src": [SELF, "data:"],
+    "font-src": [SELF, "data:"],
+    "script-src": [SELF, NONCE],
+    "style-src": [SELF, "'unsafe-inline'"],
+    "connect-src": [SELF],
+    "object-src": [NONE],
+}
+
+_CSP_POLICY = {"DIRECTIVES": _CSP_DIRECTIVES}
+if env_bool("CSP_ENFORCE", False):
+    CONTENT_SECURITY_POLICY = _CSP_POLICY
+else:
+    CONTENT_SECURITY_POLICY_REPORT_ONLY = _CSP_POLICY
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_JSON = env_bool("LOG_JSON", not DEBUG)
@@ -201,3 +254,5 @@ if not DEBUG:
         True,
     )
     SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)
+
+init_sentry(debug=DEBUG)
