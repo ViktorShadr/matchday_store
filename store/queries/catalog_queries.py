@@ -9,12 +9,16 @@ class CatalogQueryService:
 
     @staticmethod
     def base_queryset():
-        return Product.objects.select_related("category").prefetch_related(
-            "images",
-            Prefetch(
-                "variants",
-                queryset=ProductVariant.objects.select_related("image").order_by("price", "id"),
-            ),
+        return (
+            Product.objects.filter(is_on_sale=True)
+            .select_related("category")
+            .prefetch_related(
+                "images",
+                Prefetch(
+                    "variants",
+                    queryset=ProductVariant.objects.select_related("image").order_by("price", "id"),
+                ),
+            )
         )
 
     @classmethod

@@ -112,6 +112,14 @@
                     <div class="sf-surface p-4">
                         <h2 class="h4 mb-3">Сводка</h2>
                         <div class="d-grid gap-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Статус продажи</span>
+                                {% if product.is_on_sale %}
+                                    <span class="badge text-bg-success">В продаже</span>
+                                {% else %}
+                                    <span class="badge text-bg-secondary">Снято с продажи</span>
+                                {% endif %}
+                            </div>
                             <div class="d-flex justify-content-between">
                                 <span class="text-muted">Товар</span>
                                 <strong>{{ product.name }}</strong>
@@ -128,6 +136,20 @@
                                 <span class="text-muted">Изображений</span>
                                 <strong>{{ images|length }}</strong>
                             </div>
+                        </div>
+                        <div class="d-grid gap-2 mt-3">
+                            <form method="post" action="{% url 'store:warehouse_product_publish' product.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-success w-100" {% if product.is_on_sale %}disabled{% endif %}>
+                                    Выставить на продажу
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'store:warehouse_product_unpublish' product.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-danger w-100" {% if not product.is_on_sale %}disabled{% endif %}>
+                                    Снять с продажи
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>

@@ -6,17 +6,18 @@ authors = [
     { name = "Viktor Shadrin", email = "v.viktor.shadrin@gmail.com" }
 ]
 readme = "README.md"
-requires-python = "^3.12"
+requires-python = ">=3.12,<4.0"
 dependencies = [
-    "django (>=5.2,<5.3)",
-    "python-dotenv (>=1.2.2,<2.0.0)",
-    "psycopg2-binary (>=2.9.11,<3.0.0)",
-    "load-dotenv (>=0.1.0,<0.2.0)",
-    "pillow (>=12.1.1,<13.0.0)",
-    "django-celery-email (>=3.0.0,<4.0.0)",
-    "celery (>=5.6.2,<6.0.0)",
-    "redis (>=7.3.0,<8.0.0)",
-    "celery-types (>=0.26.0,<0.27.0)"
+    "django>=5.2,<5.3",
+    "python-dotenv>=1.2.2,<2.0.0",
+    "psycopg2-binary>=2.9.11,<3.0.0",
+    "load-dotenv>=0.1.0,<0.2.0",
+    "pillow>=12.1.1,<13.0.0",
+    "django-celery-email>=3.0.0,<4.0.0",
+    "celery>=5.6.2,<6.0.0",
+    "redis>=7.3.0,<8.0.0",
+    "celery-types>=0.26.0,<0.27.0",
+    "gunicorn>=23.0.0,<24.0.0"
 ]
 
 
@@ -26,9 +27,9 @@ build-backend = "poetry.core.masonry.api"
 
 [dependency-groups]
 lint = [
-    "flake8 (>=7.3.0,<8.0.0)",
-    "isort (>=8.0.1,<9.0.0)",
-    "black (>=26.3.1,<27.0.0)"
+    "flake8>=7.3.0,<8.0.0",
+    "isort>=8.0.1,<9.0.0",
+    "black>=26.3.1,<27.0.0"
 ]
 
 [tool.black]

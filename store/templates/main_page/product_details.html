@@ -12,15 +12,9 @@
         <div class="sf-product-layout">
             <div class="sf-product-gallery">
                 <div class="sf-product-gallery-main">
-                    {% if product.images.first %}
+                    {% if product.display_image %}
                         <img
-                            src="{{ product.images.first.image.url }}"
-                            alt="{{ product.name }}"
-                            class="sf-product-gallery-image"
-                        >
-                    {% elif product.image %}
-                        <img
-                            src="{{ product.image.url }}"
+                            src="{{ product.display_image.url }}"
                             alt="{{ product.name }}"
                             class="sf-product-gallery-image"
                         >
@@ -40,9 +34,9 @@
                     {% endif %}
                 </div>
 
-                {% if product.images.all %}
+                {% if product_images %}
                     <div class="sf-product-thumbs">
-                        {% for image in product.images.all|slice:":4" %}
+                        {% for image in product_images|slice:":4" %}
                             <div class="sf-product-thumb {% if forloop.first %}is-active{% endif %}">
                                 <img src="{{ image.image.url }}" alt="{{ product.name }}">
                             </div>

@@ -39,6 +39,8 @@ from store.views.views_dashboard import (
     WarehouseCategoryUpdateView,
     WarehouseCategoryDeleteView,
     WarehouseProductManageView,
+    WarehouseProductPublishView,
+    WarehouseProductUnpublishView,
     WarehouseVariantCreateView,
     WarehouseVariantUpdateView,
     WarehouseVariantDeleteView,
@@ -100,6 +102,24 @@ urlpatterns = [
     path(
         "dashboard/warehouse/products/<int:pk>/delete/",
         RedirectView.as_view(pattern_name="store:warehouse_product_delete", permanent=False),
+    ),
+    path(
+        "dashboard/products/<int:pk>/publish/",
+        WarehouseProductPublishView.as_view(),
+        name="warehouse_product_publish",
+    ),
+    path(
+        "dashboard/warehouse/products/<int:pk>/publish/",
+        RedirectView.as_view(pattern_name="store:warehouse_product_publish", permanent=False),
+    ),
+    path(
+        "dashboard/products/<int:pk>/unpublish/",
+        WarehouseProductUnpublishView.as_view(),
+        name="warehouse_product_unpublish",
+    ),
+    path(
+        "dashboard/warehouse/products/<int:pk>/unpublish/",
+        RedirectView.as_view(pattern_name="store:warehouse_product_unpublish", permanent=False),
     ),
     path(
         "dashboard/categories/create/",

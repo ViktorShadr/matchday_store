@@ -18,6 +18,7 @@ from store.services.cart_validator import CartValidator
 from store.services.cart_exceptions import (
     CartException,
     ProductVariantNotFoundError,
+    ProductNotOnSaleError,
     InvalidQuantityError,
     InsufficientStockError,
     CartOperationError,
@@ -123,7 +124,7 @@ class AddToCartView(View):
             messages.success(request, success_message)
             return redirect(get_safe_redirect_url(request))
 
-        except (ProductVariantNotFoundError, InvalidQuantityError, InsufficientStockError) as e:
+        except (ProductVariantNotFoundError, ProductNotOnSaleError, InvalidQuantityError, InsufficientStockError) as e:
             logger.warning(f"Validation error in add_to_cart: {e}")
             if wants_json:
                 return build_error_response(e)
@@ -198,7 +199,7 @@ class UpdateCartView(View):
             messages.success(request, success_message)
             return redirect(get_safe_redirect_url(request))
 
-        except (ProductVariantNotFoundError, InvalidQuantityError, InsufficientStockError) as e:
+        except (ProductVariantNotFoundError, ProductNotOnSaleError, InvalidQuantityError, InsufficientStockError) as e:
             logger.warning(f"Validation error in update_cart: {e}")
             if wants_json:
                 return build_error_response(e)

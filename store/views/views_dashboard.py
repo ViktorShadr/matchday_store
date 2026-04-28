@@ -122,7 +122,7 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
     context_object_name = "order"
 
     def get_queryset(self):
-        return Order.objects.select_related("user").prefetch_related("items")
+        return Order.objects.select_related("user").prefetch_related("items", "status_transitions__changed_by")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -131,7 +131,7 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         payment_status_meta = DashboardOrderPresenter.get_payment_meta(self.object)
 
         context["items"] = self.object.items.order_by("pk")
-        context["status_choices"] = DASHBOARD_ORDER_STATUS_CHOICES
+        context["status_choices"] = DashboardOrderPresenter.get_available_status_choices(self.object)
         context["payment_status_choices"] = DASHBOARD_PAYMENT_STATUS_CHOICES
         context["current_status_key"] = dashboard_status_key
         context["current_status_label"] = dashboard_status_meta["label"]
@@ -139,6 +139,11 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         context["current_payment_status_key"] = self.object.payment_status
         context["current_payment_status_label"] = payment_status_meta["label"]
         context["current_payment_status_badge"] = payment_status_meta["badge_class"]
+        context["staff_guidance"] = DashboardOrderPresenter.build_staff_guidance(self.object)
+        context["status_transitions"] = self.object.status_transitions.select_related("changed_by").order_by(
+            "-created_at",
+            "-id",
+        )
         return context
 
 
@@ -152,7 +157,7 @@ class DashboardOrderStatusUpdateView(ModeratorRequiredMixin, View):
             return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
         try:
-            result = self.dashboard_order_flow_service.update_order_status(order, next_status)
+            result = self.dashboard_order_flow_service.update_order_status(order, next_status, actor=request.user)
         except DashboardOrderFlowError as exc:
             messages.error(request, str(exc))
         else:
@@ -171,7 +176,11 @@ class DashboardOrderPaymentStatusUpdateView(ModeratorRequiredMixin, View):
             return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
         try:
-            result = self.dashboard_order_flow_service.update_payment_status(order, next_payment_status)
+            result = self.dashboard_order_flow_service.update_payment_status(
+                order,
+                next_payment_status,
+                actor=request.user,
+            )
         except DashboardOrderFlowError as exc:
             messages.error(request, str(exc))
         else:
@@ -185,11 +194,16 @@ class WarehouseProductCreateView(ModeratorRequiredMixin, CreateView):
     model = Product
     form_class = ProductForm
     template_name = "dashboard/product_form.html"
+    crud_service = WarehouseCrudService()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(WarehouseUiPresenter.product_create_context())
         return context
+
+    def form_valid(self, form):
+        self.object = self.crud_service.save_product(form, is_on_sale=False)
+        return HttpResponseRedirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse("store:warehouse_product_manage", kwargs={"pk": self.object.pk})
@@ -275,6 +289,26 @@ class WarehouseProductManageView(ModeratorRequiredMixin, DetailView):
             )
         )
         return context
+
+
+class WarehouseProductPublishView(ModeratorRequiredMixin, View):
+    crud_service = WarehouseCrudService()
+
+    def post(self, request, *args, **kwargs):
+        product = get_object_or_404(Product, pk=self.kwargs["pk"])
+        self.crud_service.set_product_sale_state(product, is_on_sale=True)
+        messages.success(request, "Товар выставлен на продажу.")
+        return HttpResponseRedirect(reverse("store:warehouse_product_manage", kwargs={"pk": product.pk}))
+
+
+class WarehouseProductUnpublishView(ModeratorRequiredMixin, View):
+    crud_service = WarehouseCrudService()
+
+    def post(self, request, *args, **kwargs):
+        product = get_object_or_404(Product, pk=self.kwargs["pk"])
+        self.crud_service.set_product_sale_state(product, is_on_sale=False)
+        messages.success(request, "Товар снят с продажи.")
+        return HttpResponseRedirect(reverse("store:warehouse_product_manage", kwargs={"pk": product.pk}))
 
 
 class WarehouseVariantCreateView(ModeratorRequiredMixin, CreateView):

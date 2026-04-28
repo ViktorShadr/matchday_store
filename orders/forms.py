@@ -16,6 +16,8 @@ class CheckoutForm(forms.Form):
             attrs={
                 "class": "form-control",
                 "placeholder": "Имя и фамилия",
+                "autocomplete": "name",
+                "autofocus": True,
             }
         ),
     )
@@ -25,6 +27,10 @@ class CheckoutForm(forms.Form):
             attrs={
                 "class": "form-control",
                 "placeholder": "you@example.com",
+                "autocomplete": "email",
+                "inputmode": "email",
+                "autocapitalize": "off",
+                "spellcheck": "false",
             }
         ),
     )
@@ -35,6 +41,9 @@ class CheckoutForm(forms.Form):
             attrs={
                 "class": "form-control",
                 "placeholder": "+7 (900) 000-00-00",
+                "type": "tel",
+                "autocomplete": "tel",
+                "inputmode": "tel",
             }
         ),
     )

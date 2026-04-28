@@ -93,6 +93,11 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
                 checkout_token=submitted_token,
             )
         except CheckoutError as exc:
+            # Корзина могла измениться в checkout-сервисе (например, недоступные позиции удалены).
+            self.cart_summary = cart_service.get_cart_summary(self.cart_context)
+            if not self.cart_summary["items"]:
+                messages.warning(self.request, str(exc))
+                return redirect("store:cart")
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 
@@ -109,10 +114,11 @@ class CheckoutSuccessView(LoginRequiredMixin, CartContextMixin, TemplateView):
         """Вернуть оформленный заказ текущего пользователя."""
         context = super().get_context_data(**kwargs)
         try:
-            order = Order.objects.get(pk=self.kwargs["pk"], user=self.request.user)
+            order = Order.objects.prefetch_related("items").get(pk=self.kwargs["pk"], user=self.request.user)
         except Order.DoesNotExist as exc:
             raise Http404 from exc
 
         context["order"] = order
+        context["order_items"] = order.items.order_by("pk")
         context["pickup_location"] = CheckoutSessionService.build_pickup_location()
         return context

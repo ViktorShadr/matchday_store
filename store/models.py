@@ -47,6 +47,7 @@ class Product(models.Model):
         name (str): Название товара
         description (str): Описание товара (необязательно)
         category (Category): Связанная категория (необязательно)
+        is_on_sale (bool): Доступен ли товар к продаже на витрине
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
     """
@@ -60,6 +61,7 @@ class Product(models.Model):
         null=True,
         blank=True,
     )
+    is_on_sale = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 

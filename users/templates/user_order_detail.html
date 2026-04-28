@@ -2,6 +2,7 @@
 
 {% block title %}Детали заказа — ФК «Шинник»{% endblock %}
 {% block meta_description %}Подробная информация о заказе в официальном магазине атрибутики ФК «Шинник».{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
 <section class="sf-profile-page">
@@ -43,17 +44,34 @@
                         </div>
 
                         <div class="sf-order-status-wrap">
-                            <span class="sf-order-status
-                                {% if order.status == 'completed' or order.status == 'done' %}
-                                    sf-order-status--success
-                                {% elif order.status == 'cancelled' %}
-                                    sf-order-status--danger
-                                {% else %}
-                                    sf-order-status--neutral
-                                {% endif %}
-                            ">
-                                {{ order.get_status_display|default:order.status|default:"В обработке" }}
-                            </span>
+                            <div class="sf-order-badges">
+                                <span class="sf-order-status sf-order-status--compact
+                                    {% if order.user_work_status_tone == 'success' %}
+                                        sf-order-status--success
+                                    {% elif order.user_work_status_tone == 'danger' %}
+                                        sf-order-status--danger
+                                    {% elif order.user_work_status_tone == 'warning' %}
+                                        sf-order-status--warning
+                                    {% else %}
+                                        sf-order-status--neutral
+                                    {% endif %}
+                                ">
+                                    {{ order.user_work_status_label|default:order.get_status_display|default:order.status|default:"В обработке" }}
+                                </span>
+                                <span class="sf-order-status sf-order-status--compact
+                                    {% if order.user_payment_status_tone == 'success' %}
+                                        sf-order-status--success
+                                    {% elif order.user_payment_status_tone == 'danger' %}
+                                        sf-order-status--danger
+                                    {% elif order.user_payment_status_tone == 'warning' %}
+                                        sf-order-status--warning
+                                    {% else %}
+                                        sf-order-status--neutral
+                                    {% endif %}
+                                ">
+                                    {{ order.user_payment_status_label|default:order.get_payment_status_display|default:"Ожидает оплаты" }}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -61,9 +79,9 @@
                 <div class="sf-profile-card">
                     <h2 class="sf-profile-section-title">Состав заказа</h2>
 
-                    {% if order.items.all %}
+                    {% if order_items %}
                         <div class="sf-order-detail-items">
-                            {% for item in order.items.all %}
+                            {% for item in order_items %}
                                 <div class="sf-order-detail-item">
                                     <div class="sf-order-detail-item-main">
                                         <div class="sf-order-detail-item-name">
@@ -112,7 +130,12 @@
 
                         <div class="sf-order-detail-summary-row">
                             <span>Статус</span>
-                            <strong>{{ order.get_status_display|default:order.status|default:"В обработке" }}</strong>
+                            <strong>{{ order.user_work_status_label|default:order.get_status_display|default:order.status|default:"В обработке" }}</strong>
+                        </div>
+
+                        <div class="sf-order-detail-summary-row">
+                            <span>Оплата</span>
+                            <strong>{{ order.get_payment_status_display }}</strong>
                         </div>
 
                         <div class="sf-order-detail-summary-row">
@@ -127,6 +150,31 @@
                         </div>
                     </div>
                 </div>
+
+                {% if pickup_location %}
+                    <div class="sf-profile-card">
+                        <h2 class="sf-profile-section-title">Самовывоз</h2>
+
+                        <div class="sf-order-detail-summary">
+                            <div class="sf-order-detail-summary-row">
+                                <span>Магазин</span>
+                                <strong>{{ pickup_location.name }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Адрес</span>
+                                <strong>{{ pickup_location.address }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Часы работы</span>
+                                <strong>{{ pickup_location.hours }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Телефон</span>
+                                <strong>{{ pickup_location.phone }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
 
                 <div class="sf-profile-card">
                     <h2 class="sf-profile-section-title">Данные получателя</h2>
@@ -167,6 +215,19 @@
                         {% endif %}
                     </div>
                 </div>
+
+                {% if can_cancel %}
+                    <div class="sf-profile-card">
+                        <h2 class="sf-profile-section-title">Действия</h2>
+                        <p class="sf-order-detail-recipient-value mb-3">
+                            Заказ можно отменить, пока он не выдан и не переведен в финальный оплаченный статус.
+                        </p>
+                        <form method="post" action="{% url 'users:order_cancel' pk=order.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger w-100">Отменить заказ</button>
+                        </form>
+                    </div>
+                {% endif %}
             </aside>
         </div>
     </div>

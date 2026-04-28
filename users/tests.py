@@ -468,9 +468,83 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "ORD-USER-1")
         self.assertContains(response, "2")
         self.assertContains(response, "3000,00")
-        self.assertContains(response, "Оформлен")
+        self.assertContains(response, "Новый")
         self.assertContains(response, "Отменить заказ")
         self.assertNotContains(response, "ORD-OTHER-1")
+
+    def test_user_order_list_reflects_current_workflow_status(self):
+        """Список заказов должен показывать статус исполнения, а не только общий status."""
+        Order.objects.create(
+            number="ORD-READY-1",
+            user=self.user,
+            recipient_name="Покупатель",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PROCESSING,
+            fulfillment_status=Order.FulfillmentStatus.RESERVED,
+            total_amount="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Готов к выдаче")
+        self.assertNotContains(response, "В обработке")
+
+    def test_user_order_detail_shows_pickup_payment_and_cancel_action(self):
+        order = Order.objects.create(
+            number="ORD-DETAIL-1",
+            user=self.user,
+            recipient_name="Покупатель",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            total_amount="1500.00",
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot="Шарф",
+            unit_price="1500.00",
+            quantity=1,
+            line_total="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_detail", kwargs={"pk": order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Самовывоз")
+        self.assertContains(response, "Ожидает оплаты")
+        self.assertContains(response, "Отменить заказ")
+        self.assertContains(response, "Шарф")
+
+    def test_user_order_detail_reflects_current_workflow_status(self):
+        order = Order.objects.create(
+            number="ORD-DETAIL-READY-1",
+            user=self.user,
+            recipient_name="Покупатель",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PROCESSING,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.RESERVED,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            total_amount="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_detail", kwargs={"pk": order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Готов к выдаче")
+        self.assertNotContains(response, "В обработке")
 
     def test_user_can_cancel_own_order_from_orders_page(self):
         """Отмена из UI должна проходить через доменный сервис и возвращать остатки."""

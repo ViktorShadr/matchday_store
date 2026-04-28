@@ -6,8 +6,9 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from orders.application import CheckoutContext
-from orders.models import Order, OrderItem
+from orders.application.checkout_context import CheckoutContext
+from orders.application.order_notification_service import OrderNotificationService
+from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
 from store.repositories import IProductVariantRepository
@@ -110,6 +111,9 @@ class CheckoutService(ICheckoutService):
         if existing_payment:
             return existing_payment.order
 
+        order = None
+        unavailable_only_error = None
+
         try:
             with transaction.atomic():
                 cart = checkout_context.cart_context.cart
@@ -134,11 +138,20 @@ class CheckoutService(ICheckoutService):
 
                 subtotal_amount = Decimal("0.00")
                 order_items = []
+                processable_cart_items = []
+                skipped_cart_item_ids = []
 
                 for cart_item in cart_items:
                     variant = locked_variants.get(cart_item.product_variant_id)
                     if variant is None:
-                        raise CheckoutError("Один из товаров больше недоступен. Обновите корзину.")
+                        skipped_cart_item_ids.append(cart_item.pk)
+                        continue
+
+                    # Позиции, которые нельзя оформить (сняты с продажи или нулевой остаток),
+                    # исключаем из checkout и удаляем из корзины в этой же транзакции.
+                    if not variant.product.is_on_sale or variant.quantity <= 0:
+                        skipped_cart_item_ids.append(cart_item.pk)
+                        continue
 
                     if variant.quantity < cart_item.quantity:
                         raise CheckoutError(
@@ -160,58 +173,78 @@ class CheckoutService(ICheckoutService):
                             line_total=line_total,
                         )
                     )
+                    processable_cart_items.append(cart_item)
 
-                order = self.order_repository.create_order(
-                    number=self.build_order_number(),
-                    user=checkout_context.user,
-                    recipient_name=cleaned_data["recipient_name"],
-                    email=cleaned_data["email"],
-                    phone=cleaned_data["phone"],
-                    status=Order.Status.PLACED,
-                    payment_status=Order.PaymentStatus.PENDING,
-                    fulfillment_status=Order.FulfillmentStatus.NEW,
-                    delivery_method=Order.DeliveryMethod.PICKUP,
-                    delivery_address=None,
-                    pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
-                    subtotal_amount=subtotal_amount,
-                    delivery_amount=Decimal("0.00"),
-                    discount_amount=Decimal("0.00"),
-                    total_amount=subtotal_amount,
-                    customer_comment=cleaned_data.get("customer_comment", "").strip(),
-                    source_cart_id=cart.id,
-                    confirmed_at=timezone.now(),
-                )
+                if skipped_cart_item_ids:
+                    cart.items.filter(pk__in=skipped_cart_item_ids).delete()
 
-                for item in order_items:
-                    item.order = order
-                self.order_repository.bulk_create_order_items(order_items)
+                if not order_items:
+                    unavailable_only_error = (
+                        "В корзине не осталось доступных товаров. "
+                        "Недоступные позиции удалены."
+                    )
+                else:
+                    order = self.order_repository.create_order(
+                        number=self.build_order_number(),
+                        user=checkout_context.user,
+                        recipient_name=cleaned_data["recipient_name"],
+                        email=cleaned_data["email"],
+                        phone=cleaned_data["phone"],
+                        status=Order.Status.PLACED,
+                        payment_status=Order.PaymentStatus.PENDING,
+                        fulfillment_status=Order.FulfillmentStatus.NEW,
+                        delivery_method=Order.DeliveryMethod.PICKUP,
+                        delivery_address=None,
+                        pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+                        subtotal_amount=subtotal_amount,
+                        delivery_amount=Decimal("0.00"),
+                        discount_amount=Decimal("0.00"),
+                        total_amount=subtotal_amount,
+                        customer_comment=cleaned_data.get("customer_comment", "").strip(),
+                        source_cart_id=cart.id,
+                        confirmed_at=timezone.now(),
+                    )
 
-                PaymentWorkflowService.create_payment(
-                    order=order,
-                    provider=Payment.Provider.MANUAL,
-                    idempotency_key=payment_idempotency_key,
-                    status=Payment.Status.PENDING,
-                    amount=subtotal_amount,
-                    currency=order.currency,
-                    raw_request={
-                        "payment_method": "pay_on_receipt",
-                        "pickup_location_code": settings.STORE_PICKUP_LOCATION_CODE,
-                    },
-                )
+                    for item in order_items:
+                        item.order = order
+                    self.order_repository.bulk_create_order_items(order_items)
 
-                for cart_item in cart_items:
-                    variant = locked_variants[cart_item.product_variant_id]
-                    variant.quantity -= cart_item.quantity
-                    variant.save(update_fields=["quantity", "updated_at"])
+                    PaymentWorkflowService.create_payment(
+                        order=order,
+                        provider=Payment.Provider.MANUAL,
+                        idempotency_key=payment_idempotency_key,
+                        status=Payment.Status.PENDING,
+                        amount=subtotal_amount,
+                        currency=order.currency,
+                        raw_request={
+                            "payment_method": "pay_on_receipt",
+                            "pickup_location_code": settings.STORE_PICKUP_LOCATION_CODE,
+                        },
+                    )
 
-                cart.items.all().delete()
-                return order
+                    for cart_item in processable_cart_items:
+                        variant = locked_variants[cart_item.product_variant_id]
+                        variant.quantity -= cart_item.quantity
+                        variant.save(update_fields=["quantity", "updated_at"])
+
+                    processable_cart_item_ids = [item.pk for item in processable_cart_items]
+                    if processable_cart_item_ids:
+                        cart.items.filter(pk__in=processable_cart_item_ids).delete()
+                    OrderNotificationService.schedule_created(order.id)
         except IntegrityError as exc:
             if checkout_token:
                 existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
                 if existing_payment:
                     return existing_payment.order
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
+
+        if order:
+            return order
+
+        if unavailable_only_error:
+            raise CheckoutError(unavailable_only_error)
+
+        raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
 
 class OrderCancellationService:
@@ -268,7 +301,7 @@ class OrderCancellationService:
             return False
         return True
 
-    def cancel_order(self, order_id: int, user_id: Optional[int] = None) -> Order:
+    def cancel_order(self, order_id: int, user_id: Optional[int] = None, actor=None) -> Order:
         """
         Отменить заказ и вернуть остатки на склад.
 
@@ -305,6 +338,10 @@ class OrderCancellationService:
                 variant.quantity += order_item.quantity
                 variant.save(update_fields=["quantity", "updated_at"])
 
+            previous_order_status = order.status
+            previous_fulfillment_status = order.fulfillment_status
+            previous_payment_status = order.payment_status
+
             order.status = Order.Status.CANCELLED
             order.fulfillment_status = Order.FulfillmentStatus.CANCELLED
             order.payment_status = Order.PaymentStatus.CANCELLED
@@ -318,6 +355,28 @@ class OrderCancellationService:
                     "updated_at",
                 ]
             )
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.ORDER_STATUS,
+                from_value=previous_order_status,
+                to_value=order.status,
+                changed_by=actor,
+            )
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.FULFILLMENT_STATUS,
+                from_value=previous_fulfillment_status,
+                to_value=order.fulfillment_status,
+                changed_by=actor,
+            )
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.PAYMENT_STATUS,
+                from_value=previous_payment_status,
+                to_value=order.payment_status,
+                changed_by=actor,
+            )
+            OrderNotificationService.schedule_cancelled(order.id)
 
             return order
 
@@ -362,7 +421,7 @@ class ManualPaymentUpdateService:
     def _build_dashboard_idempotency_key(order_id: int) -> str:
         return f"dashboard-manual-{order_id}-{uuid4().hex}"
 
-    def update_order_payment_status(self, order_id: int, next_payment_status: str) -> Order:
+    def update_order_payment_status(self, order_id: int, next_payment_status: str, actor=None) -> Order:
         """
         Обновить статус оплаты заказа через ручной staff-flow.
 
@@ -375,6 +434,7 @@ class ManualPaymentUpdateService:
             except Order.DoesNotExist as exc:
                 raise ManualPaymentUpdateError("Заказ не найден.") from exc
 
+            previous_payment_status = order.payment_status
             self._ensure_can_update_payment(order, next_payment_status)
             now = timezone.now()
 
@@ -426,4 +486,16 @@ class ManualPaymentUpdateService:
                 order.save(update_fields=["paid_at", "updated_at"])
 
             order.refresh_from_db()
+            OrderStatusTransition.log_if_changed(
+                order=order,
+                transition_type=OrderStatusTransition.TransitionType.PAYMENT_STATUS,
+                from_value=previous_payment_status,
+                to_value=order.payment_status,
+                changed_by=actor,
+            )
+            if (
+                previous_payment_status != Order.PaymentStatus.SUCCEEDED
+                and order.payment_status == Order.PaymentStatus.SUCCEEDED
+            ):
+                OrderNotificationService.schedule_paid(order.id)
             return order

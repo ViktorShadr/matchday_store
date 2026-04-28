@@ -11,16 +11,30 @@ LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY is not set")
 
 
 def env_bool(name: str, default: bool = False) -> bool:
-    """Выполняет логику 'env_bool'."""
+    """Преобразует значение переменной окружения в bool."""
     return os.getenv(name, str(default)).lower() in {"1", "true", "yes", "on"}
+
+
+def env_list(name: str) -> list[str]:
+    """Преобразует comma-separated переменную окружения в список."""
+    return [item.strip() for item in os.getenv(name, "").split(",") if item.strip()]
 
 
 DEBUG = env_bool("DEBUG", True)
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "").split(",") if host.strip()]
+
+if DEBUG and not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -104,15 +118,18 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Не сохраняем тестовые загрузки на диск.
 if "test" in sys.argv:
     STORAGES = {
         "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
+else:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 
 AUTH_USER_MODEL = "users.User"
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "/users/login/"
@@ -124,18 +141,54 @@ CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 CELERY_EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
-
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@matchday-store.com")
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    EMAIL_HOST_USER or "noreply@matchday-store.com",
+)
+STAFF_ORDER_NOTIFICATION_EMAILS = env_list("STAFF_ORDER_NOTIFICATION_EMAILS")
 SITE_URL = os.getenv("SITE_URL", "http://localhost:8000")
 
 STORE_PICKUP_LOCATION_CODE = os.getenv("STORE_PICKUP_LOCATION_CODE", "main-store")
-STORE_PICKUP_LOCATION_NAME = os.getenv("STORE_PICKUP_LOCATION_NAME", "Фирменный магазин ФК «Шинник»")
-STORE_PICKUP_ADDRESS = os.getenv("STORE_PICKUP_ADDRESS", "г. Ярославль, ул. Победы, 12")
-STORE_PICKUP_HOURS = os.getenv("STORE_PICKUP_HOURS", "Ежедневно с 10:00 до 20:00")
-STORE_PICKUP_PHONE = os.getenv("STORE_PICKUP_PHONE", "+7 (4852) 00-00-00")
+STORE_PICKUP_LOCATION_NAME = os.getenv(
+    "STORE_PICKUP_LOCATION_NAME",
+    "Фирменный магазин ФК «Шинник»",
+)
+STORE_PICKUP_ADDRESS = os.getenv(
+    "STORE_PICKUP_ADDRESS",
+    "г. Ярославль, ул. Победы, 12",
+)
+STORE_PICKUP_HOURS = os.getenv(
+    "STORE_PICKUP_HOURS",
+    "Ежедневно с 10:00 до 20:00",
+)
+STORE_PICKUP_PHONE = os.getenv(
+    "STORE_PICKUP_PHONE",
+    "+7 (4852) 00-00-00",
+)
+
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+        "SECURE_HSTS_INCLUDE_SUBDOMAINS",
+        True,
+    )
+    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)

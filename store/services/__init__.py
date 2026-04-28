@@ -10,6 +10,7 @@ from .cart_exceptions import (
     InsufficientStockError,
     InvalidQuantityError,
     ProductVariantNotFoundError,
+    ProductNotOnSaleError,
     CartOperationError,
 )
 from .cart_validator import CartValidator
@@ -26,6 +27,7 @@ __all__ = [
     "InsufficientStockError",
     "InvalidQuantityError",
     "ProductVariantNotFoundError",
+    "ProductNotOnSaleError",
     "CartOperationError",
     "CartValidator",
 ]

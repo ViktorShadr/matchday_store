@@ -9,15 +9,9 @@
         {% endif %}
 
         <a href="{% url 'store:product_detail' pk=product.pk %}" class="sf-product-card-image-link">
-            {% if product.images.first %}
+            {% if product.display_image %}
                 <img
-                    src="{{ product.images.first.image.url }}"
-                    alt="{{ product.name }}"
-                    loading="lazy"
-                >
-            {% elif product.image %}
-                <img
-                    src="{{ product.image.url }}"
+                    src="{{ product.display_image.url }}"
                     alt="{{ product.name }}"
                     loading="lazy"
                 >

@@ -1,4 +1,29 @@
 services:
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "8000:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_data:/var/www/static:ro
+      - media_data:/var/www/media:ro
+
+  web:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["sh", "/app/docker/web-entrypoint.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - static_data:/app/staticfiles
+      - media_data:/app/media
 
   db:
     image: postgres:16
@@ -9,8 +34,6 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,8 +45,32 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    profiles: ["worker"]
+
+  worker:
+    build:
+      context: .
+    restart: unless-stopped
+    profiles: ["worker"]
+    env_file:
+      - .env
+    command: ["celery", "-A", "config", "worker", "-l", "info", "--uid=nobody", "--gid=nogroup"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - media_data:/app/media
 
 volumes:
   postgres_data:
+  static_data:
+  media_data:
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 100.96.10.0/24

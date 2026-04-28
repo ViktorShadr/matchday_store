@@ -64,6 +64,13 @@ class DashboardOrderPresenter:
         "cancelled": {"label": "Отменен", "badge_class": "sf-status-badge sf-status-badge--danger"},
     }
     FINAL_STATUS_KEYS = frozenset({"issued", "cancelled"})
+    STATUS_TRANSITIONS = {
+        "new": frozenset({"new", "processing", "ready", "cancelled"}),
+        "processing": frozenset({"processing", "ready", "cancelled"}),
+        "ready": frozenset({"ready", "processing", "issued", "cancelled"}),
+        "issued": frozenset({"issued"}),
+        "cancelled": frozenset({"cancelled"}),
+    }
     PAYMENT_STATUS_CHOICES = (
         (Order.PaymentStatus.PENDING, "Ожидает оплаты"),
         (Order.PaymentStatus.SUCCEEDED, "Оплачен"),
@@ -99,30 +106,71 @@ class DashboardOrderPresenter:
         )
 
     @classmethod
+    def get_available_status_choices(cls, order: Order) -> list[tuple[str, str, bool]]:
+        current_status_key = cls.get_status_key(order)
+        allowed_transitions = cls.STATUS_TRANSITIONS[current_status_key]
+        return [
+            (value, label, value in allowed_transitions)
+            for value, label in cls.STATUS_CHOICES
+        ]
+
+    @classmethod
+    def build_staff_guidance(cls, order: Order) -> list[str]:
+        current_status_key = cls.get_status_key(order)
+        guidance = []
+
+        if current_status_key == "new":
+            guidance.append("Проверьте состав заказа и подтвердите, что товар доступен к сборке.")
+            guidance.append("Переведите заказ в «В обработке», когда сотрудник начал подготовку.")
+        elif current_status_key == "processing":
+            guidance.append("Заказ собирается. После комплектации переведите его в «Готов к выдаче».")
+        elif current_status_key == "ready":
+            guidance.append("Свяжитесь с клиентом и сообщите, что заказ готов к самовывозу.")
+            if order.payment_status != Order.PaymentStatus.SUCCEEDED:
+                guidance.append("Перед выдачей подтвердите оплату через блок «Изменить оплату».")
+            else:
+                guidance.append("Оплата подтверждена. Заказ можно выдать клиенту.")
+        elif current_status_key == "issued":
+            guidance.append("Заказ уже выдан. Дальнейшие изменения через dashboard недоступны.")
+        elif current_status_key == "cancelled":
+            guidance.append("Заказ отменен. Остатки уже возвращены на склад автоматически.")
+
+        if order.delivery_method == Order.DeliveryMethod.PICKUP:
+            guidance.append("Сценарий MVP: самовывоз из магазина, доставка и онлайн-оплата не используются.")
+
+        return guidance
+
+    @classmethod
     def apply_status(cls, order: Order, status_key: str) -> None:
         if status_key == "new":
             order.fulfillment_status = Order.FulfillmentStatus.NEW
             order.status = Order.Status.PLACED
+            order.issued_at = None
             order.cancelled_at = None
             return
         if status_key == "processing":
             order.fulfillment_status = Order.FulfillmentStatus.PACKING
             order.status = Order.Status.PROCESSING
+            order.issued_at = None
             order.cancelled_at = None
             return
         if status_key == "ready":
             order.fulfillment_status = Order.FulfillmentStatus.RESERVED
             order.status = Order.Status.PROCESSING
+            order.issued_at = None
             order.cancelled_at = None
             return
         if status_key == "issued":
             order.fulfillment_status = Order.FulfillmentStatus.DELIVERED
             order.status = Order.Status.DELIVERED
+            if order.issued_at is None:
+                order.issued_at = timezone.now()
             order.cancelled_at = None
             return
         if status_key == "cancelled":
             order.fulfillment_status = Order.FulfillmentStatus.CANCELLED
             order.status = Order.Status.CANCELLED
+            order.issued_at = None
             if order.cancelled_at is None:
                 order.cancelled_at = timezone.now()
             return

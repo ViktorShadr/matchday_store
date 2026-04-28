@@ -80,7 +80,7 @@ function showNotification(message, type, duration = 3000) {
 
     const notification = document.createElement('div');
     notification.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed sf-notification`;
-    notification.style.cssText = 'top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; min-width: 300px; max-width: 500px; text-align: center; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);';
+    notification.style.cssText = 'top: 16px; left: 50%; transform: translateX(-50%); z-index: 9999; width: min(500px, calc(100vw - 24px)); text-align: center; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);';
     notification.textContent = message;
 
     document.body.appendChild(notification);
@@ -137,127 +137,12 @@ function debounce(func, wait) {
     };
 }
 
-// Mini-cart functionality
-(function() {
-    const cartBtn = document.querySelector('[data-mini-cart-toggle]');
-    const miniCart = document.querySelector('.sf-mini-cart');
-
-    if (cartBtn && miniCart) {
-        cartBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            miniCart.classList.toggle('show');
-        });
-
-        // Close when clicking outside
-        document.addEventListener('click', function(e) {
-            if (!cartBtn.contains(e.target) && !miniCart.contains(e.target)) {
-                miniCart.classList.remove('show');
-            }
-        });
-    }
-})();
-
-// Quick-add functionality for product cards
-(function() {
-    document.addEventListener('DOMContentLoaded', function() {
-        const quickAddBtns = document.querySelectorAll('.quick-add-btn');
-
-        quickAddBtns.forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-
-                const variantId = this.dataset.variantId;
-                const addUrl = this.dataset.addUrl;
-                if (!variantId || !addUrl) return;
-
-                // Disable button during request
-                this.disabled = true;
-                const originalContent = this.innerHTML;
-                this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-
-                fetch(addUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': getCsrfToken()
-                    },
-                    body: `variant_id=${variantId}&quantity=1`
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showNotification(data.message, 'success');
-                        updateCartCounter(data.cart_total);
-                    } else {
-                        showNotification(data.error, 'error');
-                    }
-                })
-                .catch(error => {
-                    showNotification('Ошибка при добавлении товара', 'error');
-                })
-                .finally(() => {
-                    this.disabled = false;
-                    this.innerHTML = originalContent;
-                });
-            });
-        });
-    });
-})();
-
-// Toast notification system
-(function() {
-    // Create container if not exists
-    let container = document.getElementById('toastContainer');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toastContainer';
-        container.className = 'sf-toast-container';
-        document.body.appendChild(container);
-    }
-
-    // Override showNotification to use toast
-    window.showNotification = function(message, type = 'success', title = '') {
-        const icons = {
-            success: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
-            error: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
-            info: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
-        };
-
-        const titles = {
-            success: title || 'Успешно',
-            error: title || 'Ошибка',
-            info: title || 'Информация'
-        };
-
-        const toast = document.createElement('div');
-        toast.className = `sf-toast ${type}`;
-        toast.innerHTML = `
-            <div class="sf-toast-icon">${icons[type] || icons.info}</div>
-            <div class="sf-toast-content">
-                <div class="sf-toast-title">${titles[type]}</div>
-                <div class="sf-toast-message">${message}</div>
-            </div>
-            <button class="sf-toast-close" onclick="this.parentElement.remove()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
-        `;
-
-        container.appendChild(toast);
-
-        // Auto remove after 4 seconds
-        setTimeout(() => {
-            toast.classList.add('removing');
-            setTimeout(() => toast.remove(), 300);
-        }, 4000);
-    };
-})();
-
 // Scroll to top button
 (function() {
+    if (document.querySelector('.sf-scroll-top')) {
+        return;
+    }
+
     const scrollBtn = document.createElement('button');
     scrollBtn.className = 'sf-scroll-top';
     scrollBtn.setAttribute('aria-label', 'Наверх');
@@ -286,62 +171,16 @@ function debounce(func, wait) {
 
 // Confirm toast notification with action buttons
 function showConfirmToast(message, onConfirm, onCancel) {
-    const container = document.getElementById('toastContainer') || (() => {
-        const c = document.createElement('div');
-        c.id = 'toastContainer';
-        c.className = 'sf-toast-container';
-        document.body.appendChild(c);
-        return c;
-    })();
-
-    const toast = document.createElement('div');
-    toast.className = 'sf-toast info';
-    toast.style.minWidth = '350px';
-    toast.innerHTML = `
-        <div class="sf-toast-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-            </svg>
-        </div>
-        <div class="sf-toast-content">
-            <div class="sf-toast-title">Подтвердите действие</div>
-            <div class="sf-toast-message">${message}</div>
-            <div class="mt-2 d-flex gap-2">
-                <button class="btn btn-sm btn-danger confirm-btn">Удалить</button>
-                <button class="btn btn-sm btn-outline-secondary cancel-btn">Отмена</button>
-            </div>
-        </div>
-    `;
-
-    container.appendChild(toast);
-
-    const confirmBtn = toast.querySelector('.confirm-btn');
-    const cancelBtn = toast.querySelector('.cancel-btn');
-
-    const removeToast = () => {
-        toast.classList.add('removing');
-        setTimeout(() => toast.remove(), 300);
-    };
-
-    confirmBtn.addEventListener('click', () => {
-        removeToast();
-        if (typeof onConfirm === 'function') onConfirm();
-    });
-
-    cancelBtn.addEventListener('click', () => {
-        removeToast();
-        if (typeof onCancel === 'function') onCancel();
-    });
-
-    // Auto remove after 10 seconds if no action
-    setTimeout(() => {
-        if (toast.parentNode) {
-            toast.classList.add('removing');
-            setTimeout(() => toast.remove(), 300);
+    const confirmed = window.confirm(message);
+    if (confirmed) {
+        if (typeof onConfirm === 'function') {
+            onConfirm();
         }
-    }, 10000);
+        return;
+    }
+    if (typeof onCancel === 'function') {
+        onCancel();
+    }
 }
 
 // Export functions for use in other scripts

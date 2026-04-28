@@ -9,6 +9,7 @@ from ..application.cart_context import CartContext
 from .cart_exceptions import (
     InsufficientStockError,
     ProductVariantNotFoundError,
+    ProductNotOnSaleError,
     CartOperationError,
 )
 
@@ -80,6 +81,9 @@ class CartService:
 
             logger.info("User %s adding variant %s qty %s", cart_context.actor_label, product_variant_id, quantity)
 
+            if not product_variant.product.is_on_sale:
+                raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
+
             # Проверяем наличие товара
             if product_variant.quantity < quantity:
                 logger.warning(
@@ -120,7 +124,7 @@ class CartService:
         except ProductVariant.DoesNotExist:
             logger.error(f"Product variant not found: {product_variant_id}")
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
-        except (InsufficientStockError, ProductVariantNotFoundError):
+        except (InsufficientStockError, ProductVariantNotFoundError, ProductNotOnSaleError):
             # Пробрасываем свои исключения дальше
             raise
         except Exception as e:
@@ -151,6 +155,9 @@ class CartService:
 
             logger.info("User %s updating variant %s qty to %s", cart_context.actor_label, product_variant_id, quantity)
 
+            if not product_variant.product.is_on_sale:
+                raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
+
             if quantity < 1:
                 raise ValueError("Количество должно быть больше 0")
 
@@ -175,7 +182,7 @@ class CartService:
         except ProductVariant.DoesNotExist:
             logger.error(f"Product variant not found: {product_variant_id}")
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
-        except (InsufficientStockError, ProductVariantNotFoundError, ValueError):
+        except (InsufficientStockError, ProductVariantNotFoundError, ProductNotOnSaleError, ValueError):
             raise
         except Exception as e:
             logger.error(f"Error updating cart item: {e}", exc_info=True)
@@ -239,6 +246,8 @@ class CartService:
         ).prefetch_related('product_variant__product__images').all():
             variant = item.product_variant
             product = variant.product
+            in_stock = variant.quantity > 0
+            is_available = bool(product.is_on_sale and in_stock)
             size = _clean_variant_value(variant.size)
             color = _clean_variant_value(variant.color)
             variant_parts = [part for part in (size, color) if part]
@@ -254,7 +263,7 @@ class CartService:
 
             items.append({
                 'variant_id': variant.id,
-                'product_id': product.id,
+                'product_id': product.id if is_available else None,
                 'product_name': product.name,
                 'size': size or None,
                 'color': color or None,
@@ -264,6 +273,10 @@ class CartService:
                 'total_price': item.total_price,
                 'total_price_formatted': f"{item.total_price:,}".replace(",", " "),
                 'image': image_url,
-                'max_quantity': variant.quantity,
+                'max_quantity': variant.quantity if is_available else 0,
+                'is_available': is_available,
+                'is_on_sale': product.is_on_sale,
+                'in_stock': in_stock,
+                'availability_message': "" if is_available else "Данный товар закончился",
             })
         return items

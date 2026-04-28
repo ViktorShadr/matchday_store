@@ -81,3 +81,66 @@ class PaymentWorkflowTest(TestCase):
         pending_payment.refresh_from_db()
 
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.PENDING)
+
+
+class PaymentSignalsSyncTest(TestCase):
+    """Тесты синхронизации статуса заказа через signals при прямых изменениях Payment."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(email="signals@example.com", password="testpass123")
+        self.address = Address.objects.create(
+            user=self.user,
+            recipient_name="Signal User",
+            phone="+79991110000",
+            city="Moscow",
+            postal_code="101000",
+            street="Tverskaya",
+            house="2",
+        )
+        self.order = Order.objects.create(
+            number="ORDER-SIGNALS-1001",
+            user=self.user,
+            email=self.user.email,
+            phone="+79991110000",
+            delivery_address=self.address,
+            subtotal_amount=Decimal("2000.00"),
+            total_amount=Decimal("2000.00"),
+        )
+
+    def _create_payment_directly(self, **kwargs) -> Payment:
+        defaults = {
+            "order": self.order,
+            "idempotency_key": f"signal-idem-{Payment.objects.count() + 1}",
+            "amount": Decimal("2000.00"),
+        }
+        defaults.update(kwargs)
+        return Payment.objects.create(**defaults)
+
+    def test_direct_create_payment_syncs_order_payment_status(self):
+        self._create_payment_directly(status=Payment.Status.SUCCEEDED)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+
+    def test_direct_update_payment_syncs_order_payment_status(self):
+        payment = self._create_payment_directly(status=Payment.Status.PENDING)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.PENDING)
+
+        payment.status = Payment.Status.REQUIRES_ACTION
+        payment.save(update_fields=["status", "updated_at"])
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.REQUIRES_ACTION)
+
+    def test_direct_delete_payment_syncs_order_payment_status(self):
+        pending_payment = self._create_payment_directly(status=Payment.Status.PENDING)
+        succeeded_payment = self._create_payment_directly(status=Payment.Status.SUCCEEDED)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+
+        succeeded_payment.delete()
+
+        self.order.refresh_from_db()
+        pending_payment.refresh_from_db()
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.PENDING)
