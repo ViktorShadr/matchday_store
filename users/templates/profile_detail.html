@@ -48,15 +48,6 @@
                     <div class="sf-profile-email">
                         {{ profile_user.email }}
                     </div>
-
-                    <div class="sf-profile-quick-links">
-                        <a href="{% url 'users:profile_edit' %}" class="sf-profile-quick-link">
-                            Изменить данные
-                        </a>
-                        <a href="{% url 'users:order_list' %}" class="sf-profile-quick-link">
-                            Перейти к заказам
-                        </a>
-                    </div>
                 </div>
             </aside>
 
@@ -118,26 +109,6 @@
                                 </div>
                             </div>
                         {% endif %}
-                    </div>
-                </div>
-
-                <div class="sf-profile-card">
-                    <h2 class="sf-profile-section-title">Что можно сделать</h2>
-
-                    <div class="sf-profile-actions-grid">
-                        <a href="{% url 'users:profile_edit' %}" class="sf-profile-action-tile">
-                            <div class="sf-profile-action-title">Редактировать профиль</div>
-                            <div class="sf-profile-action-text">
-                                Обновить контактные данные и сведения аккаунта.
-                            </div>
-                        </a>
-
-                        <a href="{% url 'users:order_list' %}" class="sf-profile-action-tile">
-                            <div class="sf-profile-action-title">Посмотреть заказы</div>
-                            <div class="sf-profile-action-text">
-                                Перейти к истории покупок и деталям оформленных заказов.
-                            </div>
-                        </a>
                     </div>
                 </div>
 

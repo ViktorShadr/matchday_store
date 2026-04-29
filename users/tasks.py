@@ -19,8 +19,8 @@ def send_welcome_email(user_email):
         )
         return False
 
-    subject = "Добро пожаловать в наш магазин"
-    message = "Спасибо, что зарегистрировались в Shinnik Fan Shop!"
+    subject = "Добро пожаловать в магазин атрибутики ФК Шинник!"
+    message = "Спасибо, что зарегистрировались в нашем магазине."
     recipient_list = [user_email]
 
     try:
@@ -64,9 +64,9 @@ def send_confirmation_email_sync(user_email, confirmation_token):
     # Формируем ссылку подтверждения
     confirmation_url = f"{settings.SITE_URL}/users/confirm-email/{confirmation_token}/"
 
-    subject = "Подтверждение email в Shinnik Fan Shop"
+    subject = "Подтверждение email в магазине атрибутики ФК Шинник"
     message = f"""
-    Спасибо за регистрацию в Shinnik Fan Shop!
+    Спасибо за регистрацию!
 
     Для активации вашего аккаунта, пожалуйста, подтвердите ваш email, перейдя по ссылке:
     {confirmation_url}
