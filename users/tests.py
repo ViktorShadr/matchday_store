@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from orders.models import Order, OrderItem
 from store.models import Category, Product, ProductImage, ProductVariant
+from users.application import EmailConfirmationService
 from users.forms import UserRegistrationForm, UserProfileForm, ProfileDeleteConfirmForm
 
 User = get_user_model()
@@ -62,6 +63,14 @@ class UserModelTest(TestCase):
 
         self.assertEqual(user.email_token, token)
         self.assertIsNotNone(user.email_token_created_at)
+
+    def test_missing_token_timestamp_is_not_expired_during_rollout(self):
+        user = User.objects.create_user(**self.user_data)
+        user.email_token = "legacy-token"
+        user.email_token_created_at = None
+        user.save(update_fields=["email_token", "email_token_created_at"])
+
+        self.assertFalse(EmailConfirmationService.is_token_expired(user))
 
     def test_email_normalization(self):
         """Проверяет сценарий 'email normalization'."""
@@ -307,6 +316,17 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json().get("status"), "ok")
 
+    @override_settings(
+        DEBUG=False,
+        ALLOWED_HOSTS=["testserver"],
+        SECURE_SSL_REDIRECT=True,
+    )
+    def test_healthz_endpoint_is_not_redirected_when_ssl_redirect_enabled(self):
+        response = self.client.get("/healthz/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "ok")
+
     @patch("users.views.send_welcome_email")
     def test_confirm_email_logs_user_in_and_redirects_to_profile(self, mock_welcome_email):
         confirm_user = User.objects.create_user(
@@ -326,6 +346,28 @@ class UserViewsTest(TestCase):
         self.assertIsNone(confirm_user.email_token_created_at)
         self.assertEqual(int(self.client.session["_auth_user_id"]), confirm_user.pk)
         mock_welcome_email.delay.assert_called_once_with("confirm-flow@example.com")
+
+    @patch("users.views.send_welcome_email")
+    def test_confirm_email_with_legacy_token_without_timestamp_succeeds(self, mock_welcome_email):
+        confirm_user = User.objects.create_user(
+            email="legacy-token@example.com",
+            password="confirmpass123",
+            is_active=True,
+            is_email_confirmed=False,
+        )
+        token = confirm_user.generate_email_token()
+        confirm_user.email_token_created_at = None
+        confirm_user.save(update_fields=["email_token_created_at"])
+
+        response = self.client.get(reverse("users:confirm_email", kwargs={"token": token}))
+
+        confirm_user.refresh_from_db()
+        self.assertRedirects(response, reverse("users:profile_detail", kwargs={"pk": confirm_user.pk}))
+        self.assertTrue(confirm_user.is_email_confirmed)
+        self.assertTrue(confirm_user.is_active)
+        self.assertIsNone(confirm_user.email_token)
+        self.assertIsNone(confirm_user.email_token_created_at)
+        mock_welcome_email.delay.assert_called_once_with("legacy-token@example.com")
 
     @override_settings(
         RATELIMIT_REGISTRATION_IP_RATE="1/m",
