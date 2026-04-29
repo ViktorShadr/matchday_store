@@ -25,6 +25,11 @@ class OrderNotificationService:
                 "Ошибка постановки задачи уведомления %s для заказа %s, используем sync fallback",
                 event_key,
                 order_id,
+                extra={
+                    "event": "order_notification_dispatch_failed",
+                    "order_id": order_id,
+                    "event_key": event_key,
+                },
             )
             return send_order_notification_sync(order_id, event_key)
 
@@ -41,6 +46,10 @@ class OrderNotificationService:
             logger.exception(
                 "Ошибка постановки staff-задачи уведомления о новом заказе %s, используем sync fallback",
                 order_id,
+                extra={
+                    "event": "staff_order_notification_dispatch_failed",
+                    "order_id": order_id,
+                },
             )
             return send_staff_new_order_notification_sync(order_id)
 

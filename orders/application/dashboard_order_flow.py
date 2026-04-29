@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from django.db import transaction
@@ -11,6 +12,8 @@ from orders.services import (
     OrderCancellationService,
 )
 from store.presenters import DashboardOrderPresenter
+
+audit_logger = logging.getLogger("audit")
 
 
 class DashboardOrderFlowError(Exception):
@@ -93,6 +96,16 @@ class DashboardOrderFlowService:
                     to_value=next_status,
                     changed_by=actor,
                 )
+                audit_logger.info(
+                    "Статус заказа изменен через dashboard",
+                    extra={
+                        "event": "dashboard_order_status_changed",
+                        "order_id": cancelled_order.id,
+                        "from_status": current_status,
+                        "to_status": next_status,
+                        "actor_id": getattr(actor, "id", None),
+                    },
+                )
                 return DashboardOrderStatusUpdateResult(
                     order=cancelled_order,
                     changed=True,
@@ -127,6 +140,16 @@ class DashboardOrderFlowService:
                 to_value=order.fulfillment_status,
                 changed_by=actor,
             )
+            audit_logger.info(
+                "Статус заказа изменен через dashboard",
+                extra={
+                    "event": "dashboard_order_status_changed",
+                    "order_id": order.id,
+                    "from_status": current_status,
+                    "to_status": next_status,
+                    "actor_id": getattr(actor, "id", None),
+                },
+            )
             if next_status == "ready":
                 OrderNotificationService.schedule_ready(order.id)
             return DashboardOrderStatusUpdateResult(order=order, changed=True, message="Статус заказа обновлен.")
@@ -148,6 +171,16 @@ class DashboardOrderFlowService:
             )
         except ManualPaymentUpdateError as exc:
             raise DashboardOrderFlowError(str(exc)) from exc
+
+        audit_logger.info(
+            "Статус оплаты заказа изменен через dashboard",
+            extra={
+                "event": "dashboard_payment_status_changed",
+                "order_id": updated_order.id,
+                "payment_status": next_payment_status,
+                "actor_id": getattr(actor, "id", None),
+            },
+        )
 
         return DashboardPaymentStatusUpdateResult(
             order=updated_order,

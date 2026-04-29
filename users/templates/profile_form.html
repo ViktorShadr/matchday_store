@@ -2,130 +2,115 @@
 {% load static %}
 
 {% block title %}Редактирование профиля — ФК «Шинник»{% endblock %}
-{% block meta_description %}Редактирование профиля пользователя в официальном магазине атрибутики ФК «Шинник».{% endblock %}
+{% block meta_description %}Редактирование профиля пользователя в официальном магазине атрибутики ФК
+    «Шинник».{% endblock %}
 
 {% block content %}
-<section class="sf-profile-page">
-    <div class="container">
-        <div class="sf-profile-hero">
-            <div>
-                <div class="sf-home-eyebrow">Личный кабинет</div>
-                <h1 class="sf-profile-title">Редактирование профиля</h1>
-                <p class="sf-profile-lead">
-                    Обнови личные данные, чтобы оформление заказов оставалось быстрым и удобным.
-                </p>
-            </div>
-
-            <div class="sf-profile-hero-actions">
-                <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
-                    Назад в профиль
-                </a>
-                <a href="{% url 'users:order_list' %}" class="btn btn-secondary">
-                    Мои заказы
-                </a>
-            </div>
-        </div>
-
-        <div class="sf-profile-layout">
-            <aside class="sf-profile-sidebar">
-                <div class="sf-profile-card sf-profile-card--accent">
-                    <div class="sf-profile-avatar-wrap">
-                        {% if profile_user.avatar %}
-                            <img src="{{ profile_user.avatar.url }}" alt="Аватар" class="sf-profile-avatar-lg">
-                        {% else %}
-                            <img src="{% static 'img/default_avatar.png' %}" alt="Аватар" class="sf-profile-avatar-lg">
-                        {% endif %}
-                    </div>
-
-                    <div class="sf-profile-name">
-                        {% if profile_user.get_full_name %}
-                            {{ profile_user.get_full_name }}
-                        {% else %}
-                            {{ profile_user.email }}
-                        {% endif %}
-                    </div>
-
-                    <div class="sf-profile-email">
-                        {{ profile_user.email }}
-                    </div>
-
-                    <div class="sf-profile-quick-links">
-                        <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="sf-profile-quick-link">
-                            Вернуться к профилю
-                        </a>
-                        <a href="{% url 'users:order_list' %}" class="sf-profile-quick-link">
-                            История заказов
-                        </a>
-                    </div>
-                </div>
-            </aside>
-
-            <div class="sf-profile-main">
-                <div class="sf-profile-card">
-                    <h2 class="sf-profile-section-title">Изменение данных</h2>
-
-                    <form method="post" enctype="multipart/form-data" novalidate>
-                        {% csrf_token %}
-
-                        {% if form.non_field_errors %}
-                            <div class="alert alert-danger sf-alert mb-4">
-                                {% for error in form.non_field_errors %}
-                                    <div>{{ error }}</div>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-
-                        <div class="row g-4">
-                            {% for field in form %}
-                                <div class="col-12 {% if field.name in 'first_name,last_name,phone,email' %}col-md-6{% endif %}">
-                                    <div class="sf-form-group">
-                                        <label for="{{ field.id_for_label }}" class="form-label">
-                                            {{ field.label }}
-                                            {% if field.field.required %}
-                                                <span class="sf-required">*</span>
-                                            {% endif %}
-                                        </label>
-
-                                        {{ field }}
-
-                                        {% if field.help_text %}
-                                            <div class="sf-field-help">
-                                                {{ field.help_text }}
-                                            </div>
-                                        {% endif %}
-
-                                        {% if field.errors %}
-                                            <div class="sf-field-errors">
-                                                {% for error in field.errors %}
-                                                    <div>{{ error }}</div>
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-
-                        <div class="sf-profile-form-actions">
-                            <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
-                                Отмена
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                Сохранить изменения
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-                <div class="sf-profile-card">
-                    <h2 class="sf-profile-section-title">Зачем это нужно</h2>
-                    <p class="sf-profile-note">
-                        Хороший кабинет не должен путать пользователя. Редактирование профиля —
-                        это простое действие, которое должно быть быстрым, понятным и аккуратно оформленным.
+    <section class="sf-profile-page">
+        <div class="container">
+            <div class="sf-profile-hero">
+                <div>
+                    <div class="sf-home-eyebrow">Личный кабинет</div>
+                    <h1 class="sf-profile-title">Редактирование профиля</h1>
+                    <p class="sf-profile-lead">
+                        Обнови личные данные, чтобы оформление заказов оставалось быстрым и удобным.
                     </p>
                 </div>
+
+                <div class="sf-profile-hero-actions">
+                    <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
+                        Назад в профиль
+                    </a>
+                    <a href="{% url 'users:order_list' %}" class="btn btn-secondary">
+                        Мои заказы
+                    </a>
+                </div>
+            </div>
+
+            <div class="sf-profile-layout">
+                <aside class="sf-profile-sidebar">
+                    <div class="sf-profile-card sf-profile-card--accent">
+                        <div class="sf-profile-avatar-wrap">
+                            {% if profile_user.avatar %}
+                                <img src="{{ profile_user.avatar.url }}" alt="Аватар" class="sf-profile-avatar-lg">
+                            {% else %}
+                                <img src="{% static 'img/default_avatar.png' %}" alt="Аватар"
+                                     class="sf-profile-avatar-lg">
+                            {% endif %}
+                        </div>
+
+                        <div class="sf-profile-name">
+                            {% if profile_user.get_full_name %}
+                                {{ profile_user.get_full_name }}
+                            {% else %}
+                                {{ profile_user.email }}
+                            {% endif %}
+                        </div>
+
+                        <div class="sf-profile-email">
+                            {{ profile_user.email }}
+                        </div>
+                    </div>
+                </aside>
+
+                <div class="sf-profile-main">
+                    <div class="sf-profile-card">
+                        <h2 class="sf-profile-section-title">Изменение данных</h2>
+
+                        <form method="post" enctype="multipart/form-data" novalidate>
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                <div class="alert alert-danger sf-alert mb-4">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="row g-4">
+                                {% for field in form %}
+                                    <div class="col-12 {% if field.name in 'first_name,last_name,phone,email' %}col-md-6{% endif %}">
+                                        <div class="sf-form-group">
+                                            <label for="{{ field.id_for_label }}" class="form-label">
+                                                {{ field.label }}
+                                                {% if field.field.required %}
+                                                    <span class="sf-required">*</span>
+                                                {% endif %}
+                                            </label>
+
+                                            {{ field }}
+
+                                            {% if field.help_text %}
+                                                <div class="sf-field-help">
+                                                    {{ field.help_text }}
+                                                </div>
+                                            {% endif %}
+
+                                            {% if field.errors %}
+                                                <div class="sf-field-errors">
+                                                    {% for error in field.errors %}
+                                                        <div>{{ error }}</div>
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="sf-profile-form-actions">
+                                <a href="{% url 'users:profile_detail' pk=profile_user.pk %}" class="btn btn-secondary">
+                                    Отмена
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    Сохранить изменения
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 {% endblock %}

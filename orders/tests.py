@@ -4,6 +4,7 @@ from threading import Event
 from time import sleep
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.cache import cache
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import close_old_connections
 from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings, skipUnlessDBFeature
@@ -133,6 +134,28 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
         self.assertContains(response, "Авторизация")
+
+    @override_settings(
+        RATELIMIT_CHECKOUT_IP_RATE="1/m",
+        RATELIMIT_CHECKOUT_USER_RATE="1/m",
+    )
+    def test_checkout_rate_limited(self):
+        cache.clear()
+        self.client.login(email="buyer@example.com", password="testpass123")
+        checkout_url = reverse("orders:checkout")
+        payload = {
+            "recipient_name": "Иван Иванов",
+            "email": "buyer@example.com",
+            "phone": "+79990001122",
+            "customer_comment": "",
+        }
+
+        first_response = self.client.post(checkout_url, data=payload)
+        second_response = self.client.post(checkout_url, data=payload, follow=True)
+
+        self.assertEqual(first_response.status_code, 302)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertContains(second_response, "Слишком много попыток оформления заказа. Повторите чуть позже.")
 
     def test_checkout_creates_order_deducts_stock_and_clears_cart(self):
         """Оформление заказа должно создать order, payment и очистить корзину."""

@@ -3,8 +3,11 @@ from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views.generic import FormView, TemplateView
+from django_ratelimit.decorators import ratelimit
 
+from config.rate_limits import setting_rate
 from orders.application import CheckoutContext, CheckoutSessionService
 from orders.forms import CheckoutForm
 from orders.models import Order
@@ -21,6 +24,24 @@ cart_service = CartService()
 cart_context_resolver = CartContextResolver()
 
 
+@method_decorator(
+    ratelimit(
+        key="ip",
+        rate=setting_rate("RATELIMIT_CHECKOUT_IP_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
+@method_decorator(
+    ratelimit(
+        key="user_or_ip",
+        rate=setting_rate("RATELIMIT_CHECKOUT_USER_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
 class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
     """Страница оформления заказа для MVP-сценария самовывоза."""
 
@@ -33,6 +54,10 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
         if not request.user.is_authenticated:
             messages.info(request, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
             return self.handle_no_permission()
+
+        if request.method == "POST" and getattr(request, "limited", False):
+            messages.error(request, "Слишком много попыток оформления заказа. Повторите чуть позже.")
+            return redirect(reverse("orders:checkout"))
 
         if not request.user.is_email_confirmed:
             messages.warning(

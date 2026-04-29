@@ -1,6 +1,8 @@
 import logging
 import secrets
+from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -27,12 +29,26 @@ class EmailConfirmationService:
             logger.exception(
                 "Ошибка постановки задачи отправки подтверждения для %s, используем sync fallback",
                 user_email,
+                extra={"event": "confirmation_email_dispatch_failed"},
             )
             return user_views.send_confirmation_email_sync(user_email, confirmation_token)
 
     @staticmethod
     def generate_token() -> str:
         return secrets.token_urlsafe(32)
+
+    @staticmethod
+    def token_ttl() -> timedelta:
+        ttl_hours = max(getattr(settings, "EMAIL_CONFIRMATION_TOKEN_TTL_HOURS", 24), 1)
+        return timedelta(hours=ttl_hours)
+
+    @classmethod
+    def is_token_expired(cls, user: User) -> bool:
+        if not user.email_token_created_at:
+            # Rollout-safe fallback for legacy tokens issued before
+            # `email_token_created_at` was introduced.
+            return False
+        return timezone.now() >= user.email_token_created_at + cls.token_ttl()
 
     @classmethod
     def can_resend(cls, user) -> tuple[bool, int]:
@@ -65,6 +81,7 @@ class EmailConfirmationService:
             return False
 
         user.email_token = confirmation_token
+        user.email_token_created_at = timezone.now()
         user.confirmation_email_last_sent_at = timezone.now()
-        user.save(update_fields=["email_token", "confirmation_email_last_sent_at"])
+        user.save(update_fields=["email_token", "email_token_created_at", "confirmation_email_last_sent_at"])
         return True

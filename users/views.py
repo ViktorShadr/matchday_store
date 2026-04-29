@@ -12,12 +12,14 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
-from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
+from django_ratelimit.decorators import ratelimit
 
 from orders.models import Order
 from orders.services import OrderCancellationService, OrderCancellationError
 from orders.application.checkout_session_service import CheckoutSessionService
+from config.rate_limits import setting_rate
 from store.presenters import DashboardOrderPresenter
 from users.forms import (
     UserLoginForm,
@@ -59,6 +61,31 @@ def apply_user_order_status(order: Order) -> Order:
     return order
 
 
+def build_ratelimit_response(view, request, message: str, status_code: int = 429):
+    messages.error(request, message)
+    response = view.get(request, *view.args, **view.kwargs)
+    response.status_code = status_code
+    return response
+
+
+@method_decorator(
+    ratelimit(
+        key="ip",
+        rate=setting_rate("RATELIMIT_LOGIN_IP_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
+@method_decorator(
+    ratelimit(
+        key="post:username",
+        rate=setting_rate("RATELIMIT_LOGIN_CREDENTIAL_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
 class CustomLoginView(CartContextMixin, LoginView):
     """
     Представление входа в систему.
@@ -70,6 +97,15 @@ class CustomLoginView(CartContextMixin, LoginView):
 
     template_name = "login.html"
     form_class = UserLoginForm
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST" and getattr(request, "limited", False):
+            return build_ratelimit_response(
+                self,
+                request,
+                "Слишком много попыток входа. Подождите и попробуйте снова.",
+            )
+        return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
         """
@@ -104,6 +140,24 @@ class CustomLogoutView(LogoutView):
     next_page = reverse_lazy("store:base")
 
 
+@method_decorator(
+    ratelimit(
+        key="ip",
+        rate=setting_rate("RATELIMIT_REGISTRATION_IP_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
+@method_decorator(
+    ratelimit(
+        key="post:email",
+        rate=setting_rate("RATELIMIT_REGISTRATION_EMAIL_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
 class CustomRegistrationView(CartContextMixin, CreateView):
     """
     Представление регистрации нового пользователя.
@@ -115,6 +169,15 @@ class CustomRegistrationView(CartContextMixin, CreateView):
     template_name = "registration.html"
     form_class = UserRegistrationForm
     success_url = reverse_lazy("users:login")
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST" and getattr(request, "limited", False):
+            return build_ratelimit_response(
+                self,
+                request,
+                "Слишком много попыток регистрации. Попробуйте позже.",
+            )
+        return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
         """
@@ -156,7 +219,27 @@ class CustomRegistrationView(CartContextMixin, CreateView):
 class ResendOwnConfirmationEmailView(LoginRequiredMixin, View):
     """Повторная отправка письма подтверждения из личного кабинета."""
 
+    @method_decorator(
+        ratelimit(
+            key="ip",
+            rate=setting_rate("RATELIMIT_CONFIRM_RESEND_IP_RATE"),
+            method="POST",
+            block=False,
+        )
+    )
+    @method_decorator(
+        ratelimit(
+            key="user_or_ip",
+            rate=setting_rate("RATELIMIT_CONFIRM_RESEND_USER_RATE"),
+            method="POST",
+            block=False,
+        )
+    )
     def post(self, request, *args, **kwargs):
+        if getattr(request, "limited", False):
+            messages.error(request, "Слишком много запросов на повторную отправку. Попробуйте позже.")
+            return redirect("users:profile_detail", pk=request.user.pk)
+
         user = request.user
 
         if user.is_email_confirmed:
@@ -446,13 +529,21 @@ class EmailConfirmationView(View):
         """
         try:
             user = User.objects.get(email_token=token)
+            if EmailConfirmationService.is_token_expired(user):
+                User.objects.filter(pk=user.pk).update(email_token=None, email_token_created_at=None)
+                messages.error(request, "Недействительная ссылка подтверждения или срок действия ссылки истек.")
+                return redirect("users:login")
             user.confirm_email()
             auth_backend = getattr(user, "backend", None) or settings.AUTHENTICATION_BACKENDS[0]
             auth_login(request, user, backend=auth_backend)
             try:
                 send_welcome_email.delay(user.email)
-            except Exception as e:
-                logger.error(f"Ошибка при отправке приветственного письма пользователю {user.email}: {e}")
+            except Exception:
+                logger.exception(
+                    "Ошибка при отправке приветственного письма пользователю %s",
+                    user.email,
+                    extra={"event": "welcome_email_dispatch_failed", "user_id": user.id},
+                )
             messages.success(request, "Email подтвержден. Вы автоматически вошли в аккаунт.")
             return redirect("users:profile_detail", pk=user.pk)
         except User.DoesNotExist:

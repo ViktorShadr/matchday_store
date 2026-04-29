@@ -66,3 +66,6 @@ Thumbs.db
 # SQLite databases
 *.sqlite3
 *.db
+
+# Operational artifacts
+/backups/

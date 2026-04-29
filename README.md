@@ -24,17 +24,17 @@ docker compose up --build
 
 3. Откройте `http://localhost:8000`.
 
-По умолчанию поднимаются `nginx`, `web` и `db`.
+По умолчанию поднимаются `nginx`, `web`, `db` и `redis`.
 
 ## Запуск worker при необходимости
 
-Celery не обязателен для MVP: уведомления умеют уходить через sync fallback. Если нужен фоновой worker:
+Celery worker не обязателен для MVP: уведомления умеют уходить через sync fallback. Если нужен фоновой worker:
 
 ```bash
 docker compose --profile worker up --build
 ```
 
-Это дополнительно поднимет `redis` и `worker`.
+Это дополнительно поднимет `worker` (redis уже запущен как shared cache/queue backend).
 
 ## Стек runtime
 
@@ -43,7 +43,8 @@ docker compose --profile worker up --build
 - `nginx` проксирует приложение в `gunicorn`
 - `web` применяет миграции, собирает статику и запускает Django
 - `db` хранит данные
-- `worker` и `redis` поднимаются только через профиль `worker`
+- `redis` используется как shared cache и брокер очередей
+- `worker` поднимается только через профиль `worker`
 
 Основные файлы:
 
@@ -66,10 +67,29 @@ docker compose --profile worker up --build
 - `ALLOWED_HOSTS`
 - `CSRF_TRUSTED_ORIGINS`
 - `SITE_URL`
+- `EMAIL_CONFIRMATION_TOKEN_TTL_HOURS`
 - `DEFAULT_FROM_EMAIL`
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
 - `STAFF_ORDER_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых заказах)
+- `CACHE_URL` (shared Redis cache для rate limiting между несколькими worker-процессами)
+- `RATELIMIT_*` (лимиты для login/registration/resend/checkout)
+- `CSP_ENFORCE` (`True` для production, `False` только для временной диагностики)
+- `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`
+
+Для логирования:
+
+- `LOG_LEVEL` (`INFO` по умолчанию)
+- `LOG_JSON` (`True` в production, `False` в debug)
+- `GUNICORN_LOG_LEVEL` (`info` по умолчанию)
+
+В production каждый ответ включает `X-Request-ID`; тот же идентификатор прокидывается в Celery-задачи и попадает в логи.
+
+## Backup и restore check
+
+- backup script: [ops/db/backup.sh](/home/viktor-shadrin/PycharmProjects/matchday_store/ops/db/backup.sh:1)
+- restore verify: [ops/db/restore_verify.sh](/home/viktor-shadrin/PycharmProjects/matchday_store/ops/db/restore_verify.sh:1)
+- cron шаблон: [ops/db/cron.example](/home/viktor-shadrin/PycharmProjects/matchday_store/ops/db/cron.example:1)
 
 ## Проверка перед деплоем
 
@@ -78,3 +98,5 @@ docker compose --profile worker up --build
 - проверить отправку email
 - проверить, что `nginx` отдает `/static/` и проксирует запросы в `web`
 - пройти сценарий: checkout -> ready -> paid -> issued
+
+Подробный production runbook: [RUNBOOK.md](/home/viktor-shadrin/PycharmProjects/matchday_store/RUNBOOK.md:1)
