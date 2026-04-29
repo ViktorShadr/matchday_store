@@ -33,108 +33,140 @@
     }
 })();
 
-// Product card sliders (Swiper) + lightbox (Fancybox)
+// Product card sliders (catalog cards only)
 (function() {
     const cardSwipers = document.querySelectorAll('[data-sf-product-swiper]');
-
-    if (cardSwipers.length && typeof window.Swiper === 'function') {
-        cardSwipers.forEach((swiperEl) => {
-            const paginationEl = swiperEl.querySelector('.swiper-pagination');
-            if (!paginationEl) {
-                return;
-            }
-
-            new window.Swiper(swiperEl, {
-                slidesPerView: 1,
-                spaceBetween: 0,
-                speed: 360,
-                pagination: {
-                    el: paginationEl,
-                    clickable: true,
-                },
-            });
-        });
-    }
-
-    if (window.Fancybox && typeof window.Fancybox.bind === 'function') {
-        window.Fancybox.bind('[data-fancybox^="product-card-"]', {
-            groupAll: false,
-        });
-    }
-})();
-
-// Product media slider (detail page)
-(function() {
-    const sliderRoots = document.querySelectorAll('[data-sf-slider]');
-    if (!sliderRoots.length) {
+    if (!cardSwipers.length || typeof window.Swiper !== 'function') {
         return;
     }
 
-    sliderRoots.forEach((root) => {
-        const track = root.querySelector('[data-sf-slider-track]');
-        if (!track) {
-            return;
+    cardSwipers.forEach((swiperEl) => {
+        const paginationEl = swiperEl.querySelector('.sf-product-card-swiper-pagination');
+        const nextEl = swiperEl.querySelector('.sf-product-card-swiper-next');
+        const prevEl = swiperEl.querySelector('.sf-product-card-swiper-prev');
+
+        const options = {
+            slidesPerView: 1,
+            spaceBetween: 0,
+            speed: 340,
+            watchOverflow: true,
+            threshold: 6,
+            resistanceRatio: 0.85,
+            grabCursor: true,
+            touchStartPreventDefault: false,
+            preventClicksPropagation: true,
+        };
+
+        if (paginationEl) {
+            options.pagination = {
+                el: paginationEl,
+                clickable: true,
+            };
         }
 
-        const slides = Array.from(track.querySelectorAll('[data-sf-slider-slide]'));
-        if (slides.length < 2) {
-            return;
+        if (nextEl && prevEl) {
+            options.navigation = {
+                nextEl,
+                prevEl,
+            };
+            [nextEl, prevEl].forEach((navButton) => {
+                navButton.addEventListener('click', (event) => event.stopPropagation());
+            });
         }
 
-        const controls = Array.from(root.querySelectorAll('[data-sf-slider-to]'));
-        let activeIndex = 0;
-        let scrollTicking = false;
-
-        const clampIndex = (index) => Math.max(0, Math.min(slides.length - 1, index));
-
-        const getScrollIndex = () => {
-            const slideWidth = track.clientWidth || 1;
-            return clampIndex(Math.round(track.scrollLeft / slideWidth));
-        };
-
-        const syncControls = (index) => {
-            activeIndex = clampIndex(index);
-            controls.forEach((control, controlIndex) => {
-                const isActive = controlIndex === activeIndex;
-                control.classList.toggle('is-active', isActive);
-                control.setAttribute('aria-current', isActive ? 'true' : 'false');
-            });
-        };
-
-        const scrollToIndex = (index, smooth = true) => {
-            const targetIndex = clampIndex(index);
-            const targetLeft = targetIndex * (track.clientWidth || 0);
-            if (!smooth) {
-                track.scrollLeft = targetLeft;
-            } else {
-                track.scrollTo({ left: targetLeft, behavior: 'smooth' });
-            }
-            syncControls(targetIndex);
-        };
-
-        track.addEventListener('scroll', () => {
-            if (scrollTicking) {
-                return;
-            }
-            scrollTicking = true;
-            window.requestAnimationFrame(() => {
-                syncControls(getScrollIndex());
-                scrollTicking = false;
-            });
-        }, { passive: true });
-
-        controls.forEach((control, index) => {
-            control.addEventListener('click', () => {
-                scrollToIndex(index);
-            });
-        });
-
-        window.addEventListener('resize', debounce(() => {
-            scrollToIndex(activeIndex, false);
-        }, 120));
-
-        syncControls(getScrollIndex());
+        new window.Swiper(swiperEl, options);
     });
+})();
+
+// Product page gallery (Swiper + Fancybox)
+(function() {
+    const galleryRoots = document.querySelectorAll('[data-sf-product-detail-gallery]');
+    if (!galleryRoots.length || typeof window.Swiper !== 'function') {
+        return;
+    }
+
+    galleryRoots.forEach((root) => {
+        const mainEl = root.querySelector('[data-sf-product-detail-main]');
+        if (!mainEl) {
+            return;
+        }
+
+        const galleryCount = Number(root.getAttribute('data-sf-gallery-count') || '0');
+        const hasMultipleSlides = galleryCount > 1;
+        const paginationEl = root.querySelector('.sf-product-gallery-pagination');
+        const nextEl = root.querySelector('.sf-product-gallery-next');
+        const prevEl = root.querySelector('.sf-product-gallery-prev');
+        const thumbsEl = root.querySelector('[data-sf-product-detail-thumbs]');
+        let thumbsSwiper = null;
+
+        if (hasMultipleSlides && thumbsEl) {
+            thumbsSwiper = new window.Swiper(thumbsEl, {
+                slidesPerView: 'auto',
+                spaceBetween: 12,
+                watchSlidesProgress: true,
+                watchOverflow: true,
+                freeMode: true,
+                slideToClickedSlide: true,
+                breakpoints: {
+                    768: {
+                        spaceBetween: 16,
+                    },
+                },
+            });
+        }
+
+        const options = {
+            slidesPerView: 1,
+            spaceBetween: 0,
+            speed: 360,
+            watchOverflow: true,
+            threshold: 6,
+            keyboard: {
+                enabled: true,
+                onlyInViewport: true,
+            },
+        };
+
+        if (hasMultipleSlides && paginationEl) {
+            options.pagination = {
+                el: paginationEl,
+                clickable: true,
+            };
+        }
+
+        if (hasMultipleSlides && nextEl && prevEl) {
+            options.navigation = {
+                nextEl,
+                prevEl,
+            };
+        }
+
+        if (hasMultipleSlides && thumbsSwiper) {
+            options.thumbs = {
+                swiper: thumbsSwiper,
+            };
+        }
+
+        const mainSwiper = new window.Swiper(mainEl, options);
+
+        if (hasMultipleSlides && thumbsEl) {
+            const thumbButtons = Array.from(thumbsEl.querySelectorAll('.sf-product-thumb'));
+            const syncThumbState = (activeIndex) => {
+                thumbButtons.forEach((thumbButton, index) => {
+                    thumbButton.setAttribute('aria-current', index === activeIndex ? 'true' : 'false');
+                });
+            };
+
+            syncThumbState(mainSwiper.activeIndex || 0);
+            mainSwiper.on('slideChange', () => {
+                syncThumbState(mainSwiper.activeIndex || 0);
+            });
+        }
+    });
+
+    if (window.Fancybox && typeof window.Fancybox.bind === 'function') {
+        window.Fancybox.bind('[data-fancybox^="product-gallery-"]');
+    }
 })();
 
 /**

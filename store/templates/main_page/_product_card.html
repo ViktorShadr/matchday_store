@@ -13,16 +13,21 @@
                 <div class="swiper sf-product-card-swiper" data-sf-product-swiper>
                     <div class="swiper-wrapper">
                         {% for image in product.gallery_images %}
-                            <a
-                                href="{{ image.image.url }}"
-                                class="swiper-slide sf-product-card-image-link"
-                                data-fancybox="product-card-{{ product.pk }}"
-                                data-caption="{{ product.name }}"
-                            >
+                            <div class="swiper-slide sf-product-card-image-link">
                                 <img src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}" loading="lazy">
-                            </a>
+                            </div>
                         {% endfor %}
                     </div>
+                    <button type="button" class="sf-product-card-swiper-nav sf-product-card-swiper-prev" aria-label="Предыдущее фото">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M15 18l-6-6 6-6"></path>
+                        </svg>
+                    </button>
+                    <button type="button" class="sf-product-card-swiper-nav sf-product-card-swiper-next" aria-label="Следующее фото">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M9 18l6-6-6-6"></path>
+                        </svg>
+                    </button>
                     <div class="swiper-pagination sf-product-card-swiper-pagination"></div>
                 </div>
             {% elif product.display_image %}
