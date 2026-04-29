@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from orders.models import Order, OrderItem
-from store.models import Category, Product, ProductImage, ProductVariant
+from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from users.application import EmailConfirmationService
 from users.forms import UserRegistrationForm, UserProfileForm, ProfileDeleteConfirmForm
 
@@ -112,9 +112,23 @@ class UserProfileFormTest(TestCase):
 
     def test_valid_profile_form(self):
         """Проверяет сценарий 'valid profile form'."""
-        form_data = {"first_name": "John", "last_name": "Doe", "city": "New York", "phone": "+1234567890"}
+        form_data = {"first_name": "John", "last_name": "Doe", "city": "New York", "phone": "+79109716684"}
         form = UserProfileForm(data=form_data, instance=self.user)
         self.assertTrue(form.is_valid())
+
+    def test_profile_form_normalizes_russian_phone(self):
+        form_data = {"first_name": "John", "last_name": "Doe", "city": "New York", "phone": "8 (910) 971-66-84"}
+        form = UserProfileForm(data=form_data, instance=self.user)
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["phone"], "+79109716684")
+
+    def test_profile_form_rejects_non_russian_phone(self):
+        form_data = {"first_name": "John", "last_name": "Doe", "city": "New York", "phone": "+1234567890"}
+        form = UserProfileForm(data=form_data, instance=self.user)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("phone", form.errors)
 
     def test_form_save(self):
         """Проверяет сценарий 'form save'."""
@@ -443,6 +457,17 @@ class UserViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "user@example.com")
 
+    def test_profile_detail_view_uses_actual_cart_counter(self):
+        cart = Cart.objects.create(user=self.user)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=3)
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("cart_count", response.context)
+        self.assertEqual(response.context["cart_count"], 3)
+
     def test_profile_detail_shows_email_confirmation_prompt_for_unconfirmed_user(self):
         self.client.login(email="user@example.com", password="userpass123")
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
@@ -492,13 +517,14 @@ class UserViewsTest(TestCase):
     def test_profile_update_view(self):
         """Проверяет сценарий 'profile update view'."""
         self.client.login(email="user@example.com", password="userpass123")
-        form_data = {"first_name": "Updated", "last_name": "Name", "city": "New City", "phone": "+9876543210"}
+        form_data = {"first_name": "Updated", "last_name": "Name", "city": "New City", "phone": "8 (910) 971-66-84"}
         response = self.client.post(reverse("users:profile_edit"), data=form_data)
 
         self.assertEqual(response.status_code, 302)
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, "Updated")
         self.assertEqual(self.user.last_name, "Name")
+        self.assertEqual(self.user.phone, "+79109716684")
 
     def test_profile_update_view_not_authenticated(self):
         """Проверяет сценарий 'profile update view not authenticated'."""

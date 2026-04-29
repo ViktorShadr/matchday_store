@@ -10,7 +10,6 @@
             <div class="sf-catalog-hero-card">
                 <div class="sf-catalog-hero-top">
                     <div>
-                        <div class="sf-home-eyebrow">Каталог клуба</div>
                         <h1 class="sf-catalog-title">
                             {% if selected_category %}
                                 {{ selected_category.name }}
@@ -35,13 +34,15 @@
 
                         {% if categories %}
                             <div class="sf-catalog-chips">
-                                <a href="{% url 'store:product_list' %}{% if request.GET.sort %}?sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}{% if request.GET.sort %}&{% else %}?{% endif %}q={{ request.GET.q }}{% endif %}"
+                                <a href="
+                                        {% url 'store:product_list' %}{% if request.GET.sort %}?sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}{% if request.GET.sort %}&{% else %}?{% endif %}q={{ request.GET.q }}{% endif %}"
                                    class="sf-filter-chip {% if not request.GET.category_id %}active{% endif %}">
                                     Все
                                 </a>
 
                                 {% for c in categories %}
-                                    <a href="{% url 'store:product_list' %}?category_id={{ c.id }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"
+                                    <a href="{% url 'store:product_list' %}?category_id=
+                                            {{ c.id }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"
                                        class="sf-filter-chip {% if request.GET.category_id == c.id|stringformat:'s' %}active{% endif %}">
                                         {{ c.name }}
                                     </a>
@@ -172,6 +173,7 @@
                                 {% if page_obj.has_previous %}
                                     <li class="page-item">
                                         <a class="page-link" href="?page=
+
                                                 {{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
                                             Назад
                                         </a>
@@ -186,6 +188,7 @@
                                     {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
                                         <li class="page-item">
                                             <a class="page-link" href="?page=
+
                                                     {{ num }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
                                                 {{ num }}
                                             </a>
@@ -196,6 +199,7 @@
                                 {% if page_obj.has_next %}
                                     <li class="page-item">
                                         <a class="page-link" href="?page=
+
                                                 {{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
                                             Вперёд
                                         </a>

@@ -259,7 +259,7 @@ class ResendOwnConfirmationEmailView(LoginRequiredMixin, View):
         return redirect("users:profile_detail", pk=user.pk)
 
 
-class ProfileDetailView(LoginRequiredMixin, DetailView):
+class ProfileDetailView(LoginRequiredMixin, CartContextMixin, DetailView):
     """
     Представление детальной страницы профиля пользователя.
 
@@ -303,7 +303,7 @@ class ProfileDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class ProfileList(LoginRequiredMixin, UserPassesTestMixin, ListView):
+class ProfileList(LoginRequiredMixin, UserPassesTestMixin, CartContextMixin, ListView):
     """
     Представление списка всех пользователей (только для суперпользователя).
 
@@ -334,7 +334,7 @@ class ProfileList(LoginRequiredMixin, UserPassesTestMixin, ListView):
         return context
 
 
-class ProfileUpdateView(LoginRequiredMixin, UpdateView):
+class ProfileUpdateView(LoginRequiredMixin, CartContextMixin, UpdateView):
     """
     Представление редактирования профиля пользователя.
 
@@ -393,7 +393,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         return super().form_valid(form)
 
 
-class ProfileDeleteView(LoginRequiredMixin, FormView):
+class ProfileDeleteView(LoginRequiredMixin, CartContextMixin, FormView):
     """
     Представление удаления профиля пользователя.
 

@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from phonenumber_field.formfields import PhoneNumberField
 
 from users.models import User
 
@@ -89,6 +90,21 @@ class UserLoginForm(AuthenticationForm):
 class UserProfileForm(forms.ModelForm):
     """Класс UserProfileForm."""
 
+    phone = PhoneNumberField(
+        required=False,
+        region="RU",
+        error_messages={"invalid": "Введите корректный номер телефона в формате +79991234567"},
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Введите номер в формате +79991234567",
+                "type": "tel",
+                "autocomplete": "tel",
+                "inputmode": "tel",
+            }
+        ),
+    )
+
     class Meta:
         """Мета-настройки класса."""
 
@@ -118,16 +134,14 @@ class UserProfileForm(forms.ModelForm):
                 }
             ),
             "avatar": forms.FileInput(attrs={"class": "form-control"}),
-            "phone": forms.TextInput(
-                attrs={
-                    "class": "form-control",
-                    "placeholder": "Введите номер телефона",
-                    "type": "tel",
-                    "autocomplete": "tel",
-                    "inputmode": "tel",
-                }
-            ),
         }
+
+    def clean_phone(self):
+        """Нормализует телефон к формату E.164."""
+        phone = self.cleaned_data.get("phone")
+        if not phone:
+            return ""
+        return phone.as_e164
 
 
 class ProfileDeleteConfirmForm(forms.Form):

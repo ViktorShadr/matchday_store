@@ -33,6 +33,110 @@
     }
 })();
 
+// Product card sliders (Swiper) + lightbox (Fancybox)
+(function() {
+    const cardSwipers = document.querySelectorAll('[data-sf-product-swiper]');
+
+    if (cardSwipers.length && typeof window.Swiper === 'function') {
+        cardSwipers.forEach((swiperEl) => {
+            const paginationEl = swiperEl.querySelector('.swiper-pagination');
+            if (!paginationEl) {
+                return;
+            }
+
+            new window.Swiper(swiperEl, {
+                slidesPerView: 1,
+                spaceBetween: 0,
+                speed: 360,
+                pagination: {
+                    el: paginationEl,
+                    clickable: true,
+                },
+            });
+        });
+    }
+
+    if (window.Fancybox && typeof window.Fancybox.bind === 'function') {
+        window.Fancybox.bind('[data-fancybox^="product-card-"]', {
+            groupAll: false,
+        });
+    }
+})();
+
+// Product media slider (detail page)
+(function() {
+    const sliderRoots = document.querySelectorAll('[data-sf-slider]');
+    if (!sliderRoots.length) {
+        return;
+    }
+
+    sliderRoots.forEach((root) => {
+        const track = root.querySelector('[data-sf-slider-track]');
+        if (!track) {
+            return;
+        }
+
+        const slides = Array.from(track.querySelectorAll('[data-sf-slider-slide]'));
+        if (slides.length < 2) {
+            return;
+        }
+
+        const controls = Array.from(root.querySelectorAll('[data-sf-slider-to]'));
+        let activeIndex = 0;
+        let scrollTicking = false;
+
+        const clampIndex = (index) => Math.max(0, Math.min(slides.length - 1, index));
+
+        const getScrollIndex = () => {
+            const slideWidth = track.clientWidth || 1;
+            return clampIndex(Math.round(track.scrollLeft / slideWidth));
+        };
+
+        const syncControls = (index) => {
+            activeIndex = clampIndex(index);
+            controls.forEach((control, controlIndex) => {
+                const isActive = controlIndex === activeIndex;
+                control.classList.toggle('is-active', isActive);
+                control.setAttribute('aria-current', isActive ? 'true' : 'false');
+            });
+        };
+
+        const scrollToIndex = (index, smooth = true) => {
+            const targetIndex = clampIndex(index);
+            const targetLeft = targetIndex * (track.clientWidth || 0);
+            if (!smooth) {
+                track.scrollLeft = targetLeft;
+            } else {
+                track.scrollTo({ left: targetLeft, behavior: 'smooth' });
+            }
+            syncControls(targetIndex);
+        };
+
+        track.addEventListener('scroll', () => {
+            if (scrollTicking) {
+                return;
+            }
+            scrollTicking = true;
+            window.requestAnimationFrame(() => {
+                syncControls(getScrollIndex());
+                scrollTicking = false;
+            });
+        }, { passive: true });
+
+        controls.forEach((control, index) => {
+            control.addEventListener('click', () => {
+                scrollToIndex(index);
+            });
+        });
+
+        window.addEventListener('resize', debounce(() => {
+            scrollToIndex(activeIndex, false);
+        }, 120));
+
+        syncControls(getScrollIndex());
+    });
+})();
+
 /**
  * Get cookie value by name
  * @param {string} name - Cookie name

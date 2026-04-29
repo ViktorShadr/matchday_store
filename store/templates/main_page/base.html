@@ -31,8 +31,10 @@
     <meta name="twitter:description" content="{% block twitter_description %}Клубный магазин ФК «Шинник»: форма, одежда, аксессуары и мерч.{% endblock %}">
     <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-image.jpg' %}{% endblock %}">
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@12/swiper-bundle.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@6.1/dist/fancybox/fancybox.css">
     <link href="{% static 'css/bootstrap.min.css' %}?v=2" rel="stylesheet">
-    <link href="{% static 'css/base.css' %}?v=5" rel="stylesheet">
+    <link href="{% static 'css/base.css' %}?v=7" rel="stylesheet">
 
     {% block extra_head %}{% endblock %}
 </head>

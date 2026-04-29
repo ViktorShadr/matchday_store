@@ -166,15 +166,15 @@ EMAIL_CONFIRMATION_TOKEN_TTL_HOURS = int(os.getenv("EMAIL_CONFIRMATION_TOKEN_TTL
 STORE_PICKUP_LOCATION_CODE = os.getenv("STORE_PICKUP_LOCATION_CODE", "main-store")
 STORE_PICKUP_LOCATION_NAME = os.getenv(
     "STORE_PICKUP_LOCATION_NAME",
-    "Фирменный магазин ФК «Шинник»",
+    "Магазин ФК «Шинник»",
 )
 STORE_PICKUP_ADDRESS = os.getenv(
     "STORE_PICKUP_ADDRESS",
-    "г. Ярославль, ул. Победы, 12",
+    "г. Ярославль, пл. Труда, 3",
 )
 STORE_PICKUP_HOURS = os.getenv(
     "STORE_PICKUP_HOURS",
-    "Ежедневно с 10:00 до 20:00",
+    "пн-пт с 10:00 до 16:00\nсб-вс выходной",
 )
 STORE_PICKUP_PHONE = os.getenv(
     "STORE_PICKUP_PHONE",
@@ -205,6 +205,7 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = os.getenv("SECURE_REFERRER_POLICY", "same-origin")
 SECURE_CROSS_ORIGIN_OPENER_POLICY = os.getenv("SECURE_CROSS_ORIGIN_OPENER_POLICY", "same-origin")
+SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]
 
 RATELIMIT_ENABLE = env_bool("RATELIMIT_ENABLE", True)
 RATELIMIT_USE_CACHE = os.getenv("RATELIMIT_USE_CACHE", "default")
@@ -247,7 +248,6 @@ if not DEBUG:
 
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
-    SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]
 
     SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(

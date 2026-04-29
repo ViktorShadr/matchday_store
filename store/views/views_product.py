@@ -131,7 +131,7 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
 
         context["product"] = product
         context["product_details"] = ProductDisplayService.prepare_product_details(product)
-        context["product_images"] = product.images.order_by("-is_primary", "-created_at")
+        context["product_images"] = getattr(product, "gallery_images", [])
         context["variants"] = variants
         context["available_variants"] = available_variants
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
