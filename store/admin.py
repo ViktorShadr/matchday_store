@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Category, Product, ProductVariant, ProductImage, Cart, CartItem
+from .models import Category, Product, ProductVariant, ProductImage, Page, InfoCard, Cart, CartItem
 
 
 @admin.register(Category)
@@ -40,6 +40,35 @@ class ProductImageAdmin(admin.ModelAdmin):
     list_filter = ["is_primary", "product"]
     search_fields = ["product__name", "alt_text"]
     ordering = ["-created_at"]
+
+
+@admin.register(Page)
+class PageAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для Page."""
+
+    list_display = ["title", "slug", "is_published", "updated_by", "updated_at", "created_at"]
+    search_fields = ["title", "slug", "lead", "content"]
+    prepopulated_fields = {"slug": ("title",)}
+    list_filter = ["is_published", "updated_at", "created_at"]
+    ordering = ["slug"]
+    readonly_fields = ["created_at", "updated_at"]
+
+    def save_model(self, request, obj, form, change):
+        """Проставляет автора последнего обновления страницы."""
+        if request.user and request.user.is_authenticated:
+            obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(InfoCard)
+class InfoCardAdmin(admin.ModelAdmin):
+    """Настройки админ-интерфейса для InfoCard."""
+
+    list_display = ["title", "icon", "sort_order", "is_published", "updated_at"]
+    search_fields = ["title", "text", "icon"]
+    list_filter = ["is_published", "updated_at", "created_at"]
+    ordering = ["sort_order", "id"]
+    readonly_fields = ["created_at", "updated_at"]
 
 
 @admin.register(Cart)

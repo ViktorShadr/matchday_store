@@ -136,55 +136,23 @@
             </div>
 
             <div class="row g-4">
-                <div class="col-md-4">
-                    <div class="sf-value-card">
-                        <div class="sf-value-card-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M3 8.5l9-5 9 5-9 5-9-5z"></path>
-                                <path d="M3 8.5V16l9 4.5 9-4.5V8.5"></path>
-                                <path d="M12 13.5V20.5"></path>
-                            </svg>
+                {% for card in info_cards %}
+                    <div class="col-md-4">
+                        <div class="sf-value-card">
+                            <div class="sf-value-card-icon" aria-hidden="true">
+                                {% include "main_page/_info_card_icon.html" with icon=card.icon %}
+                            </div>
+                            <div class="sf-value-card-title">{{ card.title }}</div>
+                            <p class="sf-value-card-text">{{ card.text }}</p>
                         </div>
-                        <div class="sf-value-card-title">Удобный заказ</div>
-                        <p class="sf-value-card-text">
-                            Соберите покупку за пару кликов и оформите её без лишних шагов.
-                        </p>
                     </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="sf-value-card">
-                        <div class="sf-value-card-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M4 18h16"></path>
-                                <path d="M6 18V9l6-4 6 4v9"></path>
-                                <path d="M9 12h6"></path>
-                            </svg>
+                {% empty %}
+                    <div class="col-12">
+                        <div class="sf-empty-state">
+                            Информационные карточки пока не добавлены.
                         </div>
-                        <div class="sf-value-card-title">Самовывоз со стадиона</div>
-                        <p class="sf-value-card-text">
-                            Заберите заказ в фирменной точке на арене в удобное для вас время.
-                        </p>
                     </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="sf-value-card">
-                        <div class="sf-value-card-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 3l8 3v6c0 5-3.4 8.3-8 9.5C7.4 20.3 4 17 4 12V6l8-3z"></path>
-                                <path d="M9 12l2 2 4-4"></path>
-                            </svg>
-                        </div>
-                        <div class="sf-value-card-title">Только подлинный мерч</div>
-                        <p class="sf-value-card-text">
-                            В каталоге представлены оригинальные товары клуба и лимитированные релизы.
-                        </p>
-                    </div>
-                </div>
+                {% endfor %}
             </div>
         </div>
     </section>

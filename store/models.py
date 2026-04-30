@@ -173,6 +173,60 @@ class ProductImage(models.Model):
         verbose_name_plural = "Изображения товаров"
 
 
+class Page(models.Model):
+    """
+    Контентная страница сайта.
+
+    Используется для юридических и информационных страниц,
+    управляемых через админку.
+    """
+
+    slug = models.SlugField(max_length=150, unique=True)
+    title = models.CharField(max_length=255)
+    lead = models.TextField(blank=True)
+    content = models.TextField()
+    is_published = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_store_pages",
+    )
+
+    class Meta:
+        verbose_name = "Страница"
+        verbose_name_plural = "Страницы"
+        ordering = ["slug"]
+
+    def __str__(self):
+        return self.title
+
+
+class InfoCard(models.Model):
+    """
+    Информационная карточка для блоков витрины.
+    """
+
+    title = models.CharField(max_length=255)
+    text = models.TextField()
+    icon = models.CharField(max_length=100, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Инфо-карточка"
+        verbose_name_plural = "Инфо-карточки"
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return self.title
+
+
 class Cart(models.Model):
     """
     Модель корзины.

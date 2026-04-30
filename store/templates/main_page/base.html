@@ -71,8 +71,10 @@
                     <div class="sf-cookie-title">Мы используем cookies</div>
                     <p class="sf-cookie-text mb-0">
                         Это помогает улучшать работу магазина, сохранять ваши настройки и делать интерфейс удобнее.
-                        Продолжая использовать сайт, вы соглашаетесь с
-                        <a href="{% url 'store:privacy_policy' %}">политикой конфиденциальности</a>.
+                        {% if legal_page_urls.privacy_policy %}
+                            Продолжая использовать сайт, вы соглашаетесь с
+                            <a href="{{ legal_page_urls.privacy_policy }}">политикой конфиденциальности</a>.
+                        {% endif %}
                     </p>
                 </div>
                 <div class="sf-cookie-actions">

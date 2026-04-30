@@ -1,0 +1,21 @@
+{% if icon == "store" %}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+         stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 18h16"></path>
+        <path d="M6 18V9l6-4 6 4v9"></path>
+        <path d="M9 12h6"></path>
+    </svg>
+{% elif icon == "shield-check" %}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+         stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l8 3v6c0 5-3.4 8.3-8 9.5C7.4 20.3 4 17 4 12V6l8-3z"></path>
+        <path d="M9 12l2 2 4-4"></path>
+    </svg>
+{% else %}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+         stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 8.5l9-5 9 5-9 5-9-5z"></path>
+        <path d="M3 8.5V16l9 4.5 9-4.5V8.5"></path>
+        <path d="M12 13.5V20.5"></path>
+    </svg>
+{% endif %}

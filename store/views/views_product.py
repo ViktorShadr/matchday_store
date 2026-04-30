@@ -3,7 +3,7 @@ from django.views.generic import DeleteView, DetailView, ListView, TemplateView,
 
 from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, ModeratorRequiredMixin
 from store.mixins.cart_mixins import CartContextMixin
-from store.models import Product
+from store.models import Product, InfoCard
 from store.services import enrich_product, enrich_products, ProductDisplayService, PermissionService
 from store.queries import CatalogQueryService
 
@@ -25,6 +25,7 @@ class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, T
         """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["popular_products"] = enrich_products(CatalogQueryService.build_popular_products_queryset()[:6])
+        context["info_cards"] = InfoCard.objects.filter(is_published=True).order_by("sort_order", "id")
         return context
 
 
