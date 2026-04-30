@@ -9,25 +9,24 @@
         <div class="sf-auth-layout">
             <div class="sf-auth-aside">
                 <div class="sf-auth-aside-card">
-                    <div class="sf-home-eyebrow">Личный кабинет</div>
-                    <h1 class="sf-auth-title">Вход в аккаунт</h1>
+                    <h1 class="sf-auth-title">Войти в личный кабинет</h1>
                     <p class="sf-auth-lead">
-                        Войди в личный кабинет, чтобы оформлять заказы быстрее,
-                        отслеживать покупки и хранить свои данные в одном месте.
+                        Войдите, чтобы быстрее оформлять заказы, отслеживать покупки
+                        и управлять личными данными.
                     </p>
 
                     <div class="sf-auth-benefits">
                         <div class="sf-auth-benefit">
-                            <div class="sf-auth-benefit-title">Заказы под рукой</div>
-                            <div class="sf-auth-benefit-text">История покупок и быстрый доступ к заказам</div>
+                            <div class="sf-auth-benefit-title">История заказов</div>
+                            <div class="sf-auth-benefit-text">Смотрите прошлые покупки и статус текущих заказов</div>
                         </div>
                         <div class="sf-auth-benefit">
-                            <div class="sf-auth-benefit-title">Удобнее оформление</div>
-                            <div class="sf-auth-benefit-text">Контактные данные не нужно вводить заново каждый раз</div>
+                            <div class="sf-auth-benefit-title">Быстрое оформление</div>
+                            <div class="sf-auth-benefit-text">Сохраненные контакты будут под рукой при оформлении заказа</div>
                         </div>
                         <div class="sf-auth-benefit">
-                            <div class="sf-auth-benefit-title">Единый стиль сервиса</div>
-                            <div class="sf-auth-benefit-text">Кабинет должен выглядеть так же уверенно, как витрина магазина</div>
+                            <div class="sf-auth-benefit-title">Личный кабинет</div>
+                            <div class="sf-auth-benefit-text">Управляйте профилем и покупками в одном месте</div>
                         </div>
                     </div>
                 </div>
@@ -35,7 +34,7 @@
 
             <div class="sf-auth-form-wrap">
                 <div class="sf-auth-form-card">
-                    <h2 class="sf-auth-form-title">Авторизация</h2>
+                    <h2 class="sf-auth-form-title">Вход</h2>
 
                     <form method="post" novalidate>
                         {% csrf_token %}
@@ -83,8 +82,8 @@
                     </form>
 
                     <div class="sf-auth-footer">
-                        <span>Нет аккаунта?</span>
-                        <a href="{% url 'users:registration' %}" class="sf-link">Зарегистрироваться</a>
+                        <span>Впервые в магазине?</span>
+                        <a href="{% url 'users:registration' %}" class="sf-link">Создать аккаунт</a>
                     </div>
                 </div>
             </div>
