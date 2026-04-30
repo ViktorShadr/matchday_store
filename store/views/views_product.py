@@ -3,7 +3,7 @@ from django.views.generic import DeleteView, DetailView, ListView, TemplateView,
 
 from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, ModeratorRequiredMixin
 from store.mixins.cart_mixins import CartContextMixin
-from store.models import Product
+from store.models import Product, InfoCard
 from store.services import enrich_product, enrich_products, ProductDisplayService, PermissionService
 from store.queries import CatalogQueryService
 
@@ -25,6 +25,7 @@ class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, T
         """Формирует контекст для шаблона."""
         context = super().get_context_data(**kwargs)
         context["popular_products"] = enrich_products(CatalogQueryService.build_popular_products_queryset()[:6])
+        context["info_cards"] = InfoCard.objects.filter(is_published=True).order_by("sort_order", "id")
         return context
 
 
@@ -129,9 +130,27 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
         variant_prices = [v.price for v in variants if v.price]
         variant_quantities = [v.quantity for v in variants if v.quantity > 0]
 
+        gallery_images = list(getattr(product, "gallery_images", []))
+        prepared_gallery_images = [
+            {
+                "url": image.image.url,
+                "alt": image.alt_text or product.name,
+            }
+            for image in gallery_images
+            if getattr(image, "image", None)
+        ]
+        if not prepared_gallery_images and getattr(product, "display_image", None):
+            prepared_gallery_images.append(
+                {
+                    "url": product.display_image.url,
+                    "alt": product.name,
+                }
+            )
+
         context["product"] = product
         context["product_details"] = ProductDisplayService.prepare_product_details(product)
-        context["product_images"] = product.images.order_by("-is_primary", "-created_at")
+        context["product_images"] = gallery_images
+        context["product_gallery_images"] = prepared_gallery_images
         context["variants"] = variants
         context["available_variants"] = available_variants
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)

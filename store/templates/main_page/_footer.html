@@ -23,16 +23,24 @@
                         <li><a href="{% url 'store:product_list' %}">Каталог</a></li>
                         <li><a href="{% url 'store:cart' %}">Корзина</a></li>
                         <li><a href="{% url 'users:order_list' %}">Мои заказы</a></li>
-                        <li><a href="{% url 'store:return_policy' %}">Возврат</a></li>
+                        {% if legal_page_urls.return_policy %}
+                            <li><a href="{{ legal_page_urls.return_policy }}">Возврат</a></li>
+                        {% endif %}
                     </ul>
                 </div>
 
                 <div class="col-12 col-sm-6 col-lg-2">
                     <h6 class="sf-footer-heading">Информация</h6>
                     <ul class="sf-footer-links">
-                        <li><a href="{% url 'store:offer' %}">Оферта</a></li>
-                        <li><a href="{% url 'store:privacy_policy' %}">Конфиденциальность</a></li>
-                        <li><a href="{% url 'store:terms_of_service' %}">Пользовательское соглашение</a></li>
+                        {% if legal_page_urls.offer %}
+                            <li><a href="{{ legal_page_urls.offer }}">Оферта</a></li>
+                        {% endif %}
+                        {% if legal_page_urls.privacy_policy %}
+                            <li><a href="{{ legal_page_urls.privacy_policy }}">Конфиденциальность</a></li>
+                        {% endif %}
+                        {% if legal_page_urls.terms_of_service %}
+                            <li><a href="{{ legal_page_urls.terms_of_service }}">Пользовательское соглашение</a></li>
+                        {% endif %}
                     </ul>
                 </div>
 
@@ -40,8 +48,12 @@
                     <h6 class="sf-footer-heading">Помощь</h6>
                     <ul class="sf-footer-links">
                         <li><a href="mailto:support@matchday-store.com">Написать в поддержку</a></li>
-                        <li><a href="{% url 'store:return_policy' %}">Условия возврата</a></li>
-                        <li><a href="{% url 'store:offer' %}">Условия покупки</a></li>
+                        {% if legal_page_urls.return_policy %}
+                            <li><a href="{{ legal_page_urls.return_policy }}">Условия возврата</a></li>
+                        {% endif %}
+                        {% if legal_page_urls.offer %}
+                            <li><a href="{{ legal_page_urls.offer }}">Условия покупки</a></li>
+                        {% endif %}
                     </ul>
                 </div>
 

@@ -1,7 +1,49 @@
+from pathlib import Path
+
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from phonenumber_field.formfields import PhoneNumberField
 
 from users.models import User
+
+AVATAR_MAX_SIZE_BYTES = 2 * 1024 * 1024
+AVATAR_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+AVATAR_ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
+AVATAR_ALLOWED_MIME_TYPES = "image/jpeg,image/png,image/webp"
+AVATAR_HELP_TEXT = "Загрузите фото в формате JPG, PNG или WebP. Размер файла — до 2 МБ."
+
+
+class AvatarImageField(forms.ImageField):
+    """Проверяет аватар до сохранения профиля."""
+
+    default_error_messages = {
+        **forms.ImageField.default_error_messages,
+        "file_too_large": "Размер аватара не должен превышать 2 МБ.",
+        "invalid_extension": "Загрузите изображение в формате JPG, PNG или WebP.",
+        "invalid_image": "Загрузите корректное изображение в формате JPG, PNG или WebP.",
+    }
+
+    def to_python(self, data):
+        if data in self.empty_values:
+            return None
+
+        if getattr(data, "size", 0) > AVATAR_MAX_SIZE_BYTES:
+            raise forms.ValidationError(self.error_messages["file_too_large"], code="file_too_large")
+
+        extension = Path(getattr(data, "name", "")).suffix.lower()
+        if extension and extension not in AVATAR_ALLOWED_EXTENSIONS:
+            raise forms.ValidationError(self.error_messages["invalid_extension"], code="invalid_extension")
+
+        try:
+            image = super().to_python(data)
+        except forms.ValidationError as exc:
+            raise forms.ValidationError(self.error_messages["invalid_image"], code="invalid_image") from exc
+
+        image_format = getattr(getattr(image, "image", None), "format", "")
+        if image_format and image_format.upper() not in AVATAR_ALLOWED_FORMATS:
+            raise forms.ValidationError(self.error_messages["invalid_extension"], code="invalid_extension")
+
+        return image
 
 
 class UserRegistrationForm(UserCreationForm):
@@ -89,6 +131,36 @@ class UserLoginForm(AuthenticationForm):
 class UserProfileForm(forms.ModelForm):
     """Класс UserProfileForm."""
 
+    avatar = AvatarImageField(
+        required=False,
+        label="Аватар",
+        help_text=AVATAR_HELP_TEXT,
+        widget=forms.FileInput(
+            attrs={
+                "class": "form-control",
+                "accept": AVATAR_ALLOWED_MIME_TYPES,
+                "data-avatar-upload": "true",
+                "data-max-size": str(AVATAR_MAX_SIZE_BYTES),
+                "data-size-error": "Размер аватара не должен превышать 2 МБ.",
+                "data-type-error": "Загрузите фото в формате JPG, PNG или WebP.",
+            }
+        ),
+    )
+    phone = PhoneNumberField(
+        required=False,
+        region="RU",
+        error_messages={"invalid": "Введите корректный номер телефона в формате +79991234567"},
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Введите номер в формате +79991234567",
+                "type": "tel",
+                "autocomplete": "tel",
+                "inputmode": "tel",
+            }
+        ),
+    )
+
     class Meta:
         """Мета-настройки класса."""
 
@@ -117,17 +189,14 @@ class UserProfileForm(forms.ModelForm):
                     "autocomplete": "address-level2",
                 }
             ),
-            "avatar": forms.FileInput(attrs={"class": "form-control"}),
-            "phone": forms.TextInput(
-                attrs={
-                    "class": "form-control",
-                    "placeholder": "Введите номер телефона",
-                    "type": "tel",
-                    "autocomplete": "tel",
-                    "inputmode": "tel",
-                }
-            ),
         }
+
+    def clean_phone(self):
+        """Нормализует телефон к формату E.164."""
+        phone = self.cleaned_data.get("phone")
+        if not phone:
+            return ""
+        return phone.as_e164
 
 
 class ProfileDeleteConfirmForm(forms.Form):

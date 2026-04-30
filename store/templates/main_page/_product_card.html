@@ -8,13 +8,36 @@
             <div class="sf-product-badge sf-product-badge--muted">Нет в наличии</div>
         {% endif %}
 
-        <a href="{% url 'store:product_detail' pk=product.pk %}" class="sf-product-card-image-link">
-            {% if product.display_image %}
-                <img
-                    src="{{ product.display_image.url }}"
-                    alt="{{ product.name }}"
-                    loading="lazy"
-                >
+        {% with product.gallery_images|length as gallery_count %}
+            {% if gallery_count > 1 %}
+                <div class="swiper sf-product-card-swiper" data-sf-product-swiper>
+                    <div class="swiper-wrapper">
+                        {% for image in product.gallery_images %}
+                            <a href="{% url 'store:product_detail' pk=product.pk %}" class="swiper-slide sf-product-card-image-link">
+                                <img src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}" loading="lazy">
+                            </a>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="sf-product-card-swiper-nav sf-product-card-swiper-prev" aria-label="Предыдущее фото">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M15 18l-6-6 6-6"></path>
+                        </svg>
+                    </button>
+                    <button type="button" class="sf-product-card-swiper-nav sf-product-card-swiper-next" aria-label="Следующее фото">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M9 18l6-6-6-6"></path>
+                        </svg>
+                    </button>
+                    <div class="swiper-pagination sf-product-card-swiper-pagination"></div>
+                </div>
+            {% elif product.display_image %}
+                <a href="{% url 'store:product_detail' pk=product.pk %}" class="sf-product-card-image-link">
+                    <img
+                        src="{{ product.display_image.url }}"
+                        alt="{{ product.name }}"
+                        loading="lazy"
+                    >
+                </a>
             {% else %}
                 <div class="sf-product-card-placeholder">
                     <div class="sf-product-card-placeholder-icon" aria-hidden="true">
@@ -27,7 +50,7 @@
                     <div class="sf-product-card-placeholder-text">Изображение появится позже</div>
                 </div>
             {% endif %}
-        </a>
+        {% endwith %}
     </div>
 
     <div class="sf-product-card-body">

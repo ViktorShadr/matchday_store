@@ -75,7 +75,15 @@
                                     {% endif %}
                                 </span>
                                 <span class="sf-action-text d-none d-xl-inline text-truncate" style="max-width: 160px;">
-                                    {{ user.email }}
+                                    {% if user.first_name and user.last_name %}
+                                        {{ user.first_name }} {{ user.last_name }}
+                                    {% elif user.first_name %}
+                                        {{ user.first_name }}
+                                    {% elif user.last_name %}
+                                        {{ user.last_name }}
+                                    {% else %}
+                                        {{ user.email }}
+                                    {% endif %}
                                 </span>
                             </button>
 

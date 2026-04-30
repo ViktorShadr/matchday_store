@@ -10,40 +10,79 @@
 <section class="sf-product-page">
     <div class="container">
         <div class="sf-product-layout">
-            <div class="sf-product-gallery">
-                <div class="sf-product-gallery-main">
-                    {% if product.display_image %}
-                        <img
-                            src="{{ product.display_image.url }}"
-                            alt="{{ product.name }}"
-                            class="sf-product-gallery-image"
-                        >
-                    {% else %}
-                        <div class="sf-product-gallery-placeholder">
-                            <div class="sf-product-gallery-placeholder-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                                    <circle cx="8.5" cy="9.5" r="1.5"></circle>
-                                    <path d="M21 15l-5-5L5 20"></path>
-                                </svg>
+            {% with product_gallery_images|length as product_images_count %}
+                <div class="sf-product-gallery" data-sf-product-detail-gallery data-sf-gallery-count="{{ product_images_count }}">
+                    {% if product_images_count %}
+                        <div class="sf-product-gallery-main">
+                            <div class="swiper sf-product-gallery-main-swiper" data-sf-product-detail-main>
+                                <div class="swiper-wrapper">
+                                    {% for image in product_gallery_images %}
+                                        <div class="swiper-slide">
+                                            <a
+                                                href="{{ image.url }}"
+                                                class="sf-product-gallery-image-link"
+                                                data-fancybox="product-gallery-{{ product.pk }}"
+                                                data-caption="{{ image.alt|default:product.name }}"
+                                            >
+                                                <img
+                                                    src="{{ image.url }}"
+                                                    alt="{{ image.alt|default:product.name }}"
+                                                    class="sf-product-gallery-image"
+                                                    loading="{% if forloop.first %}eager{% else %}lazy{% endif %}"
+                                                    {% if forloop.first %}fetchpriority="high"{% endif %}
+                                                >
+                                            </a>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+
+                                {% if product_images_count > 1 %}
+                                    <button type="button" class="sf-product-gallery-nav sf-product-gallery-prev" aria-label="Предыдущее фото">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <path d="M15 18l-6-6 6-6"></path>
+                                        </svg>
+                                    </button>
+                                    <button type="button" class="sf-product-gallery-nav sf-product-gallery-next" aria-label="Следующее фото">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <path d="M9 18l6-6-6-6"></path>
+                                        </svg>
+                                    </button>
+                                    <div class="swiper-pagination sf-product-gallery-pagination"></div>
+                                {% endif %}
                             </div>
-                            <div class="sf-product-gallery-placeholder-text">
-                                Изображение товара появится позже
+                        </div>
+
+                        {% if product_images_count > 1 %}
+                            <div class="swiper sf-product-thumbs-swiper" data-sf-product-detail-thumbs aria-label="Миниатюры фото товара">
+                                <div class="swiper-wrapper">
+                                    {% for image in product_gallery_images %}
+                                        <div class="swiper-slide">
+                                            <button type="button" class="sf-product-thumb" aria-label="Фото {{ forloop.counter }} из {{ product_images_count }}">
+                                                <img src="{{ image.url }}" alt="{{ image.alt|default:product.name }}" loading="lazy">
+                                            </button>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="sf-product-gallery-main">
+                            <div class="sf-product-gallery-placeholder">
+                                <div class="sf-product-gallery-placeholder-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                                        <circle cx="8.5" cy="9.5" r="1.5"></circle>
+                                        <path d="M21 15l-5-5L5 20"></path>
+                                    </svg>
+                                </div>
+                                <div class="sf-product-gallery-placeholder-text">
+                                    Изображение товара появится позже
+                                </div>
                             </div>
                         </div>
                     {% endif %}
                 </div>
-
-                {% if product_images %}
-                    <div class="sf-product-thumbs">
-                        {% for image in product_images|slice:":4" %}
-                            <div class="sf-product-thumb {% if forloop.first %}is-active{% endif %}">
-                                <img src="{{ image.image.url }}" alt="{{ product.name }}">
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
+            {% endwith %}
 
             <div class="sf-product-info">
                 {% if product.category %}
@@ -102,7 +141,8 @@
                             {% else %}
                                 <input type="hidden" name="variant_id" value="{{ available_variants.0.id }}">
                                 <div class="small text-muted mb-2">
-                                    Вариант: {{ available_variants.0.size|default:'Без размера' }} / {{ available_variants.0.color|default:'Без цвета' }}
+                                    Размер: {{ available_variants.0.size|default:'Без размера' }}
+                                    Цвет: {{ available_variants.0.color|default:'Без цвета' }}
                                 </div>
                             {% endif %}
                             <input type="hidden" name="quantity" value="1">

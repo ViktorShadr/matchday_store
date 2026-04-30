@@ -53,14 +53,14 @@ class ProductCardPresenter:
 
     @staticmethod
     def enrich(product):
-        images = list(product.images.all())
+        images = sorted(list(product.images.all()), key=lambda image: (not image.is_primary, -image.id))
         variants = list(product.variants.all())
         available_variants = [variant for variant in variants if variant.quantity > 0]
 
-        primary_image = next((image for image in images if image.is_primary), None)
-        first_image = primary_image or (images[0] if images else None)
+        first_image = images[0] if images else None
         first_variant = variants[0] if variants else None
 
+        product.gallery_images = images
         product.display_image = (
             first_image.image if first_image else getattr(getattr(first_variant, "image", None), "image", None)
         )

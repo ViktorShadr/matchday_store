@@ -9,7 +9,6 @@
     <div class="container">
         <div class="sf-profile-hero">
             <div>
-                <div class="sf-home-eyebrow">Личный кабинет</div>
                 <h1 class="sf-profile-title">Заказ #{{ order.id }}</h1>
                 <p class="sf-profile-lead">
                     Подробная информация по оформленному заказу: состав, статус и основные данные.
@@ -166,7 +165,7 @@
                             </div>
                             <div class="sf-order-detail-summary-row">
                                 <span>Часы работы</span>
-                                <strong>{{ pickup_location.hours }}</strong>
+                                <strong>{{ pickup_location.hours|linebreaksbr }}</strong>
                             </div>
                             <div class="sf-order-detail-summary-row">
                                 <span>Телефон</span>
