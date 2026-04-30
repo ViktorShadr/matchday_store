@@ -1556,7 +1556,7 @@ textarea.form-control:focus {
     border-radius: 28px;
     padding: 36px;
     background: radial-gradient(circle at top right, rgba(200, 164, 93, 0.18), transparent 28%),
-    linear-gradient(135deg, #0b1220 0%, #111827 50%, #1b4aa3 100%);
+    linear-gradient(135deg, #0b1220 0%, #111827 50%, #2d63c8 100%);
     color: #fff;
     box-shadow: var(--sf-shadow-lg);
 }

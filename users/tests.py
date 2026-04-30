@@ -3,6 +3,7 @@ from unittest.mock import patch, ANY
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, Client, override_settings
 from django.urls import reverse
@@ -11,7 +12,7 @@ from django.utils import timezone
 from orders.models import Order, OrderItem
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from users.application import EmailConfirmationService
-from users.forms import UserRegistrationForm, UserProfileForm, ProfileDeleteConfirmForm
+from users.forms import AVATAR_MAX_SIZE_BYTES, UserRegistrationForm, UserProfileForm, ProfileDeleteConfirmForm
 
 User = get_user_model()
 
@@ -129,6 +130,26 @@ class UserProfileFormTest(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("phone", form.errors)
+
+    def test_profile_form_rejects_oversized_avatar(self):
+        upload = SimpleUploadedFile(
+            "avatar.jpg",
+            b"x" * (AVATAR_MAX_SIZE_BYTES + 1),
+            content_type="image/jpeg",
+        )
+        form = UserProfileForm(data={}, files={"avatar": upload}, instance=self.user)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("avatar", form.errors)
+        self.assertIn("Размер аватара не должен превышать 2 МБ", form.errors["avatar"][0])
+
+    def test_profile_form_rejects_archive_avatar(self):
+        upload = SimpleUploadedFile("avatar.zip", b"PK\x03\x04archive", content_type="application/zip")
+        form = UserProfileForm(data={}, files={"avatar": upload}, instance=self.user)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("avatar", form.errors)
+        self.assertIn("JPG, PNG или WebP", form.errors["avatar"][0])
 
     def test_form_save(self):
         """Проверяет сценарий 'form save'."""
@@ -525,6 +546,19 @@ class UserViewsTest(TestCase):
         self.assertEqual(self.user.first_name, "Updated")
         self.assertEqual(self.user.last_name, "Name")
         self.assertEqual(self.user.phone, "+79109716684")
+
+    def test_profile_update_view_rejects_archive_avatar(self):
+        self.client.login(email="user@example.com", password="userpass123")
+        upload = SimpleUploadedFile("avatar.zip", b"PK\x03\x04archive", content_type="application/zip")
+        response = self.client.post(
+            reverse("users:profile_edit"),
+            data={"first_name": "Updated", "avatar": upload},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "JPG, PNG или WebP")
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.avatar)
 
     def test_profile_update_view_not_authenticated(self):
         """Проверяет сценарий 'profile update view not authenticated'."""

@@ -169,6 +169,72 @@
     }
 })();
 
+// Avatar upload validation
+(function() {
+    const avatarInputs = document.querySelectorAll('input[data-avatar-upload="true"]');
+    if (!avatarInputs.length) {
+        return;
+    }
+
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+
+    function removeClientError(input) {
+        const group = input.closest('.sf-form-group') || input.parentElement;
+        const error = group?.querySelector('[data-avatar-client-error="true"]');
+        if (error) {
+            error.remove();
+        }
+    }
+
+    function showClientError(input, message) {
+        const group = input.closest('.sf-form-group') || input.parentElement;
+        if (!group) {
+            return;
+        }
+
+        removeClientError(input);
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'sf-field-errors';
+        wrapper.setAttribute('data-avatar-client-error', 'true');
+
+        const error = document.createElement('div');
+        error.textContent = message;
+        wrapper.appendChild(error);
+        group.appendChild(wrapper);
+    }
+
+    avatarInputs.forEach((input) => {
+        input.addEventListener('change', () => {
+            const file = input.files && input.files[0];
+            removeClientError(input);
+
+            if (!file) {
+                return;
+            }
+
+            const maxSize = Number(input.getAttribute('data-max-size') || '0');
+            if (maxSize && file.size > maxSize) {
+                showClientError(input, input.getAttribute('data-size-error') || 'Файл слишком большой.');
+                input.value = '';
+                return;
+            }
+
+            const extension = file.name.split('.').pop().toLowerCase();
+            const acceptedTypes = (input.getAttribute('accept') || '')
+                .split(',')
+                .map((type) => type.trim())
+                .filter(Boolean);
+            const typeAllowed = !file.type || acceptedTypes.includes(file.type);
+
+            if (!allowedExtensions.includes(extension) || !typeAllowed) {
+                showClientError(input, input.getAttribute('data-type-error') || 'Недопустимый формат файла.');
+                input.value = '';
+            }
+        });
+    });
+})();
+
 /**
  * Get cookie value by name
  * @param {string} name - Cookie name
