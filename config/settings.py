@@ -226,8 +226,8 @@ _CSP_DIRECTIVES = {
     "frame-ancestors": [SELF],
     "img-src": [SELF, "data:"],
     "font-src": [SELF, "data:"],
-    "script-src": [SELF, NONCE],
-    "style-src": [SELF, "'unsafe-inline'"],
+    "script-src": [SELF, NONCE, "https://cdn.jsdelivr.net"],
+    "style-src": [SELF, "'unsafe-inline'", "https://cdn.jsdelivr.net"],
     "connect-src": [SELF],
     "object-src": [NONE],
 }

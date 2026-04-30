@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from time import sleep
 
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -133,7 +134,7 @@ class CheckoutFlowTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
-        self.assertContains(response, "Авторизация")
+        self.assertContains(response, "Войти в личный кабинет")
 
     @override_settings(
         RATELIMIT_CHECKOUT_IP_RATE="1/m",
@@ -421,7 +422,7 @@ class CheckoutFlowTest(TestCase):
         success_response = self.client.get(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
         self.assertEqual(success_response.status_code, 200)
         self.assertContains(success_response, "Самовывоз")
-        self.assertContains(success_response, "Фирменный магазин ФК")
+        self.assertContains(success_response, settings.STORE_PICKUP_LOCATION_NAME)
         self.assertContains(success_response, "Шарф ФК Шинник")
         self.assertContains(success_response, "Ожидает оплаты")
 

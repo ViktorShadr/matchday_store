@@ -188,7 +188,12 @@ class MainViewTest(TestCase):
         self.assertContains(response, primary_image.image.url)
         self.assertContains(response, self.image.image.url)
         self.assertContains(response, "data-sf-product-swiper")
-        self.assertContains(response, f'data-fancybox="product-card-{self.product.pk}"')
+        detail_url = reverse("store:product_detail", kwargs={"pk": self.product.pk})
+        self.assertContains(
+            response,
+            f'href="{detail_url}" class="swiper-slide sf-product-card-image-link"',
+            count=2,
+        )
 
 
 class ProductListViewTest(TestCase):
@@ -398,7 +403,8 @@ class ProductDetailsViewTest(TestCase):
         response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, primary_image.image.url, count=2)
+        self.assertEqual(response.context["product_gallery_images"][0]["url"], primary_image.image.url)
+        self.assertContains(response, primary_image.image.url)
 
     def test_product_detail_enables_swipe_gallery_for_multiple_images(self):
         """При нескольких фото на детальной странице должен включаться свайп-режим."""
@@ -411,9 +417,10 @@ class ProductDetailsViewTest(TestCase):
         response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-sf-slider="product-details"')
-        self.assertContains(response, "data-sf-slider-track")
-        self.assertContains(response, 'data-sf-slider-to="1"')
+        self.assertContains(response, "data-sf-product-detail-gallery")
+        self.assertContains(response, 'data-sf-gallery-count="2"')
+        self.assertContains(response, "data-sf-product-detail-main")
+        self.assertContains(response, "data-sf-product-detail-thumbs")
 
     def test_product_detail_view_404_when_product_not_on_sale(self):
         """Снятый с продажи товар не должен открываться на витрине."""

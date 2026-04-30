@@ -13,9 +13,9 @@
                 <div class="swiper sf-product-card-swiper" data-sf-product-swiper>
                     <div class="swiper-wrapper">
                         {% for image in product.gallery_images %}
-                            <div class="swiper-slide sf-product-card-image-link">
+                            <a href="{% url 'store:product_detail' pk=product.pk %}" class="swiper-slide sf-product-card-image-link">
                                 <img src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}" loading="lazy">
-                            </div>
+                            </a>
                         {% endfor %}
                     </div>
                     <button type="button" class="sf-product-card-swiper-nav sf-product-card-swiper-prev" aria-label="Предыдущее фото">
