@@ -34,7 +34,6 @@ services:
         max-file: "7"
     env_file:
       - .env
-    user: "10001:10001"
     command: ["sh", "/app/docker/web-entrypoint.sh"]
     depends_on:
       db:
