@@ -3,6 +3,7 @@ from uuid import uuid4
 from typing import Optional
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -37,6 +38,21 @@ class CheckoutService(ICheckoutService):
     
     Реализует DIP через dependency injection репозиториев.
     """
+
+    ACTIVE_ORDER_FINAL_STATUSES = frozenset(
+        {
+            Order.Status.CANCELLED,
+            Order.Status.DELIVERED,
+            Order.Status.REFUNDED,
+        }
+    )
+    ACTIVE_ORDER_FINAL_FULFILLMENT_STATUSES = frozenset(
+        {
+            Order.FulfillmentStatus.CANCELLED,
+            Order.FulfillmentStatus.DELIVERED,
+            Order.FulfillmentStatus.RETURNED,
+        }
+    )
 
     def __init__(
         self,
@@ -98,6 +114,44 @@ class CheckoutService(ICheckoutService):
 
         return None
 
+    @classmethod
+    def _count_active_unpaid_orders(cls, user_id: int) -> int:
+        """Посчитать открытые неоплаченные заказы пользователя."""
+        return (
+            Order.objects.filter(user_id=user_id)
+            .exclude(status__in=cls.ACTIVE_ORDER_FINAL_STATUSES)
+            .exclude(fulfillment_status__in=cls.ACTIVE_ORDER_FINAL_FULFILLMENT_STATUSES)
+            .exclude(payment_status=Order.PaymentStatus.SUCCEEDED)
+            .count()
+        )
+
+    @classmethod
+    def _ensure_active_order_limit(cls, user_id: int) -> None:
+        max_active_orders = settings.CHECKOUT_MAX_ACTIVE_ORDERS
+        if max_active_orders <= 0:
+            return
+
+        active_orders_count = cls._count_active_unpaid_orders(user_id)
+        if active_orders_count >= max_active_orders:
+            raise CheckoutError(
+                "У вас уже есть активные неоплаченные заказы. "
+                "Получите, оплатите или отмените один из них перед новым оформлением."
+            )
+
+    @staticmethod
+    def _ensure_sku_quantity_limit(cart_item, variant) -> None:
+        max_qty_per_sku = settings.CHECKOUT_MAX_QTY_PER_SKU
+        if max_qty_per_sku <= 0 or cart_item.quantity <= max_qty_per_sku:
+            return
+
+        raise CheckoutError(
+            f'Нельзя заказать более {max_qty_per_sku} шт. одного товара "{variant.product.name}" за раз.'
+        )
+
+    @staticmethod
+    def _lock_checkout_user(user_id: int) -> None:
+        get_user_model().objects.select_for_update().only("id").get(pk=user_id)
+
     def create_order_from_cart(
         self,
         checkout_context: CheckoutContext,
@@ -111,11 +165,22 @@ class CheckoutService(ICheckoutService):
         if existing_payment:
             return existing_payment.order
 
+        self._ensure_active_order_limit(checkout_context.user_id)
+
         order = None
         unavailable_only_error = None
 
         try:
             with transaction.atomic():
+                self._lock_checkout_user(checkout_context.user_id)
+                existing_payment = self._find_existing_checkout_payment(
+                    checkout_token,
+                    checkout_context.user_id,
+                )
+                if existing_payment:
+                    return existing_payment.order
+                self._ensure_active_order_limit(checkout_context.user_id)
+
                 cart = checkout_context.cart_context.cart
                 cart_items = list(
                     cart.items.select_related("product_variant__product").select_for_update().order_by("pk")
@@ -152,6 +217,8 @@ class CheckoutService(ICheckoutService):
                     if not variant.product.is_on_sale or variant.quantity <= 0:
                         skipped_cart_item_ids.append(cart_item.pk)
                         continue
+
+                    self._ensure_sku_quantity_limit(cart_item, variant)
 
                     if variant.quantity < cart_item.quantity:
                         raise CheckoutError(

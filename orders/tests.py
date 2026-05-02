@@ -80,6 +80,7 @@ class CheckoutFormValidationTest(SimpleTestCase):
         self.assertIn("phone", form.errors)
 
 
+@override_settings(RATELIMIT_ENABLE=False)
 class CheckoutFlowTest(TestCase):
     """Тесты MVP checkout flow."""
 
@@ -137,6 +138,7 @@ class CheckoutFlowTest(TestCase):
         self.assertContains(response, "Войти в личный кабинет")
 
     @override_settings(
+        RATELIMIT_ENABLE=True,
         RATELIMIT_CHECKOUT_IP_RATE="1/m",
         RATELIMIT_CHECKOUT_USER_RATE="1/m",
     )
@@ -263,6 +265,66 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(self.variant.quantity, 1)
         self.assertEqual(self.cart.items.count(), 1)
 
+    @override_settings(CHECKOUT_MAX_ACTIVE_ORDERS=3)
+    def test_checkout_fails_when_active_unpaid_order_limit_reached(self):
+        """Пользователь не должен создавать новые заказы сверх лимита активных неоплаченных."""
+        for index in range(3):
+            Order.objects.create(
+                number=f"ORD-ACTIVE-{index}",
+                user=self.user,
+                recipient_name="Иван Иванов",
+                email="buyer@example.com",
+                phone="+79990001122",
+                status=Order.Status.PLACED,
+                payment_status=Order.PaymentStatus.PENDING,
+                fulfillment_status=Order.FulfillmentStatus.NEW,
+                delivery_method=Order.DeliveryMethod.PICKUP,
+                subtotal_amount=Decimal("100.00"),
+                delivery_amount=Decimal("0.00"),
+                discount_amount=Decimal("0.00"),
+                total_amount=Decimal("100.00"),
+            )
+
+        self.client.login(email="buyer@example.com", password="testpass123")
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        self.variant.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "активные неоплаченные заказы")
+        self.assertEqual(Order.objects.filter(user=self.user).count(), 3)
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.cart.items.count(), 1)
+
+    @override_settings(CHECKOUT_MAX_QTY_PER_SKU=1)
+    def test_checkout_fails_when_sku_quantity_limit_exceeded(self):
+        """Checkout должен ограничивать количество одного SKU на уровне сервиса."""
+        self.client.login(email="buyer@example.com", password="testpass123")
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        self.variant.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Нельзя заказать более 1 шт.")
+        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.cart.items.count(), 1)
+
     def test_checkout_fails_when_product_is_not_on_sale(self):
         """Если в корзине только снятый товар, он удаляется и checkout не создается."""
         self.client.login(email="buyer@example.com", password="testpass123")
@@ -359,6 +421,7 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(second_variant.quantity, 1)
         self.assertEqual(self.cart.items.count(), 0)
 
+    @override_settings(CHECKOUT_MAX_ACTIVE_ORDERS=1)
     def test_checkout_service_is_idempotent_with_same_token(self):
         """Повторный checkout с тем же токеном должен вернуть уже созданный заказ."""
         service = CheckoutService()

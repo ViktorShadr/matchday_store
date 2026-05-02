@@ -26,17 +26,17 @@
 
 ## Этап A. Быстрые антиабуз-ограничения (без смены модели склада) - 1 день
 
-- [ ] Добавить лимит активных заказов пользователя перед созданием заказа.
+- [x] Добавить лимит активных заказов пользователя перед созданием заказа.
   - Где: `orders/services.py` (`CheckoutService.create_order_from_cart`).
   - Настройки: `CHECKOUT_MAX_ACTIVE_ORDERS` (например, 3-5).
   - Активными считать заказы со статусами не `issued/cancelled` и `payment_status != succeeded`.
 
-- [ ] Добавить доменный лимит количества одного SKU в заказе.
+- [x] Добавить доменный лимит количества одного SKU в заказе.
   - Где: `orders/services.py` (проверка `cart_item.quantity` перед резервом/созданием позиции).
   - Настройки: `CHECKOUT_MAX_QTY_PER_SKU` (например, 5-10).
   - Важно: это лимит в сервисе, а не только UI/форма.
 
-- [ ] Ужесточить текущие rate limits checkout.
+- [x] Ужесточить текущие rate limits checkout.
   - Где: `config/settings.py`, `orders/views.py`.
   - Пример: снизить `RATELIMIT_CHECKOUT_USER_RATE`, `RATELIMIT_CHECKOUT_IP_RATE`.
 
