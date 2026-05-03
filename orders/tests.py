@@ -1,5 +1,6 @@
-from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from decimal import Decimal
 from threading import Event
 from time import sleep
 
@@ -8,7 +9,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import close_old_connections
-from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings, skipUnlessDBFeature
+from django.test import (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+    skipUnlessDBFeature,
+)
 from django.urls import reverse
 from django.utils import timezone
 from unittest.mock import patch
@@ -19,11 +27,13 @@ from orders.models import Order, OrderItem, OrderStatusTransition
 from orders.services import (
     CheckoutService,
     ManualPaymentUpdateService,
+    OrderAutoCancellationService,
     OrderCancellationError,
     OrderCancellationService,
 )
 from orders.tasks import (
     NotificationDeliveryError,
+    auto_cancel_expired_pickup_orders,
     send_order_notification,
     send_order_notification_sync,
     send_staff_new_order_notification,
@@ -652,8 +662,7 @@ class OrderCancellationServiceTest(TestCase):
         self.service.cancel_order(order_id=order.id, user_id=self.user.id, actor=self.user)
 
         transitions = {
-            transition.transition_type: transition
-            for transition in OrderStatusTransition.objects.filter(order=order)
+            transition.transition_type: transition for transition in OrderStatusTransition.objects.filter(order=order)
         }
         self.assertIn(OrderStatusTransition.TransitionType.ORDER_STATUS, transitions)
         self.assertIn(OrderStatusTransition.TransitionType.FULFILLMENT_STATUS, transitions)
@@ -687,6 +696,22 @@ class OrderCancellationServiceTest(TestCase):
             transitions,
         )
 
+    def test_ready_order_can_be_cancelled(self):
+        order = self._create_order_with_item(
+            status=Order.Status.PROCESSING,
+            fulfillment_status=Order.FulfillmentStatus.RESERVED,
+        )
+
+        self.service.cancel_order(order_id=order.id, user_id=self.user.id)
+
+        self.variant.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+
     def test_repeated_cancellation_does_not_duplicate_stock_return(self):
         order = self._create_order_with_item()
 
@@ -717,6 +742,133 @@ class OrderCancellationServiceTest(TestCase):
         self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.SHIPPED)
         self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
         self.assertIsNone(order.cancelled_at)
+
+
+@override_settings(ORDER_PICKUP_RETENTION_BUSINESS_DAYS=3, ORDER_AUTO_CANCEL_BATCH_SIZE=100)
+class OrderAutoCancellationServiceTest(TestCase):
+    """Тесты автоотмены заказов самовывоза по рабочим дням."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="auto-cancel@example.com",
+            password="testpass123",
+            first_name="Анна",
+            last_name="Автоотмена",
+            phone="+79995550000",
+            is_active=True,
+        )
+        self.category = Category.objects.create(name="Автоотмена")
+        self.product = Product.objects.create(name="Товар для автоотмены", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Синий",
+            price=Decimal("1000.00"),
+            quantity=3,
+        )
+        self.service = OrderAutoCancellationService()
+
+    @staticmethod
+    def _local_datetime(year, month, day, hour=10, minute=0):
+        return timezone.make_aware(datetime(year, month, day, hour, minute))
+
+    def _create_order_with_item(self, *, placed_at, **order_overrides):
+        order_defaults = {
+            "number": f"ORD-AUTO-{Order.objects.count() + 1}",
+            "user": self.user,
+            "recipient_name": "Анна Автоотмена",
+            "email": self.user.email,
+            "phone": self.user.phone,
+            "status": Order.Status.PLACED,
+            "payment_status": Order.PaymentStatus.PENDING,
+            "fulfillment_status": Order.FulfillmentStatus.NEW,
+            "delivery_method": Order.DeliveryMethod.PICKUP,
+            "pickup_point_code": "main-store",
+            "subtotal_amount": Decimal("2000.00"),
+            "delivery_amount": Decimal("0.00"),
+            "discount_amount": Decimal("0.00"),
+            "total_amount": Decimal("2000.00"),
+            "confirmed_at": placed_at,
+        }
+        order_defaults.update(order_overrides)
+        order = Order.objects.create(**order_defaults)
+        Order.objects.filter(pk=order.pk).update(created_at=placed_at, confirmed_at=placed_at)
+        order.refresh_from_db()
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=2,
+            line_total=Decimal("2000.00"),
+        )
+        return order
+
+    def test_pickup_deadline_skips_weekends(self):
+        friday = self._local_datetime(2026, 5, 1, 10, 0)
+        order = self._create_order_with_item(placed_at=friday)
+
+        deadline = self.service.get_pickup_deadline(order)
+
+        self.assertEqual(deadline, self._local_datetime(2026, 5, 6, 10, 0))
+
+    def test_does_not_cancel_before_three_business_days_pass(self):
+        friday = self._local_datetime(2026, 5, 1, 10, 0)
+        tuesday = self._local_datetime(2026, 5, 5, 10, 0)
+        order = self._create_order_with_item(placed_at=friday)
+
+        result = self.service.cancel_expired_pickup_orders(now=tuesday)
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(result["cancelled"], 0)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(order.status, Order.Status.PLACED)
+        self.assertEqual(self.variant.quantity, 3)
+
+    def test_cancels_after_three_business_days_pass(self):
+        friday = self._local_datetime(2026, 5, 1, 10, 0)
+        wednesday = self._local_datetime(2026, 5, 6, 10, 1)
+        order = self._create_order_with_item(placed_at=friday)
+
+        result = self.service.cancel_expired_pickup_orders(now=wednesday)
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(result["cancelled"], 1)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertEqual(self.variant.quantity, 5)
+
+    def test_does_not_cancel_paid_order(self):
+        friday = self._local_datetime(2026, 5, 1, 10, 0)
+        wednesday = self._local_datetime(2026, 5, 6, 10, 1)
+        order = self._create_order_with_item(
+            placed_at=friday,
+            payment_status=Order.PaymentStatus.SUCCEEDED,
+        )
+
+        result = self.service.cancel_expired_pickup_orders(now=wednesday)
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(result["scanned"], 0)
+        self.assertEqual(order.status, Order.Status.PLACED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.SUCCEEDED)
+        self.assertEqual(self.variant.quantity, 3)
+
+    @patch("orders.services.OrderAutoCancellationService.cancel_expired_pickup_orders")
+    def test_auto_cancel_expired_pickup_orders_task_delegates_to_service(self, mock_cancel_expired):
+        mock_cancel_expired.return_value = {"scanned": 1, "cancelled": 1, "skipped": 0, "failed": 0}
+
+        result = auto_cancel_expired_pickup_orders()
+
+        self.assertEqual(result["cancelled"], 1)
+        mock_cancel_expired.assert_called_once_with()
 
 
 class OrderConcurrencyTest(TransactionTestCase):

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 from typing import Optional
@@ -35,7 +36,7 @@ class ManualPaymentUpdateError(Exception):
 class CheckoutService(ICheckoutService):
     """
     Сервис оформления заказа из корзины.
-    
+
     Реализует DIP через dependency injection репозиториев.
     """
 
@@ -190,7 +191,9 @@ class CheckoutService(ICheckoutService):
                     if checkout_token:
                         # Повторно проверяем idempotency после захвата блокировок:
                         # в параллельном submit первый запрос мог уже создать заказ и очистить корзину.
-                        existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
+                        existing_payment = self._find_existing_checkout_payment(
+                            checkout_token, checkout_context.user_id
+                        )
                         if existing_payment:
                             return existing_payment.order
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
@@ -246,10 +249,7 @@ class CheckoutService(ICheckoutService):
                     cart.items.filter(pk__in=skipped_cart_item_ids).delete()
 
                 if not order_items:
-                    unavailable_only_error = (
-                        "В корзине не осталось доступных товаров. "
-                        "Недоступные позиции удалены."
-                    )
+                    unavailable_only_error = "В корзине не осталось доступных товаров. " "Недоступные позиции удалены."
                 else:
                     order = self.order_repository.create_order(
                         number=self.build_order_number(),
@@ -321,6 +321,7 @@ class OrderCancellationService:
         {
             Order.Status.PLACED,
             Order.Status.AWAITING_PAYMENT,
+            Order.Status.PROCESSING,
         }
     )
     CANCELLABLE_FULFILLMENT_STATUSES = frozenset(
@@ -342,9 +343,7 @@ class OrderCancellationService:
     @classmethod
     def _ensure_order_can_be_cancelled(cls, order: Order) -> None:
         if order.status not in cls.CANCELLABLE_ORDER_STATUSES:
-            raise OrderCancellationError(
-                f'Заказ в статусе "{order.get_status_display()}" нельзя отменить.'
-            )
+            raise OrderCancellationError(f'Заказ в статусе "{order.get_status_display()}" нельзя отменить.')
 
         if order.fulfillment_status not in cls.CANCELLABLE_FULFILLMENT_STATUSES:
             raise OrderCancellationError(
@@ -446,6 +445,92 @@ class OrderCancellationService:
             OrderNotificationService.schedule_cancelled(order.id)
 
             return order
+
+
+def add_business_days(value, business_days: int):
+    """Return a local-time datetime after adding Monday-Friday business days."""
+    deadline = timezone.localtime(value) if timezone.is_aware(value) else timezone.make_aware(value)
+    if business_days <= 0:
+        return deadline
+
+    remaining_days = business_days
+    while remaining_days > 0:
+        deadline += timedelta(days=1)
+        if deadline.weekday() < 5:
+            remaining_days -= 1
+    return deadline
+
+
+class OrderAutoCancellationService:
+    """Auto-cancel expired pickup orders without direct stock mutations."""
+
+    ELIGIBLE_ORDER_STATUSES = OrderCancellationService.CANCELLABLE_ORDER_STATUSES
+    ELIGIBLE_FULFILLMENT_STATUSES = OrderCancellationService.CANCELLABLE_FULFILLMENT_STATUSES
+    NON_CANCELLABLE_PAYMENT_STATUSES = OrderCancellationService.NON_CANCELLABLE_PAYMENT_STATUSES
+
+    def __init__(self, cancellation_service: Optional[OrderCancellationService] = None):
+        self.cancellation_service = cancellation_service or OrderCancellationService()
+
+    @staticmethod
+    def get_order_retention_started_at(order: Order):
+        return order.confirmed_at or order.created_at
+
+    @classmethod
+    def get_pickup_deadline(cls, order: Order, *, business_days: Optional[int] = None):
+        retention_business_days = (
+            settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS if business_days is None else business_days
+        )
+        return add_business_days(cls.get_order_retention_started_at(order), retention_business_days)
+
+    @classmethod
+    def is_pickup_deadline_expired(cls, order: Order, *, now=None, business_days: Optional[int] = None) -> bool:
+        current_time = timezone.localtime(now or timezone.now())
+        return current_time >= cls.get_pickup_deadline(order, business_days=business_days)
+
+    def cancel_expired_pickup_orders(
+        self,
+        *,
+        now=None,
+        business_days: Optional[int] = None,
+        batch_size: Optional[int] = None,
+    ) -> dict[str, int]:
+        current_time = now or timezone.now()
+        retention_business_days = (
+            settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS if business_days is None else business_days
+        )
+        max_orders = settings.ORDER_AUTO_CANCEL_BATCH_SIZE if batch_size is None else batch_size
+        rough_cutoff = current_time - timedelta(days=max(retention_business_days, 0))
+
+        candidate_orders = list(
+            Order.objects.filter(
+                delivery_method=Order.DeliveryMethod.PICKUP,
+                status__in=self.ELIGIBLE_ORDER_STATUSES,
+                fulfillment_status__in=self.ELIGIBLE_FULFILLMENT_STATUSES,
+                created_at__lte=rough_cutoff,
+            )
+            .exclude(payment_status__in=self.NON_CANCELLABLE_PAYMENT_STATUSES)
+            .order_by("created_at", "pk")[:max_orders]
+        )
+
+        result = {
+            "scanned": len(candidate_orders),
+            "cancelled": 0,
+            "skipped": 0,
+            "failed": 0,
+        }
+        for order in candidate_orders:
+            if not self.is_pickup_deadline_expired(order, now=current_time, business_days=retention_business_days):
+                result["skipped"] += 1
+                continue
+
+            try:
+                self.cancellation_service.cancel_order(order_id=order.pk)
+            except OrderCancellationError:
+                result["failed"] += 1
+            else:
+                result["cancelled"] += 1
+
+        return result
 
 
 class ManualPaymentUpdateService:

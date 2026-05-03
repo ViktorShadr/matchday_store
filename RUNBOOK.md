@@ -33,7 +33,7 @@ docker compose up -d --build
 docker compose run --rm --user 0:0 web sh -c "chown -R 10001:10001 /app/staticfiles /app/media"
 ```
 
-3. При необходимости поднять worker:
+3. При необходимости поднять worker-профиль. Он запускает Celery worker и Celery beat; beat нужен для регулярной автоотмены просроченных заказов самовывоза.
 
 ```bash
 docker compose --profile worker up -d --build

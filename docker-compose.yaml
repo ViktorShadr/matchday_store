@@ -105,6 +105,23 @@ services:
     volumes:
       - media_data:/app/media
 
+  beat:
+    build:
+      context: .
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "7"
+    env_file:
+      - .env
+    user: "10001:10001"
+    command: ["celery", "-A", "config", "beat", "-l", "info"]
+    depends_on:
+      redis:
+        condition: service_started
+
 volumes:
   postgres_data:
   static_data:
