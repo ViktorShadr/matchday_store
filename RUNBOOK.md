@@ -9,6 +9,8 @@
 - корректные `ALLOWED_HOSTS`
 - корректные `CSRF_TRUSTED_ORIGINS` c `https://...`
 - `SITE_URL` указывает на боевой HTTPS-домен
+- `CSRF_COOKIE_SECURE=True` и `SESSION_COOKIE_SECURE=True`
+- `USE_X_FORWARDED_PROTO=True`, если TLS завершается на внешнем reverse proxy
 - настроены SMTP-переменные (`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`)
 - настроен `CACHE_URL` (общий Redis cache, чтобы rate limits работали консистентно между web-процессами)
 - настроены `RATELIMIT_*` и корректный `RATELIMIT_IP_META_KEY` для reverse proxy
@@ -17,6 +19,9 @@
 - внешний reverse proxy/ingress терминирует TLS
 - есть регулярный backup PostgreSQL и проверка восстановления
 - определены ответственные за релиз и rollback
+
+Для временной проверки по HTTP/IP без TLS допустимо ставить `CSRF_COOKIE_SECURE=False` и
+`SESSION_COOKIE_SECURE=False`. Для боевого домена это нужно вернуть в `True`.
 
 ## 2. Deploy (Docker Compose)
 
