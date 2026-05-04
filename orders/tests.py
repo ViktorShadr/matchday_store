@@ -1098,6 +1098,32 @@ class OrderConcurrencyTest(TransactionTestCase):
         finally:
             close_old_connections()
 
+    def _run_checkout_for_user_once(self, user_id: int, checkout_token: str):
+        close_old_connections()
+        try:
+            user = User.objects.get(pk=user_id)
+            request = self._build_checkout_request()
+            request.user = user
+            checkout_context = CheckoutContext(
+                user=user,
+                cart_context=self.cart_context_resolver.resolve_request(request),
+            )
+            order = CheckoutService().create_order_from_cart(
+                checkout_context,
+                {
+                    "recipient_name": user.email,
+                    "email": user.email,
+                    "phone": "+79990000001",
+                    "customer_comment": "",
+                },
+                checkout_token=checkout_token,
+            )
+            return ("ok", order.pk)
+        except Exception as exc:
+            return ("error", str(exc))
+        finally:
+            close_old_connections()
+
     def _create_cancellable_order(self):
         order = Order.objects.create(
             number=f"ORD-CONC-{Order.objects.count() + 1}",
@@ -1173,6 +1199,49 @@ class OrderConcurrencyTest(TransactionTestCase):
         self.assertEqual(Order.objects.filter(user=self.user).count(), 1)
         self.assertEqual(Payment.objects.filter(order=order).count(), 1)
         self.assertEqual(CartItem.objects.filter(cart__user=self.user).count(), 0)
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_parallel_checkout_load_smoke_preserves_stock_invariants(self):
+        """N параллельных checkout не должны перепродавать SKU с малым остатком."""
+        self.variant.quantity = 3
+        self.variant.reserved_quantity = 0
+        self.variant.save(update_fields=["quantity", "reserved_quantity", "updated_at"])
+
+        user_ids = []
+        for index in range(8):
+            user = User.objects.create_user(
+                email=f"parallel-load-{index}@example.com",
+                password="testpass123",
+                first_name="Load",
+                last_name=str(index),
+                phone="+79990000001",
+                is_active=True,
+            )
+            cart = Cart.objects.create(user=user)
+            CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=1)
+            user_ids.append(user.pk)
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(
+                executor.map(
+                    lambda args: self._run_checkout_for_user_once(*args),
+                    [(user_id, f"parallel-load-{user_id}") for user_id in user_ids],
+                )
+            )
+
+        ok_results = [result for result in results if result[0] == "ok"]
+        error_results = [result for result in results if result[0] == "error"]
+
+        self.variant.refresh_from_db()
+        self.assertEqual(len(ok_results), 3, results)
+        self.assertEqual(len(error_results), 5, results)
+        self.assertEqual(Order.objects.filter(user_id__in=user_ids).count(), 3)
+        self.assertEqual(Payment.objects.filter(order__user_id__in=user_ids).count(), 3)
+        self.assertGreaterEqual(self.variant.quantity, 0)
+        self.assertGreaterEqual(self.variant.reserved_quantity, 0)
+        self.assertLessEqual(self.variant.reserved_quantity, self.variant.quantity)
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 3)
 
     def test_parallel_cancellation_returns_stock_only_once(self):
         """Параллельная отмена одного заказа должна быть идемпотентной."""
