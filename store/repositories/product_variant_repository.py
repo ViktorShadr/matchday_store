@@ -14,4 +14,9 @@ class ProductVariantRepository(IProductVariantRepository):
 
     def get_variants_for_update(self, variant_ids: List[int]) -> QuerySet[ProductVariant]:
         """Получить варианты товаров с блокировкой для обновления."""
-        return ProductVariant.objects.select_for_update().filter(id__in=variant_ids).select_related("product")
+        return (
+            ProductVariant.objects.select_for_update()
+            .filter(id__in=variant_ids)
+            .select_related("product")
+            .order_by("pk")
+        )

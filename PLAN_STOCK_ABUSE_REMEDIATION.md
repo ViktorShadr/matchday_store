@@ -58,29 +58,29 @@
 
 ## Этап C. Переход на резерв вместо раннего списания - 2-3 дня
 
-- [ ] Добавить поле резерва в SKU.
+- [x] Добавить поле резерва в SKU.
   - Где: `store/models.py`, миграция.
   - Поле: `reserved_quantity = models.PositiveIntegerField(default=0)`.
   - Ограничение: `reserved_quantity <= quantity` (CheckConstraint).
 
-- [ ] Изменить checkout-транзакцию: резервировать, не списывать.
+- [x] Изменить checkout-транзакцию: резервировать, не списывать.
   - Где: `orders/services.py`.
   - Вместо `variant.quantity -= cart_item.quantity` делать `variant.reserved_quantity += cart_item.quantity`.
   - Проверка доступности: `quantity - reserved_quantity >= requested`.
   - Сохранить `transaction.atomic()` + `select_for_update()`.
 
-- [ ] Изменить отмену заказа: возвращать резерв.
+- [x] Изменить отмену заказа: возвращать резерв.
   - Где: `orders/services.py` (`OrderCancellationService`).
   - Вместо `quantity += ...` делать `reserved_quantity -= ...` (с защитой от ухода в минус).
 
-- [ ] Изменить выдачу заказа: списывать физический склад.
+- [x] Изменить выдачу заказа: списывать физический склад.
   - Где: `orders/application/dashboard_order_flow.py` (+ сервис в `orders/services.py`).
   - На переходе в `issued`:
     - lock `Order` и все `ProductVariant` через `select_for_update()`,
     - атомарно `quantity -= item.qty`, `reserved_quantity -= item.qty`.
   - Для обновлений использовать `F()`-выражения, чтобы убрать риск lost update.
 
-- [ ] Учесть `available` в витрине/корзине/валидации.
+- [x] Учесть `available` в витрине/корзине/валидации.
   - Где: `store/services/cart_service.py`, `store/services/cart_validator.py`, при необходимости presenters/queries.
   - UI должен видеть доступность по `quantity - reserved_quantity`.
 

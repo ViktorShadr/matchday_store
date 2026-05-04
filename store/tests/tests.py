@@ -730,6 +730,7 @@ class DashboardOrdersManagementTest(TestCase):
             color="Синий",
             price=Decimal("1500.00"),
             quantity=10,
+            reserved_quantity=1,
         )
         self.order = Order.objects.create(
             number="ORD-TEST-0001",
@@ -830,11 +831,12 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.status, Order.Status.DELIVERED)
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
         self.assertIsNotNone(self.order.issued_at)
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 9)
+        self.assertEqual(self.variant.reserved_quantity, 0)
 
     def test_order_cancel_from_dashboard_uses_cancellation_service(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
-        self.variant.quantity = 9
-        self.variant.save(update_fields=["quantity", "updated_at"])
 
         response = self.client.post(
             reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
@@ -849,6 +851,7 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertIsNotNone(self.order.cancelled_at)
         self.assertEqual(self.variant.quantity, 10)
+        self.assertEqual(self.variant.reserved_quantity, 0)
 
     def test_cancelled_order_cannot_be_reopened_from_dashboard(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
@@ -1131,7 +1134,7 @@ class CartPageRenderingTest(TestCase):
         response = self.client.get(reverse("store:cart"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Данный товар закончился")
+        self.assertContains(response, "Товар снят с продажи")
         self.assertNotContains(
             response,
             reverse("store:product_detail", kwargs={"pk": self.product.pk}),

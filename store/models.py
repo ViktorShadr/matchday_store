@@ -93,6 +93,7 @@ class ProductVariant(models.Model):
         color (str): Цвет варианта
         price (Decimal): Цена варианта
         quantity (int): Количество на складе
+        reserved_quantity (int): Количество, зарезервированное под активные заказы
         image (ProductImage): Основное изображение варианта (необязательно)
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
@@ -111,6 +112,7 @@ class ProductVariant(models.Model):
         validators=[MinValueValidator(0)],
     )
     quantity = models.PositiveIntegerField(default=0)
+    reserved_quantity = models.PositiveIntegerField(default=0)
     image = models.ForeignKey(
         "ProductImage",
         on_delete=models.SET_NULL,
@@ -125,6 +127,11 @@ class ProductVariant(models.Model):
         """Возвращает строковое представление объекта."""
         return f"{self.product.name} ({self.size}, {self.color})"
 
+    @property
+    def available_quantity(self) -> int:
+        """Количество, доступное для новых заказов."""
+        return max((self.quantity or 0) - (self.reserved_quantity or 0), 0)
+
     class Meta:
         """Мета-настройки класса."""
 
@@ -134,6 +141,10 @@ class ProductVariant(models.Model):
             models.UniqueConstraint(
                 fields=["product", "size", "color"],
                 name="unique_product_variant_size_color",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(reserved_quantity__lte=models.F("quantity")),
+                name="product_variant_reserved_lte_quantity",
             ),
         ]
 

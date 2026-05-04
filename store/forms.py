@@ -44,6 +44,15 @@ class ProductVariantForm(forms.ModelForm):
             self.fields["image"].queryset = self.product.images.order_by("-is_primary", "-created_at")
         self.fields["image"].empty_label = "Без изображения"
 
+    def clean_quantity(self):
+        quantity = self.cleaned_data["quantity"]
+        reserved_quantity = getattr(self.instance, "reserved_quantity", 0) or 0
+        if quantity < reserved_quantity:
+            raise forms.ValidationError(
+                f"Физический остаток не может быть меньше резерва ({reserved_quantity} шт.)."
+            )
+        return quantity
+
 
 class ProductImageForm(forms.ModelForm):
     class Meta:
@@ -63,3 +72,12 @@ class VariantStockForm(forms.ModelForm):
         widgets = {
             "quantity": forms.NumberInput(attrs={"class": "form-control", "min": "0"}),
         }
+
+    def clean_quantity(self):
+        quantity = self.cleaned_data["quantity"]
+        reserved_quantity = getattr(self.instance, "reserved_quantity", 0) or 0
+        if quantity < reserved_quantity:
+            raise forms.ValidationError(
+                f"Физический остаток не может быть меньше резерва ({reserved_quantity} шт.)."
+            )
+        return quantity

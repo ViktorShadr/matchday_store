@@ -134,7 +134,8 @@ class SalesFlowSmokeE2ETest(TestCase):
             self.assertEqual(payment.amount, Decimal("3980.00"))
 
             self.variant.refresh_from_db()
-            self.assertEqual(self.variant.quantity, 8)
+            self.assertEqual(self.variant.quantity, 10)
+            self.assertEqual(self.variant.reserved_quantity, 2)
             customer_cart = Cart.objects.get(user=customer_user)
             self.assertEqual(customer_cart.items.count(), 0)
 
@@ -178,6 +179,9 @@ class SalesFlowSmokeE2ETest(TestCase):
             self.assertEqual(order.status, Order.Status.DELIVERED)
             self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
             self.assertIsNotNone(order.issued_at)
+            self.variant.refresh_from_db()
+            self.assertEqual(self.variant.quantity, 8)
+            self.assertEqual(self.variant.reserved_quantity, 0)
 
             self.assertIn(call(order.id, "paid"), mock_send_order_notification.delay.call_args_list)
             self.assertIn(call(order.id, "ready"), mock_send_order_notification.delay.call_args_list)

@@ -62,7 +62,7 @@
                                     {% endif %}
                                 </h2>
 
-                                {% if not item.is_available %}
+                                {% if item.availability_message %}
                                     <span class="sf-stock-badge sf-stock-badge--muted">
                                         {{ item.availability_message }}
                                     </span>
@@ -79,6 +79,7 @@
                                                 <input type="number"
                                                        name="quantity"
                                                        min="1"
+                                                       max="{{ item.max_quantity }}"
                                                        value="{{ item.quantity }}"
                                                        class="form-control sf-cart-qty-input">
                                                 <button type="submit" class="btn btn-outline-primary">

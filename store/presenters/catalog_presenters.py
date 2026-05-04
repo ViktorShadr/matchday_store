@@ -55,7 +55,7 @@ class ProductCardPresenter:
     def enrich(product):
         images = sorted(list(product.images.all()), key=lambda image: (not image.is_primary, -image.id))
         variants = list(product.variants.all())
-        available_variants = [variant for variant in variants if variant.quantity > 0]
+        available_variants = [variant for variant in variants if variant.available_quantity > 0]
 
         first_image = images[0] if images else None
         first_variant = variants[0] if variants else None
@@ -110,7 +110,7 @@ class ProductDetailsPresenter:
             "color": variant.color,
             "price": variant.price,
             "price_formatted": f"{variant.price} ₽",
-            "quantity": variant.quantity,
-            "in_stock": variant.quantity > 0,
+            "quantity": variant.available_quantity,
+            "in_stock": variant.available_quantity > 0,
             "product_name": variant.product.name if variant.product else "",
         }

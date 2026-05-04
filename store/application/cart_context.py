@@ -82,7 +82,7 @@ class CartContextResolver:
                 return
 
             for item in session_cart.items.select_related("product_variant").all():
-                available_quantity = item.product_variant.quantity
+                available_quantity = item.product_variant.available_quantity
                 if available_quantity < 1:
                     continue
 
