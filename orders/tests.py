@@ -1,10 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from decimal import Decimal
+from io import StringIO
 from threading import Event
 from time import sleep
 
 from django.conf import settings
+from django.core.management import call_command, CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.cache import cache
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -25,6 +27,7 @@ from orders.application import CheckoutContext, DashboardOrderFlowError, Dashboa
 from orders.forms import CheckoutForm
 from orders.models import Order, OrderItem, OrderStatusTransition
 from orders.services import (
+    CheckoutError,
     CheckoutService,
     ManualPaymentUpdateService,
     OrderAutoCancellationService,
@@ -210,6 +213,32 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(payment.provider, Payment.Provider.MANUAL)
         self.assertEqual(payment.status, Payment.Status.PENDING)
         self.assertEqual(payment.amount, Decimal("3980.00"))
+
+    @override_settings(STOCK_RESERVE_MODE_ENABLED=False)
+    def test_checkout_fails_when_stock_reserve_mode_disabled(self):
+        service = CheckoutService()
+        request = self._build_service_request()
+        checkout_context = CheckoutContext(
+            user=self.user,
+            cart_context=self.cart_context_resolver.resolve_request(request),
+        )
+
+        with self.assertRaises(CheckoutError):
+            service.create_order_from_cart(
+                checkout_context,
+                cleaned_data={
+                    "recipient_name": "Иван Иванов",
+                    "email": "buyer@example.com",
+                    "phone": "+79990001122",
+                    "customer_comment": "",
+                },
+            )
+
+        self.variant.refresh_from_db()
+        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+        self.assertEqual(self.cart.items.count(), 1)
 
     def test_checkout_redirects_to_profile_when_email_not_confirmed(self):
         self.user.is_email_confirmed = False
@@ -892,6 +921,112 @@ class OrderAutoCancellationServiceTest(TestCase):
 
         self.assertEqual(result["cancelled"], 1)
         mock_cancel_expired.assert_called_once_with()
+
+
+class StockReservationBackfillCommandTest(TestCase):
+    """Тесты одноразовой команды backfill резервов склада."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="backfill@example.com",
+            password="testpass123",
+            first_name="Бэкфилл",
+            last_name="Резервов",
+            phone="+79990000003",
+            is_active=True,
+        )
+        self.category = Category.objects.create(name="Backfill")
+        self.product = Product.objects.create(name="Backfill товар", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Синий",
+            price=Decimal("1000.00"),
+            quantity=3,
+        )
+
+    def _create_order_with_item(
+        self,
+        *,
+        status=Order.Status.PLACED,
+        fulfillment_status=Order.FulfillmentStatus.NEW,
+        quantity=2,
+    ):
+        order = Order.objects.create(
+            number=f"ORD-BACKFILL-{Order.objects.count() + 1}",
+            user=self.user,
+            recipient_name="Бэкфилл Резервов",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=status,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("2000.00"),
+            total_amount=Decimal("2000.00"),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=quantity,
+            line_total=self.variant.price * quantity,
+        )
+        return order
+
+    def test_backfill_stock_reservations_dry_run_does_not_update_stock(self):
+        self._create_order_with_item()
+        stdout = StringIO()
+
+        call_command("backfill_stock_reservations", stdout=stdout)
+
+        self.variant.refresh_from_db()
+        self.assertIn("DRY-RUN", stdout.getvalue())
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+    def test_backfill_stock_reservations_refuses_apply_while_checkout_live(self):
+        self._create_order_with_item()
+
+        with self.assertRaises(CommandError):
+            call_command("backfill_stock_reservations", "--apply", stdout=StringIO())
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+    @override_settings(STOCK_RESERVE_MODE_ENABLED=False)
+    def test_backfill_stock_reservations_apply_is_idempotent(self):
+        self._create_order_with_item(quantity=2)
+        self._create_order_with_item(
+            status=Order.Status.DELIVERED,
+            fulfillment_status=Order.FulfillmentStatus.DELIVERED,
+            quantity=1,
+        )
+        self._create_order_with_item(
+            status=Order.Status.CANCELLED,
+            fulfillment_status=Order.FulfillmentStatus.CANCELLED,
+            quantity=1,
+        )
+        stdout = StringIO()
+
+        call_command("backfill_stock_reservations", "--apply", stdout=stdout)
+
+        self.variant.refresh_from_db()
+        self.assertIn("APPLIED", stdout.getvalue())
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+        call_command("backfill_stock_reservations", "--apply", stdout=StringIO())
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 2)
 
 
 class OrderConcurrencyTest(TransactionTestCase):

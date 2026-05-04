@@ -86,7 +86,7 @@
 
 ## Этап D. Безопасная миграция текущих данных - 1 день
 
-- [ ] Добавить одноразовую backfill-команду для перехода со старой схемы.
+- [x] Добавить одноразовую backfill-команду для перехода со старой схемы.
   - Где: новая management command в `orders/management/commands/`.
   - Для активных невыданных заказов:
     - `quantity += order_item.qty` (откат раннего списания),
@@ -94,7 +94,7 @@
   - Для `issued/delivered` заказы не трогать.
   - Для `cancelled` заказы не трогать.
 
-- [ ] На время backfill включить maintenance window checkout (короткий), либо feature-flag.
+- [x] На время backfill включить maintenance window checkout (короткий), либо feature-flag.
   - Настройка: `STOCK_RESERVE_MODE_ENABLED`.
 
 ## Этап E. Тесты и приемка - 1-2 дня

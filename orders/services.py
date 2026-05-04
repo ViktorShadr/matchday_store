@@ -214,6 +214,12 @@ class CheckoutService(ICheckoutService):
     def _lock_checkout_user(user_id: int) -> None:
         get_user_model().objects.select_for_update().only("id").get(pk=user_id)
 
+    @staticmethod
+    def _ensure_stock_reserve_mode_enabled() -> None:
+        if getattr(settings, "STOCK_RESERVE_MODE_ENABLED", True):
+            return
+        raise CheckoutError("Оформление заказов временно недоступно. Повторите попытку позже.")
+
     def create_order_from_cart(
         self,
         checkout_context: CheckoutContext,
@@ -227,6 +233,7 @@ class CheckoutService(ICheckoutService):
         if existing_payment:
             return existing_payment.order
 
+        self._ensure_stock_reserve_mode_enabled()
         self._ensure_active_order_limit(checkout_context.user_id)
 
         order = None
@@ -241,6 +248,7 @@ class CheckoutService(ICheckoutService):
                 )
                 if existing_payment:
                     return existing_payment.order
+                self._ensure_stock_reserve_mode_enabled()
                 self._ensure_active_order_limit(checkout_context.user_id)
 
                 cart = checkout_context.cart_context.cart
