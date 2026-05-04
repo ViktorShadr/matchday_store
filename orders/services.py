@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import F
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from orders.application.checkout_context import CheckoutContext
@@ -211,8 +212,14 @@ class CheckoutService(ICheckoutService):
         )
 
     @staticmethod
-    def _lock_checkout_user(user_id: int) -> None:
-        get_user_model().objects.select_for_update().only("id").get(pk=user_id)
+    def _lock_checkout_user(user_id: int):
+        return get_user_model().objects.select_for_update().only("id", "is_email_confirmed").get(pk=user_id)
+
+    @staticmethod
+    def _ensure_user_email_confirmed(user) -> None:
+        if user.is_email_confirmed:
+            return
+        raise CheckoutError("Подтвердите email в личном кабинете перед оформлением заказа.")
 
     @staticmethod
     def _ensure_stock_reserve_mode_enabled() -> None:
@@ -241,7 +248,8 @@ class CheckoutService(ICheckoutService):
 
         try:
             with transaction.atomic():
-                self._lock_checkout_user(checkout_context.user_id)
+                locked_user = self._lock_checkout_user(checkout_context.user_id)
+                self._ensure_user_email_confirmed(locked_user)
                 existing_payment = self._find_existing_checkout_payment(
                     checkout_token,
                     checkout_context.user_id,
@@ -298,6 +306,11 @@ class CheckoutService(ICheckoutService):
                         raise CheckoutError(
                             f'Недостаточно товара "{variant.product.name}" на складе. '
                             f"Доступно: {available_quantity} шт."
+                        )
+
+                    if variant.price <= 0:
+                        raise CheckoutError(
+                            f'Некорректная цена для товара "{variant.product.name}". ' "Обратитесь в поддержку."
                         )
 
                     line_total = variant.price * cart_item.quantity
@@ -608,10 +621,11 @@ class OrderAutoCancellationService:
                 delivery_method=Order.DeliveryMethod.PICKUP,
                 status__in=self.ELIGIBLE_ORDER_STATUSES,
                 fulfillment_status__in=self.ELIGIBLE_FULFILLMENT_STATUSES,
-                created_at__lte=rough_cutoff,
             )
+            .annotate(retention_started_at=Coalesce("confirmed_at", "created_at"))
+            .filter(retention_started_at__lte=rough_cutoff)
             .exclude(payment_status__in=self.NON_CANCELLABLE_PAYMENT_STATUSES)
-            .order_by("created_at", "pk")[:max_orders]
+            .order_by("retention_started_at", "pk")[:max_orders]
         )
 
         result = {

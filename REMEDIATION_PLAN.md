@@ -1,459 +1,302 @@
 # План устранения недостатков Matchday Store
 
-**Дата создания:** 2026-05-04  
-**Приоритет:** Критичные → Средние → Низкие
+**Дата актуализации:** 2026-05-04
+**Основание:** повторная сверка с текущим кодом проекта
+**Статус:** прежний план не применять буквально; использовать этот документ как актуальный порядок работ
 
 ---
 
-## Сводка по категориям
+## Ключевой вывод
 
-| Категория | Критичные | Средние | Низкие | Всего |
-|-----------|-----------|---------|--------|-------|
-| Бизнес-логика | 3 | 5 | 1 | 9 |
-| Безопасность | 1 | 4 | 2 | 7 |
-| Деплой | 2 | 4 | 2 | 8 |
-| **Итого** | **6** | **13** | **5** | **24** |
+Исходный план был составлен как общий аудит, но часть его пунктов не соответствует текущему коду:
+
+- `Order.payment_status` уже синхронизируется через `PaymentWorkflowService` и `PaymentStatusSyncService`.
+- `web`-контейнер уже запускается не от root за счет `USER app` в `Dockerfile`.
+- логи сейчас идут в stdout/json-file, поэтому volume `/app/logs` сам по себе ничего не сохраняет.
+- часть "критичных" пунктов является defense-in-depth, а не подтвержденным багом.
+
+Дальше план сфокусирован на подтвержденных дефектах и полезных усилениях, которые не ломают существующую модель заказов.
 
 ---
 
-## Этап 1: Критичные баги бизнес-логики
+## Сводка приоритетов
 
-### 1.1 Рассинхронизация статуса заказа при обновлении платежа
+| Приоритет | Категория | Задачи |
+|-----------|-----------|--------|
+| P0 | Безопасность и данные | 2 |
+| P1 | Бизнес-логика и конкурентность | 3 |
+| P2 | Эксплуатация | 3 |
+| P3 | UX/политики | 2 |
 
-**Файл:** `orders/services.py` (строки 734-740)  
-**Проблема:** Статус `order.payment_status` не обновляется при изменении статуса платежа.
+---
 
-**Исправление:**
-```python
-# После строки 732 добавить:
-order.payment_status = next_payment_status
-if next_payment_status == Order.PaymentStatus.SUCCEEDED:
-    if order.paid_at is None:
-        order.paid_at = payment.paid_at or now
-    if order.status == Order.Status.PLACED:
-        order.status = Order.Status.PAID
-    order.save(update_fields=["payment_status", "paid_at", "status", "updated_at"])
-elif next_payment_status in self.RESET_PAID_AT_STATUSES and order.paid_at is not None:
-    order.paid_at = None
-    order.payment_status = next_payment_status
-    order.save(update_fields=["payment_status", "paid_at", "updated_at"])
-else:
-    order.payment_status = next_payment_status
-    order.save(update_fields=["payment_status", "updated_at"])
-```
+## P0: Исправить подтвержденные риски
+
+### 1. Ограничить загрузку изображений товара
+
+**Файлы:** `store/forms.py`, `store/tests/tests.py`
+**Текущее состояние:** `ProductImageForm` принимает файл без явного лимита размера и без проверки реального изображения. Nginx ограничивает тело запроса `10m`, но это не заменяет доменную валидацию формы.
+
+**Что сделать:**
+
+- Добавить лимит размера изображения, например `5 MB`.
+- Добавить `accept="image/jpeg,image/png,image/webp,image/gif"` в widget.
+- Проверять расширение/content-type как быстрый фильтр, но не считать это достаточной защитой.
+- Проверять файл через Pillow: открыть изображение, вызвать `verify()`, отклонять невалидные файлы.
+- Сбросить указатель файла после проверки, если это требуется для дальнейшего сохранения.
+
+**Важно:** не полагаться только на `UploadedFile.content_type`, потому что клиент может его подделать.
 
 **Проверка:**
-1. Создать заказ
-2. Добавить платеж со статусом SUCCEEDED
-3. Проверить, что `order.payment_status` = SUCCEEDED и `order.status` = PAID
+
+- валидный JPEG/PNG проходит;
+- файл больше лимита отклоняется;
+- файл с `content_type=image/jpeg`, но не являющийся изображением, отклоняется;
+- существующий dashboard upload продолжает работать.
 
 ---
 
-### 1.2 Проверка email только в dispatch()
+### 2. Запретить нулевую цену товара в checkout и данных склада
 
-**Файл:** `orders/views.py` (строки 101-130)  
-**Проблема:** Проверка `is_email_confirmed` только в `dispatch()`, но не в `form_valid()`.
+**Файлы:** `store/models.py`, `store/forms.py`, `orders/services.py`, миграция, тесты
+**Текущее состояние:** `ProductVariant.price` использует `MinValueValidator(0)`, а checkout создает заказ с любой ценой `>= 0`. Это позволяет оформить заказ на товар с нулевой стоимостью.
 
-**Исправление:**
-```python
-def form_valid(self, form):
-    """Создать заказ из корзины."""
-    # Повторная проверка email перед созданием заказа
-    if not self.request.user.is_email_confirmed:
-        messages.error(self.request, "Подтвердите email в личном кабинете перед оформлением заказа.")
-        return redirect(reverse("users:profile_detail", kwargs={"pk": self.request.user.pk}))
-    
-    session_token = self.checkout_session_service.get_or_create_checkout_token(self.request)
-    # ... остальной код
-```
+**Что сделать:**
 
----
+- В `ProductVariantForm` заменить `min="0"` на `min="0.01"`.
+- Добавить валидацию формы: цена должна быть больше нуля.
+- Добавить `CheckConstraint(price__gt=0)` на модель `ProductVariant`.
+- В `CheckoutService.create_order_from_cart()` оставить защитную проверку `variant.price <= 0` перед расчетом `line_total`.
+- Добавить миграцию. Перед применением на боевой базе проверить наличие вариантов с `price=0`.
 
-## Этап 2: Критичные уязвимости безопасности
+**Проверка:**
 
-### 2.1 Ограничение размера загружаемых файлов
-
-**Файл:** `store/forms.py` (строки 57-65)  
-**Проблема:** Отсутствует ограничение размера файла и проверка MIME-type.
-
-**Исправление:**
-```python
-class ProductImageForm(forms.ModelForm):
-    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
-    ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    
-    class Meta:
-        model = ProductImage
-        fields = ["image", "alt_text", "is_primary"]
-        widgets = {
-            "image": forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
-            "alt_text": forms.TextInput(attrs={"class": "form-control", "placeholder": "Краткое описание изображения"}),
-            "is_primary": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-        }
-    
-    def clean_image(self):
-        image = self.cleaned_data.get('image')
-        if not image:
-            return image
-            
-        # Проверка размера
-        if image.size > self.MAX_FILE_SIZE:
-            raise forms.ValidationError(f"Размер файла не должен превышать {self.MAX_FILE_SIZE // (1024*1024)}MB")
-        
-        # Проверка MIME-type
-        if hasattr(image, 'content_type') and image.content_type not in self.ALLOWED_TYPES:
-            raise forms.ValidationError(f"Допустимые форматы: JPEG, PNG, WebP, GIF")
-        
-        return image
-```
+- нельзя создать/обновить вариант с ценой `0`;
+- checkout с нулевой ценой падает с понятной бизнес-ошибкой;
+- обычный checkout не меняет поведение.
 
 ---
 
-## Этап 3: Критичные проблемы деплоя
+## P1: Уточнить бизнес-логику и конкурентность
 
-### 3.1 Усиление настроек nginx
+### 3. Исправить выбор кандидатов для автоотмены самовывоза
 
-**Файл:** `docker/nginx/default.conf`  
-**Проблема:** Отсутствуют защита от slowloris, rate limiting, gzip.
+**Файл:** `orders/services.py`
+**Текущее состояние:** точный расчет дедлайна использует `confirmed_at or created_at`, но предварительный queryset фильтрует только по `created_at__lte`. Это может пропускать или лишне сканировать заказы, если `confirmed_at` отличается от `created_at`.
 
-**Исправление:**
-```nginx
-map $http_x_forwarded_proto $proxy_x_forwarded_proto {
-    default $scheme;
-    https https;
-}
+**Что сделать:**
 
-# Rate limiting zone
-limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+- Не заменять фильтр на простой `confirmed_at__lte`: так сломается fallback для старых заказов.
+- Использовать выражение `Coalesce("confirmed_at", "created_at")` через annotation или эквивалентный `Q`-фильтр.
+- Сохранить финальную проверку `is_pickup_deadline_expired()` перед отменой.
+- Добавить тест, где `created_at` старый, а `confirmed_at` свежий: заказ не должен отмениться.
+- Добавить тест, где `confirmed_at is None`, но `created_at` истек: fallback должен работать.
 
-server {
-    listen 80;
-    server_name _;
+**Проверка:**
 
-    # Защита от медленных атак
-    client_body_timeout 12s;
-    client_header_timeout 12s;
-    send_timeout 10s;
-    
-    # Ограничения размера
-    client_max_body_size 10m;
-    client_header_buffer_size 4k;
-    large_client_header_buffers 4 8k;
-
-    resolver 127.0.0.11 valid=30s ipv6=off;
-    resolver_timeout 5s;
-    set $web_upstream web:8000;
-
-    # Gzip сжатие
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
-
-    location /static/ {
-        alias /var/www/static/;
-        access_log off;
-        expires 7d;
-        add_header Cache-Control "public";
-    }
-
-    location /media/ {
-        alias /var/www/media/;
-        access_log off;
-        expires 1d;
-        add_header Cache-Control "public";
-    }
-
-    # Rate limiting для API endpoints
-    location /orders/checkout {
-        limit_req zone=login burst=3 nodelay;
-        proxy_pass http://$web_upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
-        proxy_redirect off;
-    }
-
-    location / {
-        limit_req zone=api burst=20 nodelay;
-        proxy_pass http://$web_upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
-        proxy_redirect off;
-    }
-}
-```
+- существующие тесты `OrderAutoCancellationServiceTest` проходят;
+- оплаченные заказы по-прежнему не отменяются;
+- старые заказы без `confirmed_at` обрабатываются корректно.
 
 ---
 
-### 3.2 Добавить user для web сервиса
+### 4. Усилить merge session-cart в user-cart от гонок
 
-**Файл:** `docker-compose.yaml` (сервис web)  
-**Проблема:** Сервис web работает без явного указания пользователя.
+**Файл:** `store/application/cart_context.py`
+**Текущее состояние:** merge выполняется в транзакции, но не блокирует корзины и позиции явно. При параллельном login/resolve возможны гонки вокруг `get_or_create_cart_item()` и удаления session-cart.
 
-**Исправление:**
-```yaml
-web:
-  build: .
-  user: "10001:10001"  # <-- добавить эту строку
-  entrypoint: /app/docker/web-entrypoint.sh
-  command: >
-    gunicorn config.asgi:application
-    ...
-```
+**Что сделать:**
 
----
+- Блокировать `user_cart` и `session_cart` через `select_for_update()` в стабильном порядке.
+- Блокировать позиции session-cart перед переносом.
+- Для существующих user-cart items использовать `select_for_update()` перед изменением количества.
+- Обработать `IntegrityError` на уникальном индексе `unique_cart_product_variant`: повторно прочитать строку под lock и пересчитать quantity.
+- Сохранить ограничение по `available_quantity`.
 
-## Этап 4: Средние приоритеты (бизнес-логика)
+**Проверка:**
 
-### 4.1 Race condition в merge корзин
-
-**Файл:** `store/application/cart_context.py` (строки 77-113)  
-**Проблема:** Отсутствует `select_for_update()` при мерже корзин.
-
-**Исправление:**
-```python
-@transaction.atomic
-def merge_session_cart_into_user_cart(self, user_cart: Cart, session_key: str) -> None:
-    try:
-        session_cart = self.cart_repository.get_cart_by_session_key(session_key)
-        if not session_cart:
-            return
-        
-        # Добавить select_for_update для предотвращения race conditions
-        items = list(
-            session_cart.items
-            .select_related("product_variant")
-            .select_for_update(nowait=False)
-            .all()
-        )
-        
-        for item in items:
-            # ... остальной код
-```
+- обычный merge сохраняет текущее поведение;
+- параллельный merge одного session-cart не создает дублей;
+- итоговое quantity не превышает доступный остаток.
 
 ---
 
-### 4.2 Инвалидация токена при ошибке checkout
+### 5. Усилить проверку подтвержденного email на уровне сервиса
 
-**Файл:** `orders/views.py` (строки 120-127)  
-**Проблема:** Токен не инвалидируется при `CheckoutError`.
+**Файлы:** `orders/views.py`, `orders/services.py`, `orders/tests.py`
+**Текущее состояние:** `CheckoutView.dispatch()` не пускает неподтвержденного пользователя к checkout. Это достаточно для обычного web-flow, но сервисный слой все еще доверяет переданному пользователю.
 
-**Исправление:**
-```python
-except CheckoutError as exc:
-    # Инвалидируем токен при ошибке
-    self.request.session.pop("_checkout_token", None)
-    self.request.session.modified = True
-    
-    # Корзина могла измениться в checkout-сервисе
-    self.cart_summary = cart_service.get_cart_summary(self.cart_context)
-    if not self.cart_summary["items"]:
-        messages.warning(self.request, str(exc))
-        return redirect("store:cart")
-    form.add_error(None, str(exc))
-    return self.form_invalid(form)
-```
+**Что сделать:**
+
+- Не ограничиваться повторением проверки в `form_valid()`.
+- В `CheckoutService.create_order_from_cart()` перед созданием заказа проверить актуальное состояние пользователя из базы, желательно внутри транзакции после `select_for_update()` пользователя.
+- Если email не подтвержден, выбрасывать `CheckoutError`.
+- Во view сохранить текущий redirect на профиль.
+
+**Проверка:**
+
+- GET/POST checkout неподтвержденного пользователя редиректят в профиль;
+- прямой вызов `CheckoutService` для неподтвержденного пользователя не создает заказ;
+- подтвержденный пользователь оформляет заказ как раньше.
 
 ---
 
-### 4.3 Валидация цены при создании заказа
+## P2: Эксплуатационные улучшения
 
-**Файл:** `orders/services.py` (строки 313-316)  
-**Проблема:** Нет проверки на отрицательную или нулевую цену.
+### 6. Добавить healthcheck Redis и использовать его в зависимостях
 
-**Исправление:**
-```python
-if variant.price <= 0:
-    raise CheckoutError(
-        f'Некорректная цена для товара "{variant.product.name}". '
-        f"Обратитесь в поддержку."
-    )
-```
+**Файл:** `docker-compose.yaml`
+**Текущее состояние:** `redis` не имеет healthcheck, а `worker`/`beat` зависят от `service_started`.
 
----
+**Что сделать:**
 
-### 4.4 Авто-отмена заказов использует created_at
+- Добавить `healthcheck` для Redis: `redis-cli ping`.
+- Для `worker` и `beat` заменить зависимость от Redis на `condition: service_healthy`.
+- Рассмотреть переход `redis:7` на `redis:7-alpine` только если это совместимо с текущими ожиданиями деплоя.
 
-**Файл:** `orders/services.py` (строки 606-615)  
-**Проблема:** Используется `created_at` вместо `confirmed_at`.
+**Проверка:**
 
-**Предварительно:** Проверить наличие поля `confirmed_at` в модели Order. Если отсутствует — добавить миграцию.
-
-**Исправление:**
-```python
-candidate_orders = list(
-    Order.objects.filter(
-        delivery_method=Order.DeliveryMethod.PICKUP,
-        status__in=self.ELIGIBLE_ORDER_STATUSES,
-        fulfillment_status__in=self.ELIGIBLE_FULFILLMENT_STATUSES,
-        confirmed_at__lte=rough_cutoff,  # <-- изменить с created_at
-    )
-    .exclude(payment_status__in=self.NON_CANCELLABLE_PAYMENT_STATUSES)
-    ...
-)
-```
+- `docker compose config` валиден;
+- `worker` стартует после готовности Redis.
 
 ---
 
-## Этап 5: Средние приоритеты (деплой)
+### 7. Настроить graceful shutdown для Celery worker
 
-### 5.1 Healthcheck для redis
+**Файл:** `docker-compose.yaml`
+**Текущее состояние:** worker запускается от `10001:10001`, но для него явно не задан период остановки.
 
-**Файл:** `docker-compose.yaml` (сервис redis)  
-**Проблема:** Отсутствует healthcheck.
+**Что сделать:**
 
-**Исправление:**
-```yaml
-redis:
-  image: redis:7-alpine
-  healthcheck:
-    test: ["CMD", "redis-cli", "ping"]
-    interval: 5s
-    timeout: 3s
-    retries: 5
-    start_period: 5s
-```
+- Добавить `stop_signal: SIGTERM`.
+- Добавить `stop_grace_period: 30s` или больше, если задачи уведомлений/автоотмены реально выполняются дольше.
+- Не менять команду worker без отдельной причины.
+
+**Проверка:**
+
+- `docker compose config` валиден;
+- при остановке worker получает SIGTERM и успевает завершить активную задачу.
 
 ---
 
-### 5.2 Graceful shutdown для Celery worker
+### 8. Усилить nginx без ломки приложения
 
-**Файл:** `docker-compose.yaml` (сервис worker)  
-**Проблема:** Нет graceful shutdown.
+**Файл:** `docker/nginx/default.conf`
+**Текущее состояние:** есть базовый proxy и `client_max_body_size 10m`, но нет timeouts/gzip/rate-limit на уровне nginx.
 
-**Исправление:**
-```yaml
-worker:
-  build: .
-  user: "10001:10001"
-  stop_signal: SIGTERM
-  stop_grace_period: 30s
-  command: >
-    celery -A config worker
-    --loglevel=${CELERY_LOG_LEVEL:-info}
-    --concurrency=2
-  ...
-```
+**Что сделать:**
 
----
+- Добавить `client_body_timeout`, `client_header_timeout`, `send_timeout`.
+- Добавить gzip для текстовых типов.
+- Добавить rate limit точечно для чувствительных POST endpoints, например checkout/login/register, если маршруты стабильно определены.
+- Не ставить общий aggressive rate limit на весь `/`: это может сломать статику, healthcheck или обычную навигацию.
+- Не rate-limit-ить `/healthz/`.
 
-### 5.3 Логи в volume
+**Проверка:**
 
-**Файл:** `docker-compose.yaml` (сервис web и volumes)  
-**Проблема:** Логи не сохраняются при пересоздании контейнера.
-
-**Исправление:**
-```yaml
-web:
-  build: .
-  user: "10001:10001"
-  volumes:
-    - static_data:/app/staticfiles
-    - media_data:/app/media
-    - logs_data:/app/logs  # <-- добавить
-  ...
-
-# В конце файла добавить:
-volumes:
-  static_data:
-  media_data:
-  logs_data:
-```
+- `nginx -t` проходит внутри контейнера;
+- `/healthz/`, `/static/`, `/media/` доступны;
+- checkout POST не ломается при нормальном использовании.
 
 ---
 
-## Этап 6: Низкие приоритеты
+## P3: Низкий приоритет
 
-### 6.1 Проверка совпадения email в checkout
+### 9. Проверить политику email в checkout
 
-**Файл:** `orders/forms.py` (строки 88-89)  
-**Приоритет:** Низкий
+**Файлы:** `orders/forms.py`, `orders/views.py`
+**Текущее состояние:** форма позволяет указать email, отличный от email аккаунта. Это может быть допустимой бизнес-функцией, если заказ оформляется для другого получателя, но конфликтует с требованием подтвержденного email аккаунта.
 
-**Исправление:**
-```python
-def __init__(self, *args, user=None, **kwargs):
-    super().__init__(*args, **kwargs)
-    self.user = user
+**Что решить:**
 
-def clean_email(self):
-    email = self._normalize_whitespace(self.cleaned_data["email"])
-    if self.user and email != self.user.email:
-        raise forms.ValidationError("Email должен совпадать с email вашего аккаунта")
-    return email
-```
+- Если заказ всегда должен идти на email аккаунта: передавать `user` в `CheckoutForm` и запрещать другой email.
+- Если разрешен другой email получателя: оставить как есть, но явно зафиксировать это в тесте и тексте интерфейса.
+
+**Проверка:**
+
+- выбранная политика покрыта тестом формы или view.
 
 ---
 
-### 6.2 Унификация сообщений об ошибке
+### 10. Зафиксировать версии инфраструктурных образов
 
-**Файл:** `users/views.py` (EmailConfirmationView)  
-**Приоритет:** Низкий
+**Файл:** `docker-compose.yaml`
+**Текущее состояние:** `postgres:16` и `redis:7` используют плавающие minor/patch версии.
 
-**Исправление:** Использовать одно сообщение для всех ошибок токена:
-```python
-messages.error(request, "Недействительная или истекшая ссылка подтверждения.")
-```
+**Что сделать:**
 
----
+- Для production-окружения закрепить patch/minor версии образов после проверки совместимости.
+- Обновлять версии отдельным maintenance PR с проверкой миграций и smoke-тестом.
 
-### 6.3 Фиксация версий образов
+**Проверка:**
 
-**Файл:** `docker-compose.yaml`  
-**Приоритет:** Низкий
-
-**Исправление:**
-```yaml
-# Изменить
-image: postgres:16.4  # вместо postgres:16
-```
+- `docker compose pull`;
+- `docker compose up`;
+- миграции и healthcheck проходят.
 
 ---
 
-## Порядок выполнения
+## Что не делать из старого плана
 
-### Неделя 1 (Критичные)
-```
-□ orders/services.py - синхронизация статуса платежа
-□ orders/views.py - проверка email в form_valid
-□ store/forms.py - ограничение размера файлов
-□ docker/nginx/default.conf - безопасность nginx
-```
+### Не добавлять ручную синхронизацию `order.payment_status` по предложенному сниппету
 
-### Неделя 2 (Деплой + бизнес-логика)
-```
-□ docker-compose.yaml - user, healthchecks, volumes
-□ orders/services.py - авто-отмена с confirmed_at
-□ orders/views.py - инвалидация токена
-```
+Причина: синхронизация уже есть в `payments/application/payment_workflow.py` и `payments/services/payment_status_service.py`. Предложенный сниппет дублирует ответственность и может нарушить текущий lifecycle заказа.
 
-### Неделя 3 (Оптимизации)
-```
-□ store/application/cart_context.py - select_for_update
-□ orders/services.py - валидация цены
-□ orders/forms.py - проверка email
-```
+Допустимое улучшение: отдельно проверить, нужно ли при успешной оплате переводить `Order.status` из `PLACED` в `PAID`. Сейчас dashboard-flow опирается на `payment_status` и `fulfillment_status`, поэтому такое изменение требует отдельного продуктового решения и тестов.
+
+### Не считать `user: "10001:10001"` для web критичным исправлением
+
+Причина: `Dockerfile` уже содержит `USER app`. Добавлять `user` в compose можно как дополнительную страховку, но это не P0/P1.
+
+### Не добавлять `logs_data:/app/logs` без изменения logging config
+
+Причина: приложение пишет в console/stdout, а compose уже настроен на `json-file` rotation. Volume для `/app/logs` ничего не даст, пока не появится file handler.
+
+### Не заменять auto-cancel на `confirmed_at__lte` без fallback
+
+Причина: в модели `confirmed_at` nullable. Старые или импортированные заказы могут не иметь `confirmed_at`, и их надо обрабатывать через `created_at`.
+
+---
+
+## Рекомендуемый порядок выполнения
+
+### Итерация 1
+
+- `store/forms.py`: безопасная валидация изображений.
+- `store/models.py` + миграция: запрет нулевой цены.
+- `orders/services.py`: защитная проверка цены.
+- Тесты для upload и checkout price.
+
+### Итерация 2
+
+- `orders/services.py`: корректный queryset автоотмены через `confirmed_at fallback`.
+- `store/application/cart_context.py`: блокировки и обработка race в merge.
+- Конкурентные/регрессионные тесты.
+
+### Итерация 3
+
+- `orders/services.py`: сервисная проверка подтвержденного email.
+- `docker-compose.yaml`: Redis healthcheck и graceful shutdown worker.
+- `docker/nginx/default.conf`: timeouts/gzip/точечный rate limit.
+
+### Итерация 4
+
+- Принять бизнес-решение по email в checkout.
+- Закрепить версии Docker images для production.
 
 ---
 
 ## Чек-лист приемки
 
-После каждого исправления:
-
-- [ ] Код ревью
-- [ ] Unit тесты проходят
-- [ ] Интеграционные тесты проходят
-- [ ] Ручное тестирование сценария
-- [ ] Документация обновлена (при необходимости)
+- [ ] Добавлены или обновлены тесты под каждое изменение бизнес-логики.
+- [ ] Миграции созданы и проверены на тестовой базе.
+- [ ] `python manage.py test` проходит в окружении с доступным PostgreSQL.
+- [ ] `docker compose config` проходит.
+- [ ] Для nginx выполнен `nginx -t` внутри контейнера.
+- [ ] Smoke-flow: регистрация, подтверждение email, добавление в корзину, checkout, dashboard-оплата, выдача заказа.
 
 ---
 
-## Контакты
+## Замечание по локальной проверке
 
-При вопросах по плану обращаться к автору анализа.
+При последней проверке тесты не стартовали вне docker-сети из-за `DB_HOST=db`: локальный процесс не может разрешить имя `db`. Для запуска тестов нужно либо поднять compose-сервисы и запускать тесты внутри web-контейнера, либо временно указать локальный `DB_HOST`.

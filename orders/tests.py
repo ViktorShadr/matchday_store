@@ -43,7 +43,7 @@ from orders.tasks import (
     send_staff_new_order_notification_sync,
 )
 from payments.models import Payment
-from store.application import CartContextResolver
+from store.application import CartContext, CartContextResolver
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from store.presenters import DashboardOrderPresenter
 from users.models import User
@@ -91,6 +91,22 @@ class CheckoutFormValidationTest(SimpleTestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("phone", form.errors)
+
+    def test_checkout_form_uses_account_email_when_user_is_passed(self):
+        user = type("User", (), {"email": "buyer@example.com"})()
+        form = CheckoutForm(
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "other@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+            user=user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.fields["email"].disabled)
+        self.assertEqual(form.cleaned_data["email"], "buyer@example.com")
 
 
 @override_settings(RATELIMIT_ENABLE=False)
@@ -250,6 +266,49 @@ class CheckoutFlowTest(TestCase):
         self.assertRedirects(response, reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
         self.assertContains(response, "Подтвердите email в личном кабинете перед оформлением заказа.")
 
+    def test_checkout_service_rejects_unconfirmed_email(self):
+        self.user.is_email_confirmed = False
+        self.user.save(update_fields=["is_email_confirmed"])
+        service = CheckoutService()
+        request = self._build_service_request()
+        checkout_context = CheckoutContext(
+            user=self.user,
+            cart_context=self.cart_context_resolver.resolve_request(request),
+        )
+
+        with self.assertRaisesRegex(CheckoutError, "Подтвердите email"):
+            service.create_order_from_cart(
+                checkout_context,
+                cleaned_data={
+                    "recipient_name": "Иван Иванов",
+                    "email": "buyer@example.com",
+                    "phone": "+79990001122",
+                    "customer_comment": "",
+                },
+            )
+
+        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 0)
+        self.assertEqual(self.cart.items.count(), 1)
+
+    def test_checkout_ignores_tampered_email_and_uses_account_email(self):
+        self.client.login(email="buyer@example.com", password="testpass123")
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "other@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user=self.user)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.assertEqual(order.email, self.user.email)
+
     def test_checkout_repeat_submit_with_same_token_redirects_to_existing_order(self):
         """Повторный POST с тем же checkout_token не должен создавать новый заказ."""
         self.client.login(email="buyer@example.com", password="testpass123")
@@ -368,6 +427,73 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(self.variant.quantity, 5)
         self.assertEqual(self.variant.reserved_quantity, 0)
         self.assertEqual(self.cart.items.count(), 1)
+
+    def test_checkout_service_rejects_non_positive_variant_price(self):
+        class FakeCartItems:
+            def __init__(self, items):
+                self.items = items
+
+            def select_related(self, *args):
+                return self
+
+            def select_for_update(self):
+                return self
+
+            def order_by(self, *args):
+                return self.items
+
+        class FakeCart:
+            def __init__(self, items):
+                self.items = FakeCartItems(items)
+
+        class FakeVariantRepository:
+            def __init__(self, variants):
+                self.variants = variants
+
+            def get_variants_for_update(self, variant_ids):
+                return [self.variants[variant_id] for variant_id in variant_ids]
+
+        fake_product = type("FakeProduct", (), {"name": "Тестовый товар", "is_on_sale": True})()
+        fake_variant = type(
+            "FakeVariant",
+            (),
+            {
+                "id": 999,
+                "product": fake_product,
+                "available_quantity": 1,
+                "price": Decimal("0.00"),
+            },
+        )()
+        fake_cart_item = type(
+            "FakeCartItem",
+            (),
+            {
+                "pk": 1,
+                "product_variant_id": fake_variant.id,
+                "quantity": 1,
+            },
+        )()
+        service = CheckoutService(product_variant_repository=FakeVariantRepository({fake_variant.id: fake_variant}))
+        checkout_context = CheckoutContext(
+            user=self.user,
+            cart_context=CartContext(
+                cart=FakeCart([fake_cart_item]),
+                user_id=self.user.id,
+                session_key=None,
+                is_authenticated=True,
+            ),
+        )
+
+        with self.assertRaisesRegex(CheckoutError, "Некорректная цена"):
+            service.create_order_from_cart(
+                checkout_context,
+                {
+                    "recipient_name": "Иван Иванов",
+                    "email": "buyer@example.com",
+                    "phone": "+79990001122",
+                    "customer_comment": "",
+                },
+            )
 
     def test_checkout_fails_when_product_is_not_on_sale(self):
         """Если в корзине только снятый товар, он удаляется и checkout не создается."""
@@ -879,6 +1005,22 @@ class OrderAutoCancellationServiceTest(TestCase):
         self.assertEqual(self.variant.quantity, 3)
         self.assertEqual(self.variant.reserved_quantity, 2)
 
+    def test_does_not_cancel_when_created_at_expired_but_confirmed_at_is_fresh(self):
+        friday = self._local_datetime(2026, 5, 1, 10, 0)
+        monday = self._local_datetime(2026, 5, 4, 10, 0)
+        wednesday = self._local_datetime(2026, 5, 6, 10, 1)
+        order = self._create_order_with_item(placed_at=friday)
+        Order.objects.filter(pk=order.pk).update(created_at=friday, confirmed_at=monday)
+
+        result = self.service.cancel_expired_pickup_orders(now=wednesday)
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(result["scanned"], 0)
+        self.assertEqual(result["cancelled"], 0)
+        self.assertEqual(order.status, Order.Status.PLACED)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
     def test_cancels_after_three_business_days_pass(self):
         friday = self._local_datetime(2026, 5, 1, 10, 0)
         wednesday = self._local_datetime(2026, 5, 6, 10, 1)
@@ -893,6 +1035,20 @@ class OrderAutoCancellationServiceTest(TestCase):
         self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
         self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+    def test_auto_cancel_falls_back_to_created_at_when_confirmed_at_is_missing(self):
+        friday = self._local_datetime(2026, 5, 1, 10, 0)
+        wednesday = self._local_datetime(2026, 5, 6, 10, 1)
+        order = self._create_order_with_item(placed_at=friday)
+        Order.objects.filter(pk=order.pk).update(confirmed_at=None)
+
+        result = self.service.cancel_expired_pickup_orders(now=wednesday)
+
+        order.refresh_from_db()
+        self.variant.refresh_from_db()
+        self.assertEqual(result["cancelled"], 1)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
         self.assertEqual(self.variant.reserved_quantity, 0)
 
     def test_does_not_cancel_paid_order(self):

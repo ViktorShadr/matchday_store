@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.conf import settings
@@ -109,7 +111,7 @@ class ProductVariant(models.Model):
     price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(0)],
+        validators=[MinValueValidator(Decimal("0.01"))],
     )
     quantity = models.PositiveIntegerField(default=0)
     reserved_quantity = models.PositiveIntegerField(default=0)
@@ -145,6 +147,10 @@ class ProductVariant(models.Model):
             models.CheckConstraint(
                 condition=models.Q(reserved_quantity__lte=models.F("quantity")),
                 name="product_variant_reserved_lte_quantity",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(price__gt=0),
+                name="product_variant_price_gt_zero",
             ),
         ]
 
