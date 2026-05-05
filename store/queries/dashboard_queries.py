@@ -89,7 +89,9 @@ class DashboardOrderQueryService:
         if status_filter == "new":
             return queryset.filter(fulfillment_status=Order.FulfillmentStatus.NEW)
         if status_filter == "processing":
-            return queryset.filter(fulfillment_status__in=(Order.FulfillmentStatus.PACKING, Order.FulfillmentStatus.SHIPPED))
+            return queryset.filter(
+                fulfillment_status__in=(Order.FulfillmentStatus.PACKING, Order.FulfillmentStatus.SHIPPED)
+            )
         if status_filter == "ready":
             return queryset.filter(fulfillment_status=Order.FulfillmentStatus.RESERVED)
         if status_filter == "issued":

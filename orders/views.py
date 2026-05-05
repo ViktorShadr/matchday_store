@@ -1,5 +1,5 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -13,13 +13,11 @@ from orders.forms import CheckoutForm
 from orders.models import Order
 from orders.services import CheckoutError, CheckoutService
 from store.application import CartContextResolver
-
-# Глобальный экземпляр для обратной совместимости
-checkout_service = CheckoutService()
 from store.mixins.cart_mixins import CartContextMixin
 from store.services.cart_service import CartService
 
 # Глобальный экземпляр для обратной совместимости
+checkout_service = CheckoutService()
 cart_service = CartService()
 cart_context_resolver = CartContextResolver()
 

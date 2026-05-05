@@ -1,52 +1,52 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
-from store.views.views_product import (
-    MainView,
-    ProductListView,
-    ProductDetailsView,
-    ProductUpdateView,
-    ProductDeleteView,
-    ProductCreateView,
-)
-from store.views.views_category import (
-    CategoryListView,
-    CategoryDetailView,
-    CategoryCreateView,
-    CategoryUpdateView,
-    CategoryDeleteView,
-)
-from store.views.views_cart import AddToCartView, UpdateCartView, RemoveFromCartView
+from store.views.views_cart import AddToCartView, RemoveFromCartView, UpdateCartView
 from store.views.views_cart_page import CartView
-from store.views.views_legal import (
-    PrivacyPolicyView,
-    TermsOfServiceView,
-    ReturnPolicyView,
-    OfferView,
-    Error404View,
-    Error500View,
+from store.views.views_category import (
+    CategoryCreateView,
+    CategoryDeleteView,
+    CategoryDetailView,
+    CategoryListView,
+    CategoryUpdateView,
 )
 from store.views.views_dashboard import (
     DashboardHomeView,
-    WarehouseDashboardView,
-    OrdersDashboardView,
     DashboardOrderDetailView,
-    DashboardOrderStatusUpdateView,
     DashboardOrderPaymentStatusUpdateView,
+    DashboardOrderStatusUpdateView,
+    OrdersDashboardView,
+    WarehouseCategoryCreateView,
+    WarehouseCategoryDeleteView,
+    WarehouseCategoryUpdateView,
+    WarehouseDashboardView,
+    WarehouseImageCreateView,
+    WarehouseImageDeleteView,
     WarehouseProductCreateView,
     WarehouseProductDeleteView,
-    WarehouseCategoryCreateView,
-    WarehouseCategoryUpdateView,
-    WarehouseCategoryDeleteView,
     WarehouseProductManageView,
     WarehouseProductPublishView,
     WarehouseProductUnpublishView,
     WarehouseVariantCreateView,
-    WarehouseVariantUpdateView,
     WarehouseVariantDeleteView,
     WarehouseVariantStockUpdateView,
-    WarehouseImageCreateView,
-    WarehouseImageDeleteView,
+    WarehouseVariantUpdateView,
+)
+from store.views.views_legal import (
+    Error404View,
+    Error500View,
+    OfferView,
+    PrivacyPolicyView,
+    ReturnPolicyView,
+    TermsOfServiceView,
+)
+from store.views.views_product import (
+    MainView,
+    ProductCreateView,
+    ProductDeleteView,
+    ProductDetailsView,
+    ProductListView,
+    ProductUpdateView,
 )
 
 app_name = "store"

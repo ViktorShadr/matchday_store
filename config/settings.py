@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from csp.constants import NONE, NONCE, SELF
+from csp.constants import NONCE, NONE, SELF
 from dotenv import load_dotenv
 
 from config.logging_utils import build_logging_config

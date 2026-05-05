@@ -1,8 +1,6 @@
-from decimal import Decimal
 from urllib.parse import urlencode
 
 from django.contrib import messages
-from django.db.models import Count, Q
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -12,12 +10,11 @@ from django.views.generic import CreateView, DeleteView, DetailView, RedirectVie
 from orders.application import DashboardOrderFlowError, DashboardOrderFlowService
 from orders.models import Order
 from store.application import WarehouseCrudService
-from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm, VariantStockForm
+from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm
 from store.mixins import ModeratorRequiredMixin
 from store.models import Category, Product, ProductImage, ProductVariant
 from store.presenters import DashboardOrderPresenter, WarehouseProductPresenter, WarehouseUiPresenter
 from store.queries import DashboardOrderQueryService, WarehouseManagementQueryService, WarehouseQueryService
-
 
 DASHBOARD_ORDER_STATUS_CHOICES = DashboardOrderPresenter.STATUS_CHOICES
 DASHBOARD_ORDER_FILTERS = DashboardOrderPresenter.STATUS_FILTERS
@@ -57,7 +54,9 @@ class WarehouseDashboardView(ModeratorRequiredMixin, TemplateView):
         search_query = self.request.GET.get("q", "").strip()
         selected_category = self.request.GET.get("category", "").strip()
         selected_stock_filter = self.request.GET.get("stock", "").strip()
-        selected_sort = WarehouseQueryService.normalize_sort(self.request.GET.get("sort", "updated_desc").strip() or "updated_desc")
+        selected_sort = WarehouseQueryService.normalize_sort(
+            self.request.GET.get("sort", "updated_desc").strip() or "updated_desc"
+        )
         products_queryset = WarehouseQueryService.build_products_queryset(
             search_query=search_query,
             selected_category=selected_category,

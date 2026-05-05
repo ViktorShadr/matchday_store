@@ -7,7 +7,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from users.models import User
-from users.tasks import send_confirmation_email, send_confirmation_email_sync
 
 logger = logging.getLogger(__name__)
 

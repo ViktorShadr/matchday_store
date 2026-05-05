@@ -1,4 +1,5 @@
 import secrets
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
@@ -75,16 +76,16 @@ class User(AbstractUser):
 
     username = None
     email = models.EmailField(unique=True)
-    first_name = models.CharField("Имя",max_length=150, blank=True)
-    last_name = models.CharField("Фамилия",max_length=150, blank=True)
-    phone = models.CharField("Телефон",max_length=15, blank=True, null=True)
-    city = models.CharField("Город",max_length=100, blank=True, null=True)
-    avatar = models.ImageField("Аватар",upload_to="avatars", blank=True, null=True)
-    is_active = models.BooleanField("Активен",default=False)
-    is_staff = models.BooleanField("Сотрудник",default=False)
-    is_superuser = models.BooleanField("Суперпользователь",default=False)
-    is_email_confirmed = models.BooleanField("Подтвержден email",default=False)
-    email_token = models.CharField("Токен подтверждения email",max_length=64, blank=True, null=True)
+    first_name = models.CharField("Имя", max_length=150, blank=True)
+    last_name = models.CharField("Фамилия", max_length=150, blank=True)
+    phone = models.CharField("Телефон", max_length=15, blank=True, null=True)
+    city = models.CharField("Город", max_length=100, blank=True, null=True)
+    avatar = models.ImageField("Аватар", upload_to="avatars", blank=True, null=True)
+    is_active = models.BooleanField("Активен", default=False)
+    is_staff = models.BooleanField("Сотрудник", default=False)
+    is_superuser = models.BooleanField("Суперпользователь", default=False)
+    is_email_confirmed = models.BooleanField("Подтвержден email", default=False)
+    email_token = models.CharField("Токен подтверждения email", max_length=64, blank=True, null=True)
     email_token_created_at = models.DateTimeField(blank=True, null=True)
     confirmation_email_last_sent_at = models.DateTimeField(blank=True, null=True)
 

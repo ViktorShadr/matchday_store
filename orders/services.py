@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
-from uuid import uuid4
 from typing import Optional
+from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -13,13 +13,11 @@ from django.utils import timezone
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
 from orders.models import Order, OrderItem, OrderStatusTransition
+from orders.repositories import IOrderRepository, IPaymentRepository, OrderRepository, PaymentRepository
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
-from store.repositories import IProductVariantRepository
-from store.repositories import ProductVariantRepository
-from orders.repositories import IOrderRepository, IPaymentRepository
-from orders.repositories import OrderRepository, PaymentRepository
 from store.models import ProductVariant
+from store.repositories import IProductVariantRepository, ProductVariantRepository
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
 

@@ -2,20 +2,20 @@ from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from io import BytesIO
 
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import close_old_connections
 from django.test import Client, TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.urls import reverse
-from django.contrib.auth.models import Group
 from PIL import Image
 
 from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.models import Payment
 from store.application import CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
-from store.models import Cart, CartItem, Category, Product, ProductVariant, ProductImage
+from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from users.models import User
 
 

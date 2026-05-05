@@ -1,16 +1,16 @@
 import logging
 from typing import Optional
+
 from django.db import transaction
 
-from ..models import ProductVariant
-from ..repositories import ICartRepository, IProductVariantRepository
-from ..repositories import CartRepository, ProductVariantRepository
 from ..application.cart_context import CartContext
+from ..models import ProductVariant
+from ..repositories import CartRepository, ICartRepository, IProductVariantRepository, ProductVariantRepository
 from .cart_exceptions import (
-    InsufficientStockError,
-    ProductVariantNotFoundError,
-    ProductNotOnSaleError,
     CartOperationError,
+    InsufficientStockError,
+    ProductNotOnSaleError,
+    ProductVariantNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,9 @@ class CartService:
             # Получаем вариант товара с блокировкой
             product_variant = self.product_variant_repository.get_variant_for_update(product_variant_id)
 
-            logger.info("User %s updating variant %s qty to %s", cart_context.actor_label, product_variant_id, quantity)
+            logger.info(
+                "User %s updating variant %s qty to %s", cart_context.actor_label, product_variant_id, quantity
+            )
 
             if not product_variant.product.is_on_sale:
                 raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
@@ -242,10 +244,11 @@ class CartService:
             list: Список словарей с информацией о товарах
         """
         items = []
-        for item in cart.items.select_related(
-            'product_variant',
-            'product_variant__product'
-        ).prefetch_related('product_variant__product__images').all():
+        for item in (
+            cart.items.select_related("product_variant", "product_variant__product")
+            .prefetch_related("product_variant__product__images")
+            .all()
+        ):
             variant = item.product_variant
             product = variant.product
             available_quantity = variant.available_quantity
@@ -272,22 +275,44 @@ class CartService:
             if first_image:
                 image_url = first_image.image.url if first_image.image else None
 
-            items.append({
-                'variant_id': variant.id,
-                'product_id': product.id if is_available else None,
-                'product_name': product.name,
-                'size': size or None,
-                'color': color or None,
-                'variant_label': variant_label,
-                'quantity': item.quantity,
-                'price': variant.price,
-                'total_price': item.total_price,
-                'total_price_formatted': f"{item.total_price:,}".replace(",", " "),
-                'image': image_url,
-                'max_quantity': available_quantity if is_available else 0,
-                'is_available': is_available,
-                'is_on_sale': product.is_on_sale,
-                'in_stock': in_stock,
-                'availability_message': availability_message,
-            })
+            items.append(
+                {
+                    "variant_id": variant.id,
+                    "product_id": product.id if is_available else None,
+                    "product_name": product.name,
+                    "size": size or None,
+                    "color": color or None,
+                    "variant_label": variant_label,
+                    "quantity": item.quantity,
+                    "price": variant.price,
+                    "total_price": item.total_price,
+                    "total_price_formatted": f"{item.total_price:,}".replace(",", " "),
+                    "image": image_url,
+                    "max_quantity": variant.quantity if is_available else 0,
+                    "is_available": is_available,
+                    "is_on_sale": product.is_on_sale,
+                    "in_stock": in_stock,
+                    "availability_message": "" if is_available else "Данный товар закончился",
+                }
+            )
+            items.append(
+                {
+                    "variant_id": variant.id,
+                    "product_id": product.id if is_available else None,
+                    "product_name": product.name,
+                    "size": size or None,
+                    "color": color or None,
+                    "variant_label": variant_label,
+                    "quantity": item.quantity,
+                    "price": variant.price,
+                    "total_price": item.total_price,
+                    "total_price_formatted": f"{item.total_price:,}".replace(",", " "),
+                    "image": image_url,
+                    "max_quantity": available_quantity if is_available else 0,
+                    "is_available": is_available,
+                    "is_on_sale": product.is_on_sale,
+                    "in_stock": in_stock,
+                    "availability_message": availability_message,
+                }
+            )
         return items
