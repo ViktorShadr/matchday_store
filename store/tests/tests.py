@@ -16,6 +16,7 @@ from payments.models import Payment
 from store.application import CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
+from store.services.cart_service import CartService
 from users.models import User
 
 
@@ -1232,6 +1233,32 @@ class CartPageRenderingTest(TestCase):
             response,
             reverse("store:product_detail", kwargs={"pk": self.product.pk}),
         )
+
+
+class CartServiceItemsDetailsTest(TestCase):
+    """Регрессия: позиции корзины не должны дублироваться в сервисе."""
+
+    def setUp(self):
+        self.category = Category.objects.create(name="Форма")
+        self.product = Product.objects.create(name="Домашняя футболка", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Синий",
+            price=Decimal("3499.00"),
+            quantity=7,
+        )
+        self.cart = Cart.objects.create(session_key="details-session")
+        CartItem.objects.create(cart=self.cart, product_variant=self.variant, quantity=2)
+        self.cart_service = CartService()
+
+    def test_get_cart_items_with_details_returns_single_row_per_cart_item(self):
+        items = self.cart_service.get_cart_items_with_details(self.cart)
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["variant_id"], self.variant.id)
+        self.assertEqual(items[0]["max_quantity"], self.variant.available_quantity)
+        self.assertEqual(items[0]["availability_message"], "")
 
 
 class LegalPagesCartCounterTest(TestCase):

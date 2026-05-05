@@ -288,26 +288,6 @@ class CartService:
                     "total_price": item.total_price,
                     "total_price_formatted": f"{item.total_price:,}".replace(",", " "),
                     "image": image_url,
-                    "max_quantity": variant.quantity if is_available else 0,
-                    "is_available": is_available,
-                    "is_on_sale": product.is_on_sale,
-                    "in_stock": in_stock,
-                    "availability_message": "" if is_available else "Данный товар закончился",
-                }
-            )
-            items.append(
-                {
-                    "variant_id": variant.id,
-                    "product_id": product.id if is_available else None,
-                    "product_name": product.name,
-                    "size": size or None,
-                    "color": color or None,
-                    "variant_label": variant_label,
-                    "quantity": item.quantity,
-                    "price": variant.price,
-                    "total_price": item.total_price,
-                    "total_price_formatted": f"{item.total_price:,}".replace(",", " "),
-                    "image": image_url,
                     "max_quantity": available_quantity if is_available else 0,
                     "is_available": is_available,
                     "is_on_sale": product.is_on_sale,
