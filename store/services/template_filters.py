@@ -3,7 +3,7 @@
 Содержит функции для обогащения объектов необходимыми для отображения атрибутами.
 """
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from store.presenters import CartItemPresenter, CategoryPresenter, PermissionPresenter, ProductDetailsPresenter
 
@@ -67,6 +67,7 @@ class CategoryService:
             Dict[str, Any]: Словарь с обогащёнными данными
         """
         return CategoryPresenter.present(category, user=user)
+
 
 class ProductDisplayService:
     """Сервис для подготовки данных товаров к отображению в шаблонах"""

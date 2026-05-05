@@ -16,21 +16,16 @@ from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 from django_ratelimit.decorators import ratelimit
 
-from orders.models import Order
-from orders.services import OrderCancellationService, OrderCancellationError
-from orders.application.checkout_session_service import CheckoutSessionService
 from config.rate_limits import setting_rate
-from store.presenters import DashboardOrderPresenter
-from users.forms import (
-    UserLoginForm,
-    UserProfileForm,
-    UserRegistrationForm,
-    ProfileDeleteConfirmForm,
-)
-from users.models import User
+from orders.application.checkout_session_service import CheckoutSessionService
+from orders.models import Order
+from orders.services import OrderCancellationError, OrderCancellationService
 from store.mixins.cart_mixins import CartContextMixin
+from store.presenters import DashboardOrderPresenter
 from users.application import EmailConfirmationService
-from users.tasks import send_confirmation_email, send_confirmation_email_sync, send_welcome_email
+from users.forms import ProfileDeleteConfirmForm, UserLoginForm, UserProfileForm, UserRegistrationForm
+from users.models import User
+from users.tasks import send_confirmation_email, send_confirmation_email_sync, send_welcome_email  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +200,7 @@ class CustomRegistrationView(CartContextMixin, CreateView):
         if send_result["success"]:
             messages.success(
                 self.request,
-                "Регистрация успешна! Подтвердите email по ссылке из письма, чтобы оформить первый заказ."
+                "Регистрация успешна! Подтвердите email по ссылке из письма, чтобы оформить первый заказ.",
             )
         else:
             messages.warning(
@@ -488,6 +483,7 @@ class UserOrderCancelView(LoginRequiredMixin, View):
         else:
             messages.success(request, "Заказ успешно отменен.")
         return redirect("users:order_list")
+
 
 class UserOrderDetailView(LoginRequiredMixin, CartContextMixin, DetailView):
     """Детальная страница заказа текущего пользователя."""

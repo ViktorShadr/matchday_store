@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import List, Optional
+
 from django.db.models import QuerySet
 
 from store.models import Cart, CartItem, ProductVariant

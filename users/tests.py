@@ -1,18 +1,18 @@
 from datetime import timedelta
-from unittest.mock import patch, ANY
+from unittest.mock import ANY, patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.deletion import ProtectedError
-from django.test import TestCase, Client, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from orders.models import Order, OrderItem
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
 from users.application import EmailConfirmationService
-from users.forms import AVATAR_MAX_SIZE_BYTES, UserRegistrationForm, UserProfileForm, ProfileDeleteConfirmForm
+from users.forms import AVATAR_MAX_SIZE_BYTES, ProfileDeleteConfirmForm, UserProfileForm, UserRegistrationForm
 
 User = get_user_model()
 
@@ -411,7 +411,11 @@ class UserViewsTest(TestCase):
     @patch("users.views.send_confirmation_email")
     def test_registration_view_rate_limited(self, mock_confirmation_email):
         cache.clear()
-        form_data = {"email": "new-rate-limit@example.com", "password1": "complexpass123", "password2": "complexpass123"}
+        form_data = {
+            "email": "new-rate-limit@example.com",
+            "password1": "complexpass123",
+            "password2": "complexpass123",
+        }
 
         with self.captureOnCommitCallbacks(execute=True):
             first_response = self.client.post(reverse("users:registration"), data=form_data)
@@ -787,7 +791,9 @@ class UserViewsTest(TestCase):
 
     def test_user_cannot_cancel_another_users_order(self):
         """Пользователь не может отменить чужой заказ."""
-        other_user = User.objects.create_user(email="other-cancel@example.com", password="otherpass123", is_active=True)
+        other_user = User.objects.create_user(
+            email="other-cancel@example.com", password="otherpass123", is_active=True
+        )
         order = Order.objects.create(
             number="ORD-CANCEL-UI-2",
             user=other_user,
@@ -894,7 +900,7 @@ class UserFormTest(TestCase):
 
     def setUp(self):
         """Подготавливает тестовые данные перед выполнением тестов."""
-        from users.forms import UserRegistrationForm, UserLoginForm, UserProfileForm, ProfileDeleteConfirmForm
+        from users.forms import ProfileDeleteConfirmForm, UserLoginForm, UserProfileForm, UserRegistrationForm
 
         self.UserRegistrationForm = UserRegistrationForm
         self.UserLoginForm = UserLoginForm

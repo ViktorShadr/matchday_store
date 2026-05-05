@@ -1,11 +1,11 @@
 from django.urls import reverse_lazy
-from django.views.generic import DeleteView, DetailView, ListView, TemplateView, UpdateView, CreateView
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
 
 from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, ModeratorRequiredMixin
 from store.mixins.cart_mixins import CartContextMixin
-from store.models import Product, InfoCard
-from store.services import enrich_product, enrich_products, ProductDisplayService, PermissionService
+from store.models import Category, InfoCard, Product
 from store.queries import CatalogQueryService
+from store.services import PermissionService, ProductDisplayService, enrich_product, enrich_products
 
 
 class MainView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetMixin, TemplateView):
@@ -71,12 +71,10 @@ class ProductListView(CategoriesContextMixin, CartContextMixin, CatalogQuerysetM
         category_id = self.request.GET.get("category_id")
         if category_id:
             try:
-                from store.models import Category
-
                 category = Category.objects.get(id=category_id)
                 context["selected_category"] = category
                 breadcrumbs.append({"title": category.name, "url": None})
-            except:
+            except Category.DoesNotExist:
                 breadcrumbs.append({"title": "Каталог", "url": None})
         else:
             breadcrumbs.append({"title": "Каталог", "url": None})
@@ -117,10 +115,12 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
             {"title": "Каталог", "url": reverse_lazy("store:product_list")},
         ]
         if product.category:
-            breadcrumbs.append({
-                "title": product.category.name,
-                "url": reverse_lazy("store:product_list") + f"?category_id={product.category.id}"
-            })
+            breadcrumbs.append(
+                {
+                    "title": product.category.name,
+                    "url": reverse_lazy("store:product_list") + f"?category_id={product.category.id}",
+                }
+            )
         breadcrumbs.append({"title": product.name, "url": None})
         context["breadcrumbs"] = breadcrumbs
 

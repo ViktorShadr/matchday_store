@@ -1,6 +1,6 @@
 from decimal import Decimal
-from uuid import uuid4
 from typing import Optional
+from uuid import uuid4
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -9,12 +9,10 @@ from django.utils import timezone
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
 from orders.models import Order, OrderItem, OrderStatusTransition
+from orders.repositories import IOrderRepository, IPaymentRepository, OrderRepository, PaymentRepository
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
-from store.repositories import IProductVariantRepository
-from store.repositories import ProductVariantRepository
-from orders.repositories import IOrderRepository, IPaymentRepository
-from orders.repositories import OrderRepository, PaymentRepository
+from store.repositories import IProductVariantRepository, ProductVariantRepository
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
 
@@ -34,7 +32,7 @@ class ManualPaymentUpdateError(Exception):
 class CheckoutService(ICheckoutService):
     """
     Сервис оформления заказа из корзины.
-    
+
     Реализует DIP через dependency injection репозиториев.
     """
 
@@ -125,7 +123,9 @@ class CheckoutService(ICheckoutService):
                     if checkout_token:
                         # Повторно проверяем idempotency после захвата блокировок:
                         # в параллельном submit первый запрос мог уже создать заказ и очистить корзину.
-                        existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
+                        existing_payment = self._find_existing_checkout_payment(
+                            checkout_token, checkout_context.user_id
+                        )
                         if existing_payment:
                             return existing_payment.order
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
@@ -179,10 +179,7 @@ class CheckoutService(ICheckoutService):
                     cart.items.filter(pk__in=skipped_cart_item_ids).delete()
 
                 if not order_items:
-                    unavailable_only_error = (
-                        "В корзине не осталось доступных товаров. "
-                        "Недоступные позиции удалены."
-                    )
+                    unavailable_only_error = "В корзине не осталось доступных товаров. " "Недоступные позиции удалены."
                 else:
                     order = self.order_repository.create_order(
                         number=self.build_order_number(),
@@ -275,9 +272,7 @@ class OrderCancellationService:
     @classmethod
     def _ensure_order_can_be_cancelled(cls, order: Order) -> None:
         if order.status not in cls.CANCELLABLE_ORDER_STATUSES:
-            raise OrderCancellationError(
-                f'Заказ в статусе "{order.get_status_display()}" нельзя отменить.'
-            )
+            raise OrderCancellationError(f'Заказ в статусе "{order.get_status_display()}" нельзя отменить.')
 
         if order.fulfillment_status not in cls.CANCELLABLE_FULFILLMENT_STATUSES:
             raise OrderCancellationError(

@@ -1,17 +1,24 @@
-from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from threading import Event
 from time import sleep
+from unittest.mock import patch
 
 from django.conf import settings
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.cache import cache
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections
-from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings, skipUnlessDBFeature
+from django.test import (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+    skipUnlessDBFeature,
+)
 from django.urls import reverse
 from django.utils import timezone
-from unittest.mock import patch
 
 from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService
 from orders.forms import CheckoutForm
@@ -589,8 +596,7 @@ class OrderCancellationServiceTest(TestCase):
         self.service.cancel_order(order_id=order.id, user_id=self.user.id, actor=self.user)
 
         transitions = {
-            transition.transition_type: transition
-            for transition in OrderStatusTransition.objects.filter(order=order)
+            transition.transition_type: transition for transition in OrderStatusTransition.objects.filter(order=order)
         }
         self.assertIn(OrderStatusTransition.TransitionType.ORDER_STATUS, transitions)
         self.assertIn(OrderStatusTransition.TransitionType.FULFILLMENT_STATUS, transitions)

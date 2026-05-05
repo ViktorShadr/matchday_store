@@ -3,8 +3,8 @@ from dataclasses import dataclass
 
 from django.db import transaction
 
-from orders.models import Order, OrderStatusTransition
 from orders.application.order_notification_service import OrderNotificationService
+from orders.models import Order, OrderStatusTransition
 from orders.services import (
     ManualPaymentUpdateError,
     ManualPaymentUpdateService,

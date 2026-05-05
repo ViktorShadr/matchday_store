@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('users', '0006_user_confirmation_email_last_sent_at'),
+        ("users", "0006_user_confirmation_email_last_sent_at"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='email_token_created_at',
+            model_name="user",
+            name="email_token_created_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
     ]

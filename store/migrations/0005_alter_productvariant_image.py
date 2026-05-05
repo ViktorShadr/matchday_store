@@ -7,13 +7,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('store', '0004_cart_session_key_alter_cart_user_and_more'),
+        ("store", "0004_cart_session_key_alter_cart_user_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='productvariant',
-            name='image',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='images', to='store.productimage'),
+            model_name="productvariant",
+            name="image",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.PROTECT, related_name="images", to="store.productimage"
+            ),
         ),
     ]

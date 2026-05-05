@@ -1,5 +1,5 @@
-from payments.models import Payment
 from orders.repositories.interfaces import IPaymentRepository
+from payments.models import Payment
 
 
 class PaymentRepository(IPaymentRepository):

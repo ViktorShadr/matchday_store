@@ -21,7 +21,8 @@
 ## 2. Deploy (Docker Compose)
 
 1. Подготовить `.env` на базе `.env.prod`.
-2. Собрать и запустить:
+2. Дождаться успешного CI на целевом коммите.
+3. Собрать и запустить:
 
 ```bash
 docker compose up -d --build
@@ -33,18 +34,28 @@ docker compose up -d --build
 docker compose run --rm --user 0:0 web sh -c "chown -R 10001:10001 /app/staticfiles /app/media"
 ```
 
-3. При необходимости поднять worker:
+4. При необходимости поднять worker:
 
 ```bash
 docker compose --profile worker up -d --build
 ```
 
-4. Проверить состояние сервисов и healthchecks:
+5. Проверить состояние сервисов и healthchecks:
 
 ```bash
 docker compose ps
 curl -fsS http://127.0.0.1:8000/healthz/
 ```
+
+## 2.1. CD Image Publishing
+
+Workflow `.github/workflows/cd.yml` публикует production-образ в GitHub Container Registry:
+
+- `ghcr.io/<owner>/<repo>:<branch>`
+- `ghcr.io/<owner>/<repo>:<tag>` для `v*.*.*`
+- `ghcr.io/<owner>/<repo>:sha-<short_sha>`
+
+Для pull на сервере нужен доступ к GHCR и версия образа, которую планируется выкатывать. Сам деплой на конкретный хост намеренно оставлен в runbook: способ зависит от инфраструктуры сервера, TLS/reverse proxy и политики хранения `.env`.
 
 ## 3. Smoke test (обязательно после релиза)
 

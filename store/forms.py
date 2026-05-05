@@ -51,7 +51,9 @@ class ProductImageForm(forms.ModelForm):
         fields = ["image", "alt_text", "is_primary"]
         widgets = {
             "image": forms.ClearableFileInput(attrs={"class": "form-control"}),
-            "alt_text": forms.TextInput(attrs={"class": "form-control", "placeholder": "Краткое описание изображения"}),
+            "alt_text": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Краткое описание изображения"}
+            ),
             "is_primary": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 

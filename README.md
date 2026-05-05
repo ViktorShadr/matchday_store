@@ -36,6 +36,32 @@ docker compose --profile worker up --build
 
 Это дополнительно поднимет `worker` (redis уже запущен как shared cache/queue backend).
 
+## CI/CD
+
+GitHub Actions:
+
+- CI: `.github/workflows/ci.yml`
+  - Poetry metadata/lock check
+  - Black, isort, flake8
+  - проверка миграций
+  - `manage.py check`
+  - Django tests на PostgreSQL 16 и Redis 7
+  - Docker image build
+- CD: `.github/workflows/cd.yml`
+  - сборка и публикация Docker-образа в GitHub Container Registry (`ghcr.io`) на `main`, `master`, `v*.*.*` tags и ручной запуск
+
+Локальная проверка перед push:
+
+```bash
+poetry check --lock
+find config store users orders payments delivery -name '*.py' -exec .venv/bin/black --check --target-version py312 {} \;
+.venv/bin/black --check --target-version py312 manage.py
+poetry run isort --check-only config store users orders payments delivery manage.py
+poetry run flake8 config store users orders payments delivery manage.py --exclude=.git,.venv,__pycache__,staticfiles,media,*/migrations/* --max-line-length=119 --extend-ignore=E203,W503
+poetry run python manage.py makemigrations --check --dry-run
+poetry run python manage.py check
+```
+
 ## Стек runtime
 
 - `nginx` принимает HTTP на `localhost:8000`

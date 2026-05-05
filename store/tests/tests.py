@@ -1,14 +1,15 @@
 from decimal import Decimal
-from django.test import TestCase, Client
-from django.urls import reverse
-from users.models import User
-from django.core.management import call_command
-from django.core.files.uploadedfile import SimpleUploadedFile
+
 from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.test import Client, TestCase
+from django.urls import reverse
 
 from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.models import Payment
-from store.models import Cart, CartItem, Category, Product, ProductVariant, ProductImage
+from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
+from users.models import User
 
 
 class CategoryModelTest(TestCase):
@@ -281,10 +282,15 @@ class ProductListViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         products = list(response.context["products"])
-        lower_priced_index = next(index for index, product in enumerate(products) if product.pk == lower_priced_product.pk)
+        lower_priced_index = next(
+            index for index, product in enumerate(products) if product.pk == lower_priced_product.pk
+        )
         conflicted_index = next(index for index, product in enumerate(products) if product.pk == conflicted_product.pk)
         self.assertLess(lower_priced_index, conflicted_index)
-        self.assertEqual(next(product.display_price for product in products if product.pk == conflicted_product.pk), Decimal("1005.00"))
+        self.assertEqual(
+            next(product.display_price for product in products if product.pk == conflicted_product.pk),
+            Decimal("1005.00"),
+        )
 
     def test_product_list_sort_by_name_asc(self):
         """Список должен сортироваться по названию А-Я."""

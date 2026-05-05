@@ -2,7 +2,6 @@ import re
 
 from django import forms
 
-
 PHONE_ALLOWED_CHARS_RE = re.compile(r"^[\d\s()+-]+$")
 
 

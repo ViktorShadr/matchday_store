@@ -1,6 +1,6 @@
 import os
-from celery import Celery
-from celery import signals
+
+from celery import Celery, signals
 
 from config.logging_context import get_request_id, reset_request_id, set_request_id
 
