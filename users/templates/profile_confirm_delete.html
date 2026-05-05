@@ -1,0 +1,115 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+
+{% block title %}Удаление пользователя — ФК «Шинник»{% endblock %}
+
+{% block content %}
+<section class="sf-admin-page">
+    <div class="container">
+        <div class="sf-admin-hero">
+            <div>
+                <div class="sf-home-eyebrow">Управление пользователями</div>
+                <h1 class="sf-admin-title">Удаление пользователя</h1>
+                <p class="sf-admin-lead">
+                    Подтверди удаление аккаунта пользователя. Это действие должно быть понятным, аккуратным и без визуального хаоса.
+                </p>
+            </div>
+
+            <div class="sf-admin-hero-actions">
+                <a href="{% url 'users:profile_list' %}" class="btn btn-secondary">
+                    К списку пользователей
+                </a>
+                {% if object %}
+                    <a href="{% url 'users:profile_detail' pk=object.pk %}" class="btn btn-secondary">
+                        Открыть профиль
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="sf-delete-layout">
+            <div class="sf-delete-card">
+                <div class="sf-delete-badge">Подтверждение действия</div>
+
+                <h2 class="sf-delete-title">
+                    Удалить пользователя
+                    {% if object %}
+                        «{% if object.get_full_name %}{{ object.get_full_name }}{% else %}{{ object.email }}{% endif %}»
+                    {% endif %}
+                    ?
+                </h2>
+
+                <p class="sf-delete-text">
+                    После подтверждения аккаунт пользователя будет удалён. Перед этим лучше убедиться,
+                    что удаление действительно необходимо и не повлияет на рабочие процессы.
+                </p>
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {% if object %}
+                    <div class="sf-delete-summary">
+                        <div class="sf-delete-summary-item">
+                            <div class="sf-delete-summary-label">Пользователь</div>
+                            <div class="sf-delete-summary-value">
+                                {% if object.get_full_name %}
+                                    {{ object.get_full_name }}
+                                {% else %}
+                                    {{ object.email }}
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="sf-delete-summary-item">
+                            <div class="sf-delete-summary-label">Email</div>
+                            <div class="sf-delete-summary-value">{{ object.email }}</div>
+                        </div>
+
+                        {% if object.phone %}
+                            <div class="sf-delete-summary-item">
+                                <div class="sf-delete-summary-label">Телефон</div>
+                                <div class="sf-delete-summary-value">{{ object.phone }}</div>
+                            </div>
+                        {% endif %}
+
+                        {% if object.date_joined %}
+                            <div class="sf-delete-summary-item">
+                                <div class="sf-delete-summary-label">Дата регистрации</div>
+                                <div class="sf-delete-summary-value">
+                                    {{ object.date_joined|date:"d.m.Y H:i" }}
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="sf-delete-actions">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="id_password" class="form-label">Введите пароль для подтверждения</label>
+                        {{ form.password }}
+                        {% if form.password.errors %}
+                            <div class="text-danger">
+                                {% for error in form.password.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <a href="{% url 'users:profile_list' %}" class="btn btn-secondary">
+                        Отмена
+                    </a>
+                    <button type="submit" class="btn btn-danger">
+                        Да, удалить пользователя
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

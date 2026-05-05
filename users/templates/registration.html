@@ -1,0 +1,99 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Регистрация — ФК «Шинник»{% endblock %}
+{% block meta_description %}Регистрация в официальном магазине атрибутики ФК «Шинник».{% endblock %}
+
+{% block content %}
+<section class="sf-auth-page">
+    <div class="container">
+        <div class="sf-auth-layout">
+            <div class="sf-auth-aside">
+                <div class="sf-auth-aside-card">
+                    <h1 class="sf-auth-title">Создать личный кабинет</h1>
+                    <p class="sf-auth-lead">
+                        Создайте аккаунт, чтобы быстрее оформлять заказы, отслеживать покупки
+                        и сохранять данные профиля.
+                    </p>
+
+                    <div class="sf-auth-benefits">
+                        <div class="sf-auth-benefit">
+                            <div class="sf-auth-benefit-title">Быстрое оформление</div>
+                            <div class="sf-auth-benefit-text">
+                                Сохраните контакты, чтобы не вводить их при каждом заказе.
+                            </div>
+                        </div>
+                        <div class="sf-auth-benefit">
+                            <div class="sf-auth-benefit-title">История заказов</div>
+                            <div class="sf-auth-benefit-text">
+                                Следите за статусом покупок и возвращайтесь к прошлым заказам.
+                            </div>
+                        </div>
+                        <div class="sf-auth-benefit">
+                            <div class="sf-auth-benefit-title">Личный кабинет</div>
+                            <div class="sf-auth-benefit-text">
+                                Управляйте профилем и покупками в одном месте.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sf-auth-form-wrap">
+                <div class="sf-auth-form-card">
+                    <h2 class="sf-auth-form-title">Регистрация</h2>
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger sf-alert mb-4">
+                                {% for error in form.non_field_errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% for field in form %}
+                            <div class="sf-form-group mb-3">
+                                <label for="{{ field.id_for_label }}" class="form-label">
+                                    {{ field.label }}
+                                    {% if field.field.required %}
+                                        <span class="sf-required">*</span>
+                                    {% endif %}
+                                </label>
+
+                                {{ field }}
+
+                                {% if field.help_text %}
+                                    <div class="sf-field-help">
+                                        {{ field.help_text }}
+                                    </div>
+                                {% endif %}
+
+                                {% if field.errors %}
+                                    <div class="sf-field-errors">
+                                        {% for error in field.errors %}
+                                            <div>{{ error }}</div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <div class="sf-auth-actions">
+                            <button type="submit" class="btn btn-primary w-100">
+                                Создать аккаунт
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="sf-auth-footer">
+                        <span>Уже есть аккаунт?</span>
+                        <a href="{% url 'users:login' %}" class="sf-link">Войти</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

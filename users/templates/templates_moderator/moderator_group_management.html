@@ -1,0 +1,146 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+
+{% block title %}Управление группами пользователя — ФК «Шинник»{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="sf-admin-page">
+    <div class="container">
+        <div class="sf-admin-hero">
+            <div>
+                <div class="sf-home-eyebrow">Модерация и доступы</div>
+                <h1 class="sf-admin-title">Управление группами пользователя</h1>
+                <p class="sf-admin-lead">
+                    Назначай и изменяй группы пользователя аккуратно и прозрачно, чтобы права доступа оставались понятными и контролируемыми.
+                </p>
+            </div>
+
+            <div class="sf-admin-hero-actions">
+                {% if target_user %}
+                    <a href="{% url 'users:profile_detail' pk=target_user.pk %}" class="btn btn-secondary">
+                        Открыть профиль
+                    </a>
+                {% endif %}
+                <a href="{% url 'users:profile_list' %}" class="btn btn-secondary">
+                    К списку пользователей
+                </a>
+            </div>
+        </div>
+
+        <div class="sf-admin-layout">
+            <aside class="sf-admin-sidebar">
+                <div class="sf-profile-card sf-profile-card--accent">
+                    <div class="sf-profile-avatar-wrap">
+                        {% if target_user and target_user.avatar %}
+                            <img src="{{ target_user.avatar.url }}" alt="Аватар" class="sf-profile-avatar-lg">
+                        {% else %}
+                            <img src="{% static 'img/default_avatar.png' %}" alt="Аватар" class="sf-profile-avatar-lg">
+                        {% endif %}
+                    </div>
+
+                    <div class="sf-profile-name">
+                        {% if target_user %}
+                            {% if target_user.get_full_name %}
+                                {{ target_user.get_full_name }}
+                            {% else %}
+                                {{ target_user.email }}
+                            {% endif %}
+                        {% else %}
+                            Пользователь
+                        {% endif %}
+                    </div>
+
+                    {% if target_user %}
+                        <div class="sf-profile-email">{{ target_user.email }}</div>
+                    {% endif %}
+
+                    <div class="sf-profile-quick-links">
+                        {% if target_user %}
+                            <a href="{% url 'users:profile_detail' pk=target_user.pk %}" class="sf-profile-quick-link">
+                                Профиль пользователя
+                            </a>
+                        {% endif %}
+                        <a href="{% url 'users:profile_list' %}" class="sf-profile-quick-link">
+                            Все пользователи
+                        </a>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="sf-admin-main">
+                <div class="sf-admin-card">
+                    <h2 class="sf-admin-section-title">Настройка групп</h2>
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger sf-alert mb-4">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        <div class="row g-4">
+                            {% for field in form %}
+                                <div class="col-12">
+                                    <div class="sf-form-group">
+                                        <label for="{{ field.id_for_label }}" class="form-label">
+                                            {{ field.label }}
+                                            {% if field.field.required %}
+                                                <span class="sf-required">*</span>
+                                            {% endif %}
+                                        </label>
+
+                                        <div class="sf-moderator-field-wrap">
+                                            {{ field }}
+                                        </div>
+
+                                        {% if field.help_text %}
+                                            <div class="sf-field-help">{{ field.help_text }}</div>
+                                        {% endif %}
+
+                                        {% if field.errors %}
+                                            <div class="sf-field-errors">
+                                                {% for error in field.errors %}
+                                                    <div>{{ error }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="sf-admin-form-actions">
+                            <a href="{% url 'users:profile_list' %}" class="btn btn-secondary">
+                                Отмена
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                Сохранить изменения
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="sf-admin-card">
+                    <h2 class="sf-admin-section-title">Что важно помнить</h2>
+                    <div class="sf-admin-note-list">
+                        <div class="sf-admin-note-item">
+                            Группы должны отражать реальные роли пользователя в системе.
+                        </div>
+                        <div class="sf-admin-note-item">
+                            Лишние права доступа лучше не выдавать “на всякий случай”.
+                        </div>
+                        <div class="sf-admin-note-item">
+                            Страница управления доступами должна быть чистой и понятной, без визуального шума.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

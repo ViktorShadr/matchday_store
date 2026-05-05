@@ -1,0 +1,96 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Заказы{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <div>
+                    <h1 class="sf-section-title">Заказы</h1>
+                    <p class="sf-section-subtitle">Управление заказами пользователей</p>
+                </div>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="sf-surface p-3 p-lg-4 mb-4">
+                <div class="sf-order-filter-list mb-3">
+                    {% for filter in status_filters %}
+                        <a class="sf-order-filter-chip {% if current_status_filter == filter.key %}is-active{% endif %}" href="{{ filter.url }}">
+                            {{ filter.label }}
+                        </a>
+                    {% endfor %}
+                </div>
+
+                <form method="get" class="row g-3 align-items-end">
+                    {% if current_status_filter and current_status_filter != 'all' %}
+                        <input type="hidden" name="status" value="{{ current_status_filter }}">
+                    {% endif %}
+                    <div class="col-12 col-lg-8">
+                        <label class="form-label mb-1" for="orderSearch">Поиск</label>
+                        <input
+                            id="orderSearch"
+                            type="search"
+                            class="form-control"
+                            name="q"
+                            value="{{ search_query }}"
+                            placeholder="Поиск по номеру заказа / email"
+                        >
+                    </div>
+                    <div class="col-12 col-lg-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1">Найти</button>
+                        {% if search_query %}
+                            <a class="btn btn-outline-primary" href="{% if current_status_filter and current_status_filter != 'all' %}?status={{ current_status_filter }}{% else %}{% url 'store:dashboard_orders' %}{% endif %}">
+                                Сброс
+                            </a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+
+            <div class="sf-surface p-0 overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0 sf-dashboard-table">
+                        <thead>
+                        <tr>
+                            <th>№ заказа</th>
+                            <th>Клиент</th>
+                            <th>Дата</th>
+                            <th>Сумма</th>
+                            <th>Статус</th>
+                            <th>Оплата</th>
+                            <th class="text-end">Действия</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for order in orders %}
+                            <tr>
+                                <td class="fw-semibold">#{{ order.number|default:order.pk }}</td>
+                                <td>{{ order.email|default:order.user.email }}</td>
+                                <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
+                                <td>{{ order.total_amount|floatformat:"-2" }} ₽</td>
+                                <td>
+                                    <span class="{{ order.dashboard_status_badge }}">{{ order.dashboard_status_label }}</span>
+                                </td>
+                                <td>
+                                    <span class="{{ order.dashboard_payment_badge }}">{{ order.dashboard_payment_label }}</span>
+                                </td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-primary" href="{% url 'store:dashboard_order_detail' order.pk %}">Открыть</a>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-5">
+                                    Заказы по выбранным фильтрам не найдены.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

@@ -1,0 +1,142 @@
+{% load static %}
+<header class="sf-header">
+    <div class="sf-header-top">
+        <div class="container">
+            <div class="sf-header-top-row">
+                <div class="sf-header-top-left">
+                    <span class="sf-header-note">Ярославль</span>
+                    <span class="sf-header-divider"></span>
+                    <span class="sf-header-note">Самовывоз и оформление заказов онлайн</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sf-header-main">
+        <div class="container">
+            <div class="sf-header-main-row">
+                <a class="sf-logo" href="{% url 'store:base' %}">
+                    <span class="sf-logo-mark">
+                        <img src="{% static 'img/favicon.ico' %}" alt="Логотип ФК Шинник" loading="lazy">
+                    </span>
+                    <span class="sf-logo-text">
+                        <span class="sf-logo-title">ФК «Шинник»</span>
+                        <span class="sf-logo-subtitle">Официальный магазин атрибутики</span>
+                    </span>
+                </a>
+
+                <div class="sf-header-search">
+                    <form class="sf-search-form" action="{% url 'store:product_list' %}" method="get" role="search">
+                        <div class="sf-search-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="7"></circle>
+                                <path d="M21 21l-4.35-4.35"></path>
+                            </svg>
+                        </div>
+                        <input
+                            type="search"
+                            name="q"
+                            class="form-control sf-search-input"
+                            placeholder="Найти товар"
+                            value="{{ request.GET.q|default:'' }}"
+                        >
+                        <button type="submit" class="btn btn-primary sf-search-btn">Найти</button>
+                    </form>
+                </div>
+
+                <div class="sf-header-actions">
+                    <a href="{% url 'store:cart' %}" class="btn btn-secondary sf-action-btn position-relative" aria-label="Корзина">
+                        <span class="sf-action-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 6h15l-1.5 9h-12z"></path>
+                                <path d="M6 6l-2 0"></path>
+                                <circle cx="9" cy="20" r="1"></circle>
+                                <circle cx="18" cy="20" r="1"></circle>
+                            </svg>
+                        </span>
+                        <span class="sf-action-text d-none d-xl-inline">Корзина</span>
+                        <span class="sf-badge cart-counter">{{ cart_count|default:0 }}</span>
+                    </a>
+
+                    {% if user.is_authenticated %}
+                        <div class="dropdown">
+                            <button
+                                class="btn btn-secondary sf-action-btn sf-profile-btn dropdown-toggle"
+                                type="button"
+                                id="profileDropdown"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                            >
+                                <span class="sf-profile-avatar">
+                                    {% if user.avatar %}
+                                        <img src="{{ user.avatar.url }}" alt="avatar" loading="lazy">
+                                    {% else %}
+                                        <img src="{% static 'img/default_avatar.png' %}" alt="avatar" loading="lazy">
+                                    {% endif %}
+                                </span>
+                                <span class="sf-action-text d-none d-xl-inline text-truncate" style="max-width: 160px;">
+                                    {% if user.first_name and user.last_name %}
+                                        {{ user.first_name }} {{ user.last_name }}
+                                    {% elif user.first_name %}
+                                        {{ user.first_name }}
+                                    {% elif user.last_name %}
+                                        {{ user.last_name }}
+                                    {% else %}
+                                        {{ user.email }}
+                                    {% endif %}
+                                </span>
+                            </button>
+
+                            <ul class="dropdown-menu dropdown-menu-end sf-dropdown-menu" aria-labelledby="profileDropdown">
+                                <li>
+                                    <a class="dropdown-item" href="{% url 'users:profile_detail' pk=user.pk %}">
+                                        Профиль
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{% url 'users:order_list' %}">
+                                        Мои заказы
+                                    </a>
+                                </li>
+                                {% if navigation_permissions.is_moderator %}
+                                    <li>
+                                        <a class="dropdown-item" href="{% url 'store:warehouse_dashboard' %}">
+                                            Дашборд
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                {% if user.is_staff %}
+                                    <li>
+                                        <a class="dropdown-item" href="/admin/">
+                                            Админ-панель
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form method="post" action="{% url 'users:logout' %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="dropdown-item">
+                                            Выйти
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
+                    {% else %}
+                        <a class="btn btn-secondary sf-action-btn" href="{% url 'users:login' %}" aria-label="Войти">
+                            <span class="sf-action-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                                    <path d="M10 17l5-5-5-5"></path>
+                                    <path d="M15 12H3"></path>
+                                </svg>
+                            </span>
+                            <span class="sf-action-text d-none d-xl-inline">Войти</span>
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</header>

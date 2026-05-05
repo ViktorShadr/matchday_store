@@ -1,0 +1,91 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>{% block title %}ФК «Шинник» — официальный магазин атрибутики{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}Официальный магазин атрибутики ФК «Шинник»: форма, одежда, аксессуары и клубный мерч для болельщиков.{% endblock %}">
+    <meta name="theme-color" content="#0b1220">
+    <meta name="robots" content="{% block meta_robots %}index, follow{% endblock %}">
+
+    <link rel="icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'img/apple-touch-icon.png' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/favicon-16x16.png' %}">
+    <link rel="manifest" href="{% static 'img/site.webmanifest' %}">
+
+    <link rel="canonical" href="{{ request.build_absolute_uri|cut:'?' }}">
+
+    <meta property="og:title" content="{% block og_title %}ФК «Шинник» — официальный магазин атрибутики{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Форма, атрибутика, аксессуары и клубный мерч для болельщиков ФК «Шинник».{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-image.jpg' %}{% endblock %}">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="ФК «Шинник» — магазин атрибутики">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}ФК «Шинник» — официальный магазин атрибутики{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Клубный магазин ФК «Шинник»: форма, одежда, аксессуары и мерч.{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-image.jpg' %}{% endblock %}">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@12/swiper-bundle.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@6.1/dist/fancybox/fancybox.css">
+    <link href="{% static 'css/bootstrap.min.css' %}?v=2" rel="stylesheet">
+    <link href="{% static 'css/base.css' %}?v=9" rel="stylesheet">
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="sf-body">
+    <div class="sf-site-shell">
+        {% block header %}{% include 'main_page/_header.html' %}{% endblock %}
+        {% block menu %}{% include 'main_page/_menu.html' %}{% endblock %}
+
+        {% block breadcrumbs %}{% endblock %}
+
+        {% if messages %}
+            <section class="sf-flash-wrapper">
+                <div class="container">
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags|default:'info' }} sf-alert shadow-sm border-0 mb-3" role="alert">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+
+        <main class="sf-main">
+            {% block content %}{% endblock %}
+        </main>
+
+        {% block footer %}{% include 'main_page/_footer.html' %}{% endblock %}
+    </div>
+
+    <div id="cookie-banner" class="sf-cookie-banner hidden">
+        <div class="container">
+            <div class="sf-cookie-content">
+                <div class="sf-cookie-text-wrap">
+                    <div class="sf-cookie-title">Мы используем cookies</div>
+                    <p class="sf-cookie-text mb-0">
+                        Это помогает улучшать работу магазина, сохранять ваши настройки и делать интерфейс удобнее.
+                        {% if legal_page_urls.privacy_policy %}
+                            Продолжая использовать сайт, вы соглашаетесь с
+                            <a href="{{ legal_page_urls.privacy_policy }}">политикой конфиденциальности</a>.
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="sf-cookie-actions">
+                    <button id="cookie-accept" class="btn btn-primary">Принять</button>
+                    <button id="cookie-decline" class="btn btn-secondary">Отклонить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% include 'main_page/_scripts.html' %}
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

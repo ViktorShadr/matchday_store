@@ -1,0 +1,159 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+
+{% block title %}Корзина — ФК «Шинник»{% endblock %}
+{% block meta_description %}Корзина товаров официального магазина атрибутики ФК «Шинник».{% endblock %}
+
+{% block content %}
+<section class="sf-catalog-hero">
+    <div class="container">
+        <div class="sf-catalog-hero-card">
+            <div class="sf-catalog-hero-top">
+                <div>
+                    <div class="sf-home-eyebrow">Оформление покупки</div>
+                    <h1 class="sf-catalog-title">Корзина</h1>
+                    <p class="sf-catalog-lead">
+                        Проверь выбранные товары, измени количество и переходи к оформлению заказа.
+                    </p>
+                </div>
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary">Вернуться в каталог</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="sf-section pt-0 sf-cart-page">
+    <div class="container">
+        {% if cart_items %}
+            <div class="sf-cart-layout">
+                <div class="sf-cart-items">
+                    {% for item in cart_items %}
+                        <article class="sf-cart-item">
+                            <div class="sf-cart-item-media">
+                                {% if item.product_id %}<a href="{% url 'store:product_detail' pk=item.product_id %}">{% else %}<div class="sf-cart-item-media-static">{% endif %}
+                                    {% if item.image %}
+                                        <img src="{{ item.image }}" alt="{{ item.product_name }}">
+                                    {% else %}
+                                        <div class="sf-cart-item-placeholder">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                                <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                                                <circle cx="8.5" cy="9.5" r="1.5"></circle>
+                                                <path d="M21 15l-5-5L5 20"></path>
+                                            </svg>
+                                        </div>
+                                    {% endif %}
+                                {% if item.product_id %}</a>{% else %}</div>{% endif %}
+                            </div>
+
+                            <div class="sf-cart-item-body">
+                                {% if item.variant_label %}
+                                    <div class="sf-cart-item-category">
+                                        {{ item.variant_label }}
+                                    </div>
+                                {% endif %}
+
+                                <h2 class="sf-cart-item-title">
+                                    {% if item.product_id %}
+                                        <a href="{% url 'store:product_detail' pk=item.product_id %}">
+                                            {{ item.product_name }}
+                                        </a>
+                                    {% else %}
+                                        {{ item.product_name }}
+                                    {% endif %}
+                                </h2>
+
+                                {% if item.availability_message %}
+                                    <span class="sf-stock-badge sf-stock-badge--muted">
+                                        {{ item.availability_message }}
+                                    </span>
+                                {% endif %}
+
+                                <div class="sf-cart-item-controls">
+                                    <div class="sf-cart-qty-wrap">
+                                        <span class="sf-cart-qty-label">Количество</span>
+
+                                        {% if item.is_available %}
+                                            <form method="post" action="{% url 'store:update_cart' %}" class="sf-cart-qty-form">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="variant_id" value="{{ item.variant_id }}">
+                                                <input type="number"
+                                                       name="quantity"
+                                                       min="1"
+                                                       max="{{ item.max_quantity }}"
+                                                       value="{{ item.quantity }}"
+                                                       class="form-control sf-cart-qty-input">
+                                                <button type="submit" class="btn btn-outline-primary">
+                                                    Обновить
+                                                </button>
+                                            </form>
+                                        {% else %}
+                                            <div class="small text-muted">
+                                                Удалите товар из корзины, чтобы оформить заказ.
+                                            </div>
+                                        {% endif %}
+                                    </div>
+
+                                    <form method="post" action="{% url 'store:remove_from_cart' %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="variant_id" value="{{ item.variant_id }}">
+                                        <button type="submit" class="btn btn-outline-primary sf-cart-remove-btn">
+                                            Удалить
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="sf-cart-item-side">
+                                <div class="sf-cart-item-price-label">Стоимость</div>
+                                <div class="sf-price">{{ item.total_price }} ₽</div>
+
+                                {% if item.price %}
+                                    <div class="sf-cart-item-unit-price">
+                                        {{ item.price }} ₽ за шт.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+
+                <aside class="sf-cart-summary">
+                    <div class="sf-cart-summary-card">
+                        <h3 class="sf-cart-summary-title">Ваш заказ</h3>
+
+                        <div class="sf-cart-summary-row">
+                            <span>Итого</span>
+                            <strong>{{ cart_total }} ₽</strong>
+                        </div>
+
+                        <div class="sf-cart-summary-divider"></div>
+
+                        <div class="sf-cart-summary-note">
+                            После проверки корзины можно перейти к оформлению заказа.
+                        </div>
+
+                        <div class="sf-cart-summary-actions">
+                            <a href="{% url 'orders:checkout' %}" class="btn btn-primary">
+                                Перейти к оформлению
+                            </a>
+                            <a href="{% url 'store:product_list' %}" class="btn btn-outline-primary">
+                                Продолжить покупки
+                            </a>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        {% else %}
+            <div class="sf-empty-state sf-empty-state-lg">
+                <div class="sf-empty-state-title">Корзина пока пуста</div>
+                <p class="sf-empty-state-text">
+                    Добавь товары из каталога, чтобы перейти к оформлению заказа.
+                </p>
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Перейти в каталог
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

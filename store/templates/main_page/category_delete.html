@@ -1,0 +1,70 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Удаление категории — ФК «Шинник»{% endblock %}
+
+{% block content %}
+<section class="sf-admin-page">
+    <div class="container">
+        <div class="sf-admin-hero">
+            <div>
+                <div class="sf-home-eyebrow">Управление каталогом</div>
+                <h1 class="sf-admin-title">Удаление категории</h1>
+                <p class="sf-admin-lead">
+                    Подтверди удаление категории. Лучше делать это только после проверки, что она больше не нужна в структуре каталога.
+                </p>
+            </div>
+
+            <div class="sf-admin-hero-actions">
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                    Назад в каталог
+                </a>
+            </div>
+        </div>
+
+        <div class="sf-delete-layout">
+            <div class="sf-delete-card">
+                <div class="sf-delete-badge">Подтверждение действия</div>
+
+                <h2 class="sf-delete-title">
+                    Удалить категорию
+                    {% if object %}
+                        «{{ object.name|default:object.title }}»
+                    {% endif %}
+                    ?
+                </h2>
+
+                <p class="sf-delete-text">
+                    После подтверждения категория будет удалена. Если к ней привязаны товары,
+                    сначала лучше проверить логику обработки таких связей в модели и view.
+                </p>
+
+                {% if object %}
+                    <div class="sf-delete-summary">
+                        <div class="sf-delete-summary-item">
+                            <div class="sf-delete-summary-label">Категория</div>
+                            <div class="sf-delete-summary-value">{{ object.name|default:object.title }}</div>
+                        </div>
+
+                        {% if object.slug %}
+                            <div class="sf-delete-summary-item">
+                                <div class="sf-delete-summary-label">Slug</div>
+                                <div class="sf-delete-summary-value">{{ object.slug }}</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="sf-delete-actions">
+                    {% csrf_token %}
+                    <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                        Отмена
+                    </a>
+                    <button type="submit" class="btn btn-danger">
+                        Да, удалить категорию
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

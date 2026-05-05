@@ -1,0 +1,5 @@
+# Ежедневный backup в 03:15 UTC с ротацией файлов согласно RETENTION_DAYS
+15 3 * * * cd /path/to/matchday_store && COMPOSE_FILE=/path/to/matchday_store/docker-compose.yaml BACKUP_DIR=/path/to/backups RETENTION_DAYS=14 ./ops/db/backup.sh >> /var/log/matchday_backup.log 2>&1
+
+# Еженедельная проверка восстановления в воскресенье 04:00 UTC
+0 4 * * 0 cd /path/to/matchday_store && LATEST_BACKUP="$(ls -1t /path/to/backups/postgres_*.sql.gz | head -n 1)" && [ -n "$LATEST_BACKUP" ] && COMPOSE_FILE=/path/to/matchday_store/docker-compose.yaml ./ops/db/restore_verify.sh "$LATEST_BACKUP" >> /var/log/matchday_restore_verify.log 2>&1

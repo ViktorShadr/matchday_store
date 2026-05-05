@@ -1,11 +1,11 @@
 # Poetry
 /.venv/
-/poetry.lock
 
 # Virtual environment
 /venv/
 /env/
 /.env/
+/.env.prod
 
 # Python cache and build files
 __pycache__/
@@ -65,3 +65,8 @@ Thumbs.db
 # SQLite databases
 *.sqlite3
 *.db
+
+# Operational artifacts
+/backups/
+docker/nginx/auth/.htpasswd
+docker/nginx/auth/.htpasswd

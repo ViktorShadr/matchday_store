@@ -1,0 +1,131 @@
+{% load static %}
+
+<article class="sf-product-card">
+    <div class="sf-product-card-media">
+        {% if product.in_stock %}
+            <div class="sf-product-badge">В наличии</div>
+        {% else %}
+            <div class="sf-product-badge sf-product-badge--muted">Нет в наличии</div>
+        {% endif %}
+
+        {% with product.gallery_images|length as gallery_count %}
+            {% if gallery_count > 1 %}
+                <div class="swiper sf-product-card-swiper" data-sf-product-swiper>
+                    <div class="swiper-wrapper">
+                        {% for image in product.gallery_images %}
+                            <a href="{% url 'store:product_detail' pk=product.pk %}" class="swiper-slide sf-product-card-image-link">
+                                <img src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}" loading="lazy">
+                            </a>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="sf-product-card-swiper-nav sf-product-card-swiper-prev" aria-label="Предыдущее фото">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M15 18l-6-6 6-6"></path>
+                        </svg>
+                    </button>
+                    <button type="button" class="sf-product-card-swiper-nav sf-product-card-swiper-next" aria-label="Следующее фото">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M9 18l6-6-6-6"></path>
+                        </svg>
+                    </button>
+                    <div class="swiper-pagination sf-product-card-swiper-pagination"></div>
+                </div>
+            {% elif product.display_image %}
+                <a href="{% url 'store:product_detail' pk=product.pk %}" class="sf-product-card-image-link">
+                    <img
+                        src="{{ product.display_image.url }}"
+                        alt="{{ product.name }}"
+                        loading="lazy"
+                    >
+                </a>
+            {% else %}
+                <div class="sf-product-card-placeholder">
+                    <div class="sf-product-card-placeholder-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                            <circle cx="8.5" cy="9.5" r="1.5"></circle>
+                            <path d="M21 15l-5-5L5 20"></path>
+                        </svg>
+                    </div>
+                    <div class="sf-product-card-placeholder-text">Изображение появится позже</div>
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="sf-product-card-body">
+        {% if product.category %}
+            <div class="sf-product-card-category">
+                {{ product.category.name }}
+            </div>
+        {% endif %}
+
+        <h3 class="sf-product-card-title">
+            <a href="{% url 'store:product_detail' pk=product.pk %}">
+                {{ product.name }}
+            </a>
+        </h3>
+
+        {% if product.short_description %}
+            <p class="sf-product-card-description">
+                {{ product.short_description|truncatechars:95 }}
+            </p>
+        {% elif product.description %}
+            <p class="sf-product-card-description">
+                {{ product.description|striptags|truncatechars:95 }}
+            </p>
+        {% endif %}
+
+        <div class="sf-product-card-bottom">
+            <div class="sf-product-card-price-row">
+                <div class="sf-price">
+                    {% if product.display_price %}
+                        {{ product.display_price }} ₽
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+
+                {% if product.old_price %}
+                    <div class="sf-price-old">
+                        {{ product.old_price }} ₽
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="sf-product-card-actions">
+                <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-secondary">
+                    Подробнее
+                </a>
+
+                {% if product.in_stock and product.first_available_variant_id %}
+                    {% if product.available_variant_count > 1 %}
+                        <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-primary">
+                            Выбрать вариант
+                        </a>
+                    {% else %}
+                        <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-card-cart-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="variant_id" value="{{ product.first_available_variant_id }}">
+                            <input type="hidden" name="quantity" value="1">
+                            <button type="submit" class="btn btn-primary sf-product-card-cart-btn">
+                                <span class="sf-product-card-cart-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="9" cy="20" r="1.4"></circle>
+                                        <circle cx="18" cy="20" r="1.4"></circle>
+                                        <path d="M3 4h2l2.2 10.2a1 1 0 0 0 .98.8h9.7a1 1 0 0 0 .97-.77L21 7H7"></path>
+                                    </svg>
+                                </span>
+                                <span>В корзину</span>
+                            </button>
+                        </form>
+                    {% endif %}
+                {% else %}
+                    <button type="button" class="btn btn-secondary" disabled>
+                        Недоступно
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</article>

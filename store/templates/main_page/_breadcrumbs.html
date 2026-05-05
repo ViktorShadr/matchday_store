@@ -1,0 +1,48 @@
+{% if breadcrumbs %}
+<nav class="sf-breadcrumbs" aria-label="breadcrumb">
+    <div class="container">
+        <ol class="sf-breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            {% for item in breadcrumbs %}
+                <li class="sf-breadcrumbs-item {% if forloop.last %}active{% endif %}"
+                    itemprop="itemListElement"
+                    itemscope
+                    itemtype="https://schema.org/ListItem">
+                    {% if item.url and not forloop.last %}
+                        <a href="{{ item.url }}" itemprop="item">
+                            <span itemprop="name">{{ item.title }}</span>
+                        </a>
+                    {% else %}
+                        <span itemprop="name">{{ item.title }}</span>
+                    {% endif %}
+                    <meta itemprop="position" content="{{ forloop.counter }}">
+                </li>
+
+                {% if not forloop.last %}
+                    <li class="sf-breadcrumbs-separator" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                    </li>
+                {% endif %}
+            {% endfor %}
+        </ol>
+    </div>
+</nav>
+
+<script type="application/ld+json" nonce="{{ request.csp_nonce }}">
+{
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+        {% for item in breadcrumbs %}
+        {
+            "@type": "ListItem",
+            "position": {{ forloop.counter }},
+            "name": "{{ item.title|escapejs }}",
+            "item": "{% if item.url and not forloop.last %}{{ request.scheme }}://{{ request.get_host }}{{ item.url }}{% else %}{{ request.build_absolute_uri }}{% endif %}"
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ]
+}
+</script>
+{% endif %}

@@ -1,0 +1,119 @@
+import secrets
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.db import models
+from django.utils import timezone
+
+
+class UserManager(BaseUserManager):
+    """Менеджер для управления пользователями с использованием email."""
+
+    def create_user(self, email, password=None, **extra_fields):
+        """
+        Создать нового пользователя.
+
+        Args:
+            email (str): Email пользователя
+            password (str): Пароль пользователя (опционально)
+            **extra_fields: Дополнительные поля для пользователя
+
+        Returns:
+            User: Созданный объект пользователя
+
+        Raises:
+            ValueError: Если email не указан
+        """
+        if not email:
+            raise ValueError("Email is required")
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        """
+        Создать суперпользователя.
+
+        Args:
+            email (str): Email суперпользователя
+            password (str): Пароль суперпользователя
+            **extra_fields: Дополнительные поля
+
+        Returns:
+            User: Созданный объект суперпользователя
+        """
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
+
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
+
+        return self.create_user(email, password, **extra_fields)
+
+
+class User(AbstractUser):
+    """
+    Модель пользователя системы.
+
+    Расширенная модель пользователя Django с использованием email в качестве
+    идентификатора вместо username. Включает дополнительные поля для профиля.
+
+    Attributes:
+        email (str): Уникальный email пользователя (используется как USERNAME_FIELD)
+        first_name (str): Имя пользователя (опционально)
+        last_name (str): Фамилия пользователя (опционально)
+        phone (str): Номер телефона (опционально)
+        city (str): Город проживания (опционально)
+        avatar (ImageField): Аватар пользователя (опционально)
+        is_active (bool): Флаг активного пользователя
+        is_staff (bool): Флаг сотрудника
+        is_superuser (bool): Флаг суперпользователя
+    """
+
+    username = None
+    email = models.EmailField(unique=True)
+    first_name = models.CharField("Имя",max_length=150, blank=True)
+    last_name = models.CharField("Фамилия",max_length=150, blank=True)
+    phone = models.CharField("Телефон",max_length=15, blank=True, null=True)
+    city = models.CharField("Город",max_length=100, blank=True, null=True)
+    avatar = models.ImageField("Аватар",upload_to="avatars", blank=True, null=True)
+    is_active = models.BooleanField("Активен",default=False)
+    is_staff = models.BooleanField("Сотрудник",default=False)
+    is_superuser = models.BooleanField("Суперпользователь",default=False)
+    is_email_confirmed = models.BooleanField("Подтвержден email",default=False)
+    email_token = models.CharField("Токен подтверждения email",max_length=64, blank=True, null=True)
+    email_token_created_at = models.DateTimeField(blank=True, null=True)
+    confirmation_email_last_sent_at = models.DateTimeField(blank=True, null=True)
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+
+    objects = UserManager()
+
+    def __str__(self):
+        """Возвращает строковое представление объекта."""
+        return self.email
+
+    def generate_email_token(self):
+        """Генерирует токен для подтверждения email."""
+        self.email_token = secrets.token_urlsafe(32)
+        self.email_token_created_at = timezone.now()
+        self.save(update_fields=["email_token", "email_token_created_at"])
+        return self.email_token
+
+    def confirm_email(self):
+        """Подтверждает email пользователя."""
+        self.is_email_confirmed = True
+        self.is_active = True
+        self.email_token = None
+        self.email_token_created_at = None
+        self.save(update_fields=["is_email_confirmed", "is_active", "email_token", "email_token_created_at"])
+
+    class Meta:
+        """Мета-настройки класса."""
+
+        verbose_name = "Пользователь"
+        verbose_name_plural = "Пользователи"

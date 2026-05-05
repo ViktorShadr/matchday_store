@@ -1,0 +1,65 @@
+<nav class="sf-nav">
+    <div class="container">
+        <nav class="navbar navbar-expand-lg sf-navbar">
+            <button class="navbar-toggler sf-navbar-toggler btn btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#sfNavbar"
+                    aria-controls="sfNavbar" aria-expanded="false" aria-label="Открыть меню">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="sfNavbar">
+                <ul class="navbar-nav sf-navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'base' %}active{% endif %}"
+                           href="{% url 'store:base' %}">
+                            Главная
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'product_list' %}active{% endif %}"
+                           href="{% url 'store:product_list' %}">
+                            Все товары
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link"
+                           href="{% if request.resolver_match.url_name == 'base' %}#categories{% else %}{% url 'store:base' %}#categories{% endif %}">
+                            Категории
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link"
+                           href="{% if request.resolver_match.url_name == 'base' %}#popular{% else %}{% url 'store:base' %}#popular{% endif %}">
+                            Популярное
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link"
+                           href="{% if request.resolver_match.url_name == 'base' %}#about{% else %}{% url 'store:base' %}#about{% endif %}">
+                            О магазине
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link"
+                           href="{% if request.resolver_match.url_name == 'base' %}#contacts{% else %}{% url 'store:base' %}#contacts{% endif %}">
+                            Контакты
+                        </a>
+                    </li>
+
+                    {% if navigation_permissions.is_moderator %}
+                        <li class="nav-item ms-lg-auto">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard_home' or request.resolver_match.url_name == 'dashboard_orders' or 'dashboard_order' in request.resolver_match.url_name or 'warehouse_' in request.resolver_match.url_name %}active{% endif %}"
+                               href="{% url 'store:warehouse_dashboard' %}">
+                                Дашборд
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
+    </div>
+</nav>

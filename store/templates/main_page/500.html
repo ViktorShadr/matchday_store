@@ -1,0 +1,32 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Временная ошибка — ФК «Шинник»{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="sf-error-page">
+    <div class="container">
+        <div class="sf-error-card">
+            <div class="sf-error-code">500</div>
+
+            <div class="sf-home-eyebrow">Временная ошибка</div>
+
+            <h1 class="sf-error-title">Что-то пошло не так</h1>
+
+            <p class="sf-error-text">
+                На стороне магазина произошёл временный сбой. Попробуйте обновить страницу чуть позже
+                или вернитесь в каталог и продолжите просмотр товаров.
+            </p>
+
+            <div class="sf-error-actions">
+                <a href="{% url 'store:base' %}" class="btn btn-primary">
+                    На главную
+                </a>
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                    Перейти в каталог
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Управление товаром: {{ product.name }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <div>
+                    <h1 class="sf-section-title">{{ product.name }}</h1>
+                    <p class="sf-section-subtitle">{{ product.category.name|default:'Без категории' }}</p>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a class="btn btn-outline-primary" href="{% url 'store:warehouse_dashboard' %}">Назад к складу</a>
+                    <button type="submit" form="productMainForm" class="btn btn-primary">Сохранить</button>
+                    <a class="btn btn-danger" href="{% url 'store:warehouse_product_delete' product.pk %}">Удалить</a>
+                </div>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row g-4">
+                <div class="col-12 col-xl-8">
+                    <div class="sf-surface p-4 mb-4">
+                        <h2 class="h4 mb-3">Основная информация</h2>
+                        <form id="productMainForm" method="post">
+                            {% csrf_token %}
+                            {{ product_form.non_field_errors }}
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ product_form.name.id_for_label }}">Название</label>
+                                {{ product_form.name }}
+                                {{ product_form.name.errors }}
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ product_form.category.id_for_label }}">Категория</label>
+                                {{ product_form.category }}
+                                {{ product_form.category.errors }}
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label" for="{{ product_form.description.id_for_label }}">Описание</label>
+                                {{ product_form.description }}
+                                {{ product_form.description.errors }}
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="variants" class="sf-surface p-4 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+                            <h2 class="h4 mb-0">Варианты и остатки</h2>
+                            <a class="btn btn-primary btn-sm" href="{% url 'store:warehouse_variant_create' product.pk %}">Добавить вариант</a>
+                        </div>
+
+                        {% for variant in variants %}
+                            <div class="border rounded-4 p-3 mb-3">
+                                <div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
+                                    <div>
+                                        <div class="fw-semibold">{{ variant.size|default:'—' }} / {{ variant.color|default:'—' }}</div>
+                                        <div class="small text-muted">{{ variant.price|floatformat:"-2" }} ₽</div>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <a class="btn btn-outline-primary btn-sm" href="{% url 'store:warehouse_variant_edit' variant.pk %}">Изменить</a>
+                                        <a class="btn btn-danger btn-sm" href="{% url 'store:warehouse_variant_delete' variant.pk %}">Удалить</a>
+                                    </div>
+                                </div>
+                                <form method="post" action="{% url 'store:warehouse_variant_stock_update' variant.pk %}" class="row g-2 align-items-end">
+                                    {% csrf_token %}
+                                    <div class="col-12 col-md-5">
+                                        <label class="form-label mb-1">Остаток</label>
+                                        {{ variant.stock_form.quantity }}
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <button type="submit" class="btn btn-primary w-100">Сохранить остаток</button>
+                                    </div>
+                                </form>
+                            </div>
+                        {% empty %}
+                            <div class="text-muted">Варианты ещё не созданы.</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="sf-surface p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+                            <h2 class="h4 mb-0">Изображения</h2>
+                            <a class="btn btn-outline-primary btn-sm" href="{% url 'store:warehouse_image_create' product.pk %}">Добавить изображение</a>
+                        </div>
+                        <div class="row g-3">
+                            {% for image in images %}
+                                <div class="col-12 col-md-6">
+                                    <div class="border rounded-4 p-3 h-100">
+                                        {% if image.image %}
+                                            <img class="img-fluid rounded-4 mb-3" src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}">
+                                        {% endif %}
+                                        <div class="small text-muted mb-2">{{ image.alt_text|default:'Без описания' }}</div>
+                                        {% if image.is_primary %}
+                                            <div class="badge text-bg-primary mb-2">Основное</div>
+                                        {% endif %}
+                                        <div>
+                                            <a class="btn btn-danger btn-sm" href="{% url 'store:warehouse_image_delete' image.pk %}">Удалить</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="col-12">
+                                    <div class="text-muted">Изображения ещё не загружены.</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-xl-4">
+                    <div class="sf-surface p-4">
+                        <h2 class="h4 mb-3">Сводка</h2>
+                        <div class="d-grid gap-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Статус продажи</span>
+                                {% if product.is_on_sale %}
+                                    <span class="badge text-bg-success">В продаже</span>
+                                {% else %}
+                                    <span class="badge text-bg-secondary">Снято с продажи</span>
+                                {% endif %}
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Товар</span>
+                                <strong>{{ product.name }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Категория</span>
+                                <strong>{{ product.category.name|default:'—' }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Вариантов</span>
+                                <strong>{{ variants|length }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Изображений</span>
+                                <strong>{{ images|length }}</strong>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 mt-3">
+                            <form method="post" action="{% url 'store:warehouse_product_publish' product.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-success w-100" {% if product.is_on_sale %}disabled{% endif %}>
+                                    Выставить на продажу
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'store:warehouse_product_unpublish' product.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-danger w-100" {% if not product.is_on_sale %}disabled{% endif %}>
+                                    Снять с продажи
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

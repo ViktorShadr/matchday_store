@@ -1,0 +1,55 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}{{ page.title }} — ФК «Шинник»{% endblock %}
+{% block meta_description %}
+    {% if page.lead %}
+        {{ page.lead|striptags|truncatechars:160 }}
+    {% else %}
+        {{ page.title }} официального магазина атрибутики ФК «Шинник».
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="sf-legal-page">
+    <div class="container">
+        <div class="sf-legal-hero">
+            <div>
+                <h1 class="sf-legal-title">{{ page.title }}</h1>
+                {% if page.lead %}
+                    <p class="sf-legal-lead">{{ page.lead }}</p>
+                {% endif %}
+            </div>
+
+            <div class="sf-legal-hero-actions">
+                <a href="{% url 'store:base' %}" class="btn btn-secondary">
+                    На главную
+                </a>
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    В каталог
+                </a>
+            </div>
+        </div>
+
+        <div class="sf-legal-layout">
+            <article class="sf-legal-card">
+                <div class="sf-legal-content">
+                    {{ page.content|safe }}
+                </div>
+            </article>
+
+            <aside class="sf-legal-sidebar">
+                <div class="sf-legal-side-card">
+                    <h2 class="sf-legal-side-title">Навигация</h2>
+                    <div class="sf-legal-links">
+                        {% for nav_page in legal_navigation %}
+                            <a href="{{ nav_page.url }}" class="sf-legal-link {% if nav_page.slug == page.slug %}active{% endif %}">
+                                {{ nav_page.title }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+</section>
+{% endblock %}

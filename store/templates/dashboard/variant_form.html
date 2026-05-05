@@ -1,0 +1,56 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">{{ page_title }}</h1>
+                <a class="sf-link" href="{% url 'store:warehouse_product_manage' product.pk %}">К товару</a>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-8">
+                    <div class="sf-surface p-4">
+                        <div class="small text-muted mb-3">Товар: {{ product.name }}</div>
+                        <form method="post">
+                            {% csrf_token %}
+                            {{ form.non_field_errors }}
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ form.size.id_for_label }}">Размер</label>
+                                    {{ form.size }}
+                                    {{ form.size.errors }}
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ form.color.id_for_label }}">Цвет</label>
+                                    {{ form.color }}
+                                    {{ form.color.errors }}
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ form.price.id_for_label }}">Цена</label>
+                                    {{ form.price }}
+                                    {{ form.price.errors }}
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ form.quantity.id_for_label }}">Количество на складе</label>
+                                    {{ form.quantity }}
+                                    {{ form.quantity.errors }}
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="{{ form.image.id_for_label }}">Изображение</label>
+                                    {{ form.image }}
+                                    {{ form.image.errors }}
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary mt-4">{{ submit_label }}</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

@@ -2,4 +2,12 @@ from django.apps import AppConfig
 
 
 class StoreConfig(AppConfig):
-    name = 'store'
+    """Конфигурация приложения StoreConfig."""
+
+    name = "store"
+
+    def ready(self):
+        """Выполняет инициализацию приложения при запуске."""
+        from . import signals
+
+        _ = signals

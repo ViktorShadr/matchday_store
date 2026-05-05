@@ -1,0 +1,77 @@
+{% load static %}
+<footer id="contacts" class="sf-footer sf-footer--marketplace">
+    <div class="container">
+        <div class="sf-footer-top">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="sf-footer-brand">
+                        <div class="sf-footer-brand-mark">
+                            <img src="{% static 'img/favicon.ico' %}" alt="Логотип ФК Шинник">
+                        </div>
+                        <div>
+                            <h5 class="sf-footer-title mb-2">ФК «Шинник»</h5>
+                            <p class="sf-footer-text mb-3">
+                                Официальный магазин атрибутики клуба. Форма, одежда и аксессуары для болельщиков.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Покупателям</h6>
+                    <ul class="sf-footer-links">
+                        <li><a href="{% url 'store:product_list' %}">Каталог</a></li>
+                        <li><a href="{% url 'store:cart' %}">Корзина</a></li>
+                        <li><a href="{% url 'users:order_list' %}">Мои заказы</a></li>
+                        {% if legal_page_urls.return_policy %}
+                            <li><a href="{{ legal_page_urls.return_policy }}">Возврат</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Информация</h6>
+                    <ul class="sf-footer-links">
+                        {% if legal_page_urls.offer %}
+                            <li><a href="{{ legal_page_urls.offer }}">Оферта</a></li>
+                        {% endif %}
+                        {% if legal_page_urls.privacy_policy %}
+                            <li><a href="{{ legal_page_urls.privacy_policy }}">Конфиденциальность</a></li>
+                        {% endif %}
+                        {% if legal_page_urls.terms_of_service %}
+                            <li><a href="{{ legal_page_urls.terms_of_service }}">Пользовательское соглашение</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Помощь</h6>
+                    <ul class="sf-footer-links">
+                        <li><a href="mailto:support@matchday-store.com">Написать в поддержку</a></li>
+                        {% if legal_page_urls.return_policy %}
+                            <li><a href="{{ legal_page_urls.return_policy }}">Условия возврата</a></li>
+                        {% endif %}
+                        {% if legal_page_urls.offer %}
+                            <li><a href="{{ legal_page_urls.offer }}">Условия покупки</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-2">
+                    <h6 class="sf-footer-heading">Контакты</h6>
+                    <ul class="sf-footer-contacts">
+                        <li>Ярославль, стадион «Шинник»</li>
+                        <li><a href="mailto:support@matchday-store.com">support@matchday-store.com</a></li>
+                        <li>Ежедневно: 10:00 — 19:00</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="sf-footer-bottom">
+            <div class="sf-footer-bottom-row">
+                <div>© {% now "Y" %} ФК «Шинник»</div>
+                <div class="sf-footer-bottom-note">Официальный магазин атрибутики клуба • Ярославль</div>
+            </div>
+        </div>
+    </div>
+</footer>

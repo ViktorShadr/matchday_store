@@ -1,0 +1,74 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Категории товаров — ФК «Шинник»{% endblock %}
+{% block meta_description %}Категории официального магазина атрибутики ФК «Шинник».{% endblock %}
+
+{% block content %}
+<section class="sf-categories-page">
+    <div class="container">
+        <div class="sf-categories-hero">
+            <div>
+                <div class="sf-home-eyebrow">Структура каталога</div>
+                <h1 class="sf-categories-title">Категории товаров</h1>
+                <p class="sf-categories-lead">
+                    Выберите нужный раздел, чтобы быстрее перейти к подходящим товарам:
+                    одежде, аксессуарам, атрибутике и клубному мерчу.
+                </p>
+            </div>
+
+            <div class="sf-categories-hero-actions">
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Все товары
+                </a>
+            </div>
+        </div>
+
+        {% if categories %}
+            <div class="row g-4">
+                {% for category in categories %}
+                    <div class="col-12 col-sm-6 col-xl-4">
+                        <a href="{% url 'store:category_detail' pk=category.pk %}" class="sf-category-card">
+                            <div class="sf-category-card-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <path d="M20.5 5.5 12 2 3.5 5.5"></path>
+                                    <path d="M4 6v6c0 4.5 8 10 8 10s8-5.5 8-10V6"></path>
+                                </svg>
+                            </div>
+
+                            <div class="sf-category-card-body">
+                                <h2 class="sf-category-card-title">
+                                    {{ category.name|default:"Категория" }}
+                                </h2>
+
+                                {% if category.description %}
+                                    <p class="sf-category-card-text">
+                                        {{ category.description|striptags|truncatechars:120 }}
+                                    </p>
+                                {% else %}
+                                    <p class="sf-category-card-text">
+                                        Перейти к товарам категории и посмотреть доступные позиции.
+                                    </p>
+                                {% endif %}
+                            </div>
+
+                            <div class="sf-category-card-footer">
+                                <span class="sf-link">Открыть категорию</span>
+                            </div>
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="sf-empty-state sf-empty-state-lg">
+                <div class="sf-empty-state-title">Категории пока не добавлены</div>
+                <p class="sf-empty-state-text">
+                    Когда категории появятся, здесь будет удобный вход в структуру каталога.
+                </p>
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    Перейти к товарам
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Удаление товара — ФК «Шинник»{% endblock %}
+
+{% block content %}
+<section class="sf-admin-page">
+    <div class="container">
+        <div class="sf-admin-hero">
+            <div>
+                <div class="sf-home-eyebrow">Управление каталогом</div>
+                <h1 class="sf-admin-title">Удаление товара</h1>
+                <p class="sf-admin-lead">
+                    Подтверди удаление товарной позиции. Это действие лучше оформлять спокойно и понятно, без лишней драмы.
+                </p>
+            </div>
+
+            <div class="sf-admin-hero-actions">
+                {% if object %}
+                    <a href="{% url 'store:product_detail' pk=object.pk %}" class="btn btn-secondary">
+                        Открыть товар
+                    </a>
+                {% endif %}
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                    Назад в каталог
+                </a>
+            </div>
+        </div>
+
+        <div class="sf-delete-layout">
+            <div class="sf-delete-card">
+                <div class="sf-delete-badge">Подтверждение действия</div>
+
+                <h2 class="sf-delete-title">
+                    Удалить товар
+                    {% if object %}
+                        «{{ object.name }}»
+                    {% endif %}
+                    ?
+                </h2>
+
+                <p class="sf-delete-text">
+                    После подтверждения товар будет удалён из каталога. Перед удалением стоит убедиться,
+                    что он действительно больше не нужен в витрине магазина.
+                </p>
+
+                {% if object %}
+                    <div class="sf-delete-summary">
+                        <div class="sf-delete-summary-item">
+                            <div class="sf-delete-summary-label">Товар</div>
+                            <div class="sf-delete-summary-value">{{ object.name }}</div>
+                        </div>
+
+                        {% if object.category %}
+                            <div class="sf-delete-summary-item">
+                                <div class="sf-delete-summary-label">Категория</div>
+                                <div class="sf-delete-summary-value">
+                                    {{ object.category.name }}
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        {% if object.price %}
+                            <div class="sf-delete-summary-item">
+                                <div class="sf-delete-summary-label">Цена</div>
+                                <div class="sf-delete-summary-value">{{ object.price }} ₽</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="sf-delete-actions">
+                    {% csrf_token %}
+                    <a href="{% url 'store:product_list' %}" class="btn btn-secondary">
+                        Отмена
+                    </a>
+                    <button type="submit" class="btn btn-danger">
+                        Да, удалить товар
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+    <section class="sf-section">
+        <div class="container">
+            <div class="sf-section-head">
+                <h1 class="sf-section-title">{{ page_title }}</h1>
+                <a class="sf-link" href="{% url 'store:warehouse_dashboard' %}">К складу</a>
+            </div>
+
+            {% include 'dashboard/_tabs.html' %}
+
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-8">
+                    <div class="sf-surface p-4">
+                        <form method="post">
+                            {% csrf_token %}
+                            {{ form.non_field_errors }}
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ form.name.id_for_label }}">Название</label>
+                                {{ form.name }}
+                                {{ form.name.errors }}
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ form.description.id_for_label }}">Описание</label>
+                                {{ form.description }}
+                                {{ form.description.errors }}
+                            </div>
+                            <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

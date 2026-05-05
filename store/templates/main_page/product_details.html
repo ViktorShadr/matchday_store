@@ -1,0 +1,211 @@
+{% extends 'main_page/base.html' %}
+{% load static %}
+
+{% block title %}{{ product.name }} — ФК «Шинник»{% endblock %}
+{% block meta_description %}
+    {{ product.short_description|default:product.description|striptags|truncatechars:160 }}
+{% endblock %}
+
+{% block content %}
+<section class="sf-product-page">
+    <div class="container">
+        <div class="sf-product-layout">
+            {% with product_gallery_images|length as product_images_count %}
+                <div class="sf-product-gallery" data-sf-product-detail-gallery data-sf-gallery-count="{{ product_images_count }}">
+                    {% if product_images_count %}
+                        <div class="sf-product-gallery-main">
+                            <div class="swiper sf-product-gallery-main-swiper" data-sf-product-detail-main>
+                                <div class="swiper-wrapper">
+                                    {% for image in product_gallery_images %}
+                                        <div class="swiper-slide">
+                                            <a
+                                                href="{{ image.url }}"
+                                                class="sf-product-gallery-image-link"
+                                                data-fancybox="product-gallery-{{ product.pk }}"
+                                                data-caption="{{ image.alt|default:product.name }}"
+                                            >
+                                                <img
+                                                    src="{{ image.url }}"
+                                                    alt="{{ image.alt|default:product.name }}"
+                                                    class="sf-product-gallery-image"
+                                                    loading="{% if forloop.first %}eager{% else %}lazy{% endif %}"
+                                                    {% if forloop.first %}fetchpriority="high"{% endif %}
+                                                >
+                                            </a>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+
+                                {% if product_images_count > 1 %}
+                                    <button type="button" class="sf-product-gallery-nav sf-product-gallery-prev" aria-label="Предыдущее фото">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <path d="M15 18l-6-6 6-6"></path>
+                                        </svg>
+                                    </button>
+                                    <button type="button" class="sf-product-gallery-nav sf-product-gallery-next" aria-label="Следующее фото">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <path d="M9 18l6-6-6-6"></path>
+                                        </svg>
+                                    </button>
+                                    <div class="swiper-pagination sf-product-gallery-pagination"></div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if product_images_count > 1 %}
+                            <div class="swiper sf-product-thumbs-swiper" data-sf-product-detail-thumbs aria-label="Миниатюры фото товара">
+                                <div class="swiper-wrapper">
+                                    {% for image in product_gallery_images %}
+                                        <div class="swiper-slide">
+                                            <button type="button" class="sf-product-thumb" aria-label="Фото {{ forloop.counter }} из {{ product_images_count }}">
+                                                <img src="{{ image.url }}" alt="{{ image.alt|default:product.name }}" loading="lazy">
+                                            </button>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="sf-product-gallery-main">
+                            <div class="sf-product-gallery-placeholder">
+                                <div class="sf-product-gallery-placeholder-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                                        <circle cx="8.5" cy="9.5" r="1.5"></circle>
+                                        <path d="M21 15l-5-5L5 20"></path>
+                                    </svg>
+                                </div>
+                                <div class="sf-product-gallery-placeholder-text">
+                                    Изображение товара появится позже
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endwith %}
+
+            <div class="sf-product-info">
+                {% if product.category %}
+                    <div class="sf-product-category">
+                        {{ product.category.name }}
+                    </div>
+                {% endif %}
+
+                <h1 class="sf-product-title">{{ product.name }}</h1>
+
+                <div class="sf-product-meta-row">
+                    {% if product.in_stock %}
+                        <span class="sf-stock-badge sf-stock-badge--success">В наличии</span>
+                    {% else %}
+                        <span class="sf-stock-badge sf-stock-badge--muted">Нет в наличии</span>
+                    {% endif %}
+                </div>
+
+                {% if product.short_description %}
+                    <p class="sf-product-short-description">
+                        {{ product.short_description }}
+                    </p>
+                {% endif %}
+
+                <div class="sf-product-price-block">
+                    <div class="sf-price sf-price--xl">
+                        {% if product.display_price %}
+                            {{ product.display_price }} ₽
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+
+                    {% if product.old_price %}
+                        <div class="sf-price-old sf-price-old--lg">
+                            {{ product.old_price }} ₽
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="sf-product-actions">
+                    {% if available_variants %}
+                        <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-buy-form">
+                            {% csrf_token %}
+                            {% if available_variants|length > 1 %}
+                                <div class="mb-3">
+                                    <label class="form-label" for="variantSelect">Выберите вариант</label>
+                                    <select id="variantSelect" name="variant_id" class="form-select">
+                                        {% for variant in available_variants %}
+                                            <option value="{{ variant.id }}">
+                                                {{ variant.size|default:'Без размера' }} / {{ variant.color|default:'Без цвета' }} - {{ variant.price|floatformat:"-2" }} ₽
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            {% else %}
+                                <input type="hidden" name="variant_id" value="{{ available_variants.0.id }}">
+                                <div class="small text-muted mb-2">
+                                    Размер: {{ available_variants.0.size|default:'Без размера' }}
+                                    Цвет: {{ available_variants.0.color|default:'Без цвета' }}
+                                </div>
+                            {% endif %}
+                            <input type="hidden" name="quantity" value="1">
+                            <button type="submit" class="btn btn-primary btn-lg sf-product-main-cta">
+                                <span class="sf-product-main-cta-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="9" cy="20" r="1.4"></circle>
+                                        <circle cx="18" cy="20" r="1.4"></circle>
+                                        <path d="M3 4h2l2.2 10.2a1 1 0 0 0 .98.8h9.7a1 1 0 0 0 .97-.77L21 7H7"></path>
+                                    </svg>
+                                </span>
+                                <span>Добавить в корзину</span>
+                            </button>
+                        </form>
+                    {% else %}
+                        <button type="button" class="btn btn-secondary btn-lg sf-product-main-cta sf-product-main-cta--disabled" disabled>
+                            Временно недоступно
+                        </button>
+                    {% endif %}
+
+                    <a href="{% url 'store:product_list' %}" class="btn btn-secondary btn-lg sf-product-back-link">
+                        Вернуться в каталог
+                    </a>
+                </div>
+
+                <div class="sf-product-inline-description">
+                    <h2 class="sf-product-section-title sf-product-section-title--compact">Описание товара</h2>
+
+                    {% if product.description %}
+                        <div class="sf-product-description">
+                            {{ product.description|safe }}
+                        </div>
+                    {% else %}
+                        <div class="sf-empty-state text-start">
+                            Подробное описание товара пока не заполнено.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if related_products %}
+<section class="sf-section pt-0">
+    <div class="container">
+        <div class="sf-section-head">
+            <div>
+                <h2 class="sf-section-title">Похожие товары</h2>
+                <p class="sf-section-subtitle">
+                    Ещё несколько позиций, которые могут подойти к выбранному товару.
+                </p>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            {% for product in related_products %}
+                <div class="col-12 col-md-6 col-xl-4">
+                    {% include 'main_page/_product_card.html' with product=product %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
