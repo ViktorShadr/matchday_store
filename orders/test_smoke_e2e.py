@@ -1,9 +1,9 @@
 import os
 import time
 from decimal import Decimal
-from uuid import uuid4
 from unittest import skipUnless
 from unittest.mock import ANY, call, patch
+from uuid import uuid4
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, TransactionTestCase, tag
@@ -56,7 +56,9 @@ class SalesFlowSmokeE2ETest(TestCase):
         with (
             patch("users.views.send_confirmation_email") as mock_send_confirmation_email,
             patch("users.views.send_welcome_email") as mock_send_welcome_email,
-            patch("orders.application.order_notification_service.send_order_notification") as mock_send_order_notification,
+            patch(
+                "orders.application.order_notification_service.send_order_notification"
+            ) as mock_send_order_notification,
             patch(
                 "orders.application.order_notification_service.send_staff_new_order_notification"
             ) as mock_send_staff_new_order_notification,

@@ -8,46 +8,55 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('store', '0008_product_is_on_sale'),
+        ("store", "0008_product_is_on_sale"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='InfoCard',
+            name="InfoCard",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=255)),
-                ('text', models.TextField()),
-                ('icon', models.CharField(blank=True, max_length=100)),
-                ('sort_order', models.PositiveIntegerField(default=0)),
-                ('is_published', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("title", models.CharField(max_length=255)),
+                ("text", models.TextField()),
+                ("icon", models.CharField(blank=True, max_length=100)),
+                ("sort_order", models.PositiveIntegerField(default=0)),
+                ("is_published", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'verbose_name': 'Инфо-карточка',
-                'verbose_name_plural': 'Инфо-карточки',
-                'ordering': ['sort_order', 'id'],
+                "verbose_name": "Инфо-карточка",
+                "verbose_name_plural": "Инфо-карточки",
+                "ordering": ["sort_order", "id"],
             },
         ),
         migrations.CreateModel(
-            name='Page',
+            name="Page",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('slug', models.SlugField(max_length=150, unique=True)),
-                ('title', models.CharField(max_length=255)),
-                ('lead', models.TextField(blank=True)),
-                ('content', models.TextField()),
-                ('is_published', models.BooleanField(default=False)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('updated_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='updated_store_pages', to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("slug", models.SlugField(max_length=150, unique=True)),
+                ("title", models.CharField(max_length=255)),
+                ("lead", models.TextField(blank=True)),
+                ("content", models.TextField()),
+                ("is_published", models.BooleanField(default=False)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "updated_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="updated_store_pages",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Страница',
-                'verbose_name_plural': 'Страницы',
-                'ordering': ['slug'],
+                "verbose_name": "Страница",
+                "verbose_name_plural": "Страницы",
+                "ordering": ["slug"],
             },
         ),
     ]

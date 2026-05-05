@@ -20,4 +20,3 @@ def set_request_id(value: str | None) -> Token:
 
 def reset_request_id(token: Token) -> None:
     _request_id.reset(token)
-

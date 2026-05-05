@@ -2,12 +2,12 @@ from django.views.generic import TemplateView
 
 from store.application import CartContextResolver
 from store.mixins.cart_mixins import CartContextMixin
+from store.services import CartDisplayService
 from store.services.cart_service import CartService
 
 # Глобальный экземпляр для обратной совместимости
 cart_service = CartService()
 cart_context_resolver = CartContextResolver()
-from store.services import CartDisplayService
 
 
 class CartView(CartContextMixin, TemplateView):

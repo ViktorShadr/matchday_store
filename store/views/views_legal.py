@@ -6,7 +6,6 @@ from django.views.generic import TemplateView
 from store.mixins.cart_mixins import CartContextMixin
 from store.models import Page
 
-
 LEGAL_PAGE_ROUTES = (
     ("privacy-policy", "store:privacy_policy"),
     ("terms-of-service", "store:terms_of_service"),
@@ -83,6 +82,7 @@ class OfferView(LegalPageView):
 
 class Error404View(TemplateView):
     """Кастомная страница 404"""
+
     template_name = "main_page/404.html"
 
     def get_context_data(self, **kwargs):
@@ -96,6 +96,7 @@ class Error404View(TemplateView):
 
 class Error500View(TemplateView):
     """Кастомная страница 500"""
+
     template_name = "main_page/500.html"
 
     def get_context_data(self, **kwargs):
@@ -111,10 +112,12 @@ class Error500View(TemplateView):
 def error_404_view(request, exception=None):
     """Обработчик 404 ошибки"""
     from django.shortcuts import render
+
     return render(request, "main_page/404.html", status=404)
 
 
 def error_500_view(request):
     """Обработчик 500 ошибки"""
     from django.shortcuts import render
+
     return render(request, "main_page/500.html", status=500)

@@ -1,9 +1,8 @@
-from django.urls import reverse
 from django.db.utils import OperationalError, ProgrammingError
+from django.urls import reverse
 
 from store.models import Page
 from store.services import PermissionService
-
 
 LEGAL_PAGE_URLS = (
     ("privacy-policy", "privacy_policy"),

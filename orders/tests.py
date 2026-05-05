@@ -4,12 +4,13 @@ from decimal import Decimal
 from io import StringIO
 from threading import Event
 from time import sleep
+from unittest.mock import patch
 
 from django.conf import settings
-from django.core.management import call_command, CommandError
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.cache import cache
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import CommandError, call_command
 from django.db import close_old_connections
 from django.test import (
     RequestFactory,
@@ -21,7 +22,6 @@ from django.test import (
 )
 from django.urls import reverse
 from django.utils import timezone
-from unittest.mock import patch
 
 from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService
 from orders.forms import CheckoutForm
@@ -671,6 +671,7 @@ class CheckoutFlowTest(TestCase):
             last_name="Сергеев",
             phone="+79990002233",
             is_active=True,
+            is_email_confirmed=True,
         )
         second_cart = Cart.objects.create(user=second_user)
         CartItem.objects.create(cart=second_cart, product_variant=self.variant, quantity=1)
@@ -1200,6 +1201,7 @@ class OrderConcurrencyTest(TransactionTestCase):
             last_name="Параллельный",
             phone="+79990000001",
             is_active=True,
+            is_email_confirmed=True,
         )
         category = Category.objects.create(name="Параллельные тесты")
         product = Product.objects.create(name="Параллельный товар", category=category)
@@ -1372,6 +1374,7 @@ class OrderConcurrencyTest(TransactionTestCase):
                 last_name=str(index),
                 phone="+79990000001",
                 is_active=True,
+                is_email_confirmed=True,
             )
             cart = Cart.objects.create(user=user)
             CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=1)

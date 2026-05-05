@@ -1,8 +1,8 @@
 from django.contrib import admin, messages
 from django.contrib.auth.models import Group
 from django.http import HttpResponseRedirect
-from django.urls import reverse
 from django.shortcuts import render
+from django.urls import reverse
 
 from users.models import User
 
@@ -86,9 +86,10 @@ class ModeratorGroupAdmin(admin.ModelAdmin):
         """Отображает страницу списка объектов в админке."""
         moderator_group = Group.objects.filter(name="Модераторы").first()
         if not moderator_group:
+            create_group_command = "python manage.py create_moderator_group"
             messages.error(
                 request,
-                'Группа "Модераторы" не найдена. Создайте её с помощью команды: python manage.py create_moderator_group',
+                f'Группа "Модераторы" не найдена. Создайте её с помощью команды: {create_group_command}',
             )
             return super().changelist_view(request, extra_context)
 

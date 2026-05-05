@@ -4,15 +4,15 @@ from users.views import (
     CustomLoginView,
     CustomLogoutView,
     CustomRegistrationView,
-    ProfileDetailView,
-    ProfileUpdateView,
-    ProfileDeleteView,
-    ProfileList,
-    UserOrderListView,
-    UserOrderDetailView,
-    UserOrderCancelView,
     EmailConfirmationView,
+    ProfileDeleteView,
+    ProfileDetailView,
+    ProfileList,
+    ProfileUpdateView,
     ResendOwnConfirmationEmailView,
+    UserOrderCancelView,
+    UserOrderDetailView,
+    UserOrderListView,
 )
 
 app_name = "users"

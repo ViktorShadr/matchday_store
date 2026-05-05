@@ -1,6 +1,5 @@
 from django.db import migrations
 
-
 LEGAL_PAGES = [
     {
         "slug": "privacy-policy",
@@ -256,7 +255,7 @@ def unseed_cms_content(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('store', '0009_add_cms_models'),
+        ("store", "0009_add_cms_models"),
     ]
 
     operations = [

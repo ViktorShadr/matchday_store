@@ -1,28 +1,29 @@
 import logging
+
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
-from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 
 from store.application import CartContextResolver
+from store.services.cart_exceptions import (
+    CartException,
+    CartOperationError,
+    InsufficientStockError,
+    InvalidQuantityError,
+    ProductNotOnSaleError,
+    ProductVariantNotFoundError,
+)
 from store.services.cart_service import CartService
+from store.services.cart_validator import CartValidator
 
 # Глобальный экземпляр для обратной совместимости
 cart_service = CartService()
 cart_context_resolver = CartContextResolver()
-from store.services.cart_validator import CartValidator
-from store.services.cart_exceptions import (
-    CartException,
-    ProductVariantNotFoundError,
-    ProductNotOnSaleError,
-    InvalidQuantityError,
-    InsufficientStockError,
-    CartOperationError,
-)
 
 logger = logging.getLogger(__name__)
 

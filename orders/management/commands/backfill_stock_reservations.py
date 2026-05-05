@@ -53,8 +53,7 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             locked_variants = {
-                variant.pk: variant
-                for variant in ProductVariant.objects.select_for_update().order_by("pk")
+                variant.pk: variant for variant in ProductVariant.objects.select_for_update().order_by("pk")
             }
             demand_by_variant = self._get_active_order_demand()
 
@@ -114,7 +113,4 @@ class Command(BaseCommand):
             .annotate(required_reserved=Sum("quantity"))
             .order_by("product_variant_id")
         )
-        return {
-            row["product_variant_id"]: row["required_reserved"] or 0
-            for row in rows
-        }
+        return {row["product_variant_id"]: row["required_reserved"] or 0 for row in rows}

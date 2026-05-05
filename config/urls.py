@@ -1,7 +1,8 @@
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
+
 from config.health import healthz_view
 
 urlpatterns = [
@@ -13,8 +14,8 @@ urlpatterns = [
 ]
 
 # Custom error handlers
-handler404 = 'store.views.views_legal.error_404_view'
-handler500 = 'store.views.views_legal.error_500_view'
+handler404 = "store.views.views_legal.error_404_view"
+handler500 = "store.views.views_legal.error_500_view"
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

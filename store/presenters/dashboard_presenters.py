@@ -79,11 +79,23 @@ class DashboardOrderPresenter:
         (Order.PaymentStatus.REFUNDED, "Возврат выполнен"),
     )
     PAYMENT_STATUS_META = {
-        Order.PaymentStatus.PENDING: {"label": "Ожидает оплаты", "badge_class": "sf-status-badge sf-status-badge--warning"},
+        Order.PaymentStatus.PENDING: {
+            "label": "Ожидает оплаты",
+            "badge_class": "sf-status-badge sf-status-badge--warning",
+        },
         Order.PaymentStatus.SUCCEEDED: {"label": "Оплачен", "badge_class": "sf-status-badge sf-status-badge--success"},
-        Order.PaymentStatus.FAILED: {"label": "Ошибка оплаты", "badge_class": "sf-status-badge sf-status-badge--danger"},
-        Order.PaymentStatus.CANCELLED: {"label": "Оплата отменена", "badge_class": "sf-status-badge sf-status-badge--dark"},
-        Order.PaymentStatus.REFUNDED: {"label": "Возврат выполнен", "badge_class": "sf-status-badge sf-status-badge--info"},
+        Order.PaymentStatus.FAILED: {
+            "label": "Ошибка оплаты",
+            "badge_class": "sf-status-badge sf-status-badge--danger",
+        },
+        Order.PaymentStatus.CANCELLED: {
+            "label": "Оплата отменена",
+            "badge_class": "sf-status-badge sf-status-badge--dark",
+        },
+        Order.PaymentStatus.REFUNDED: {
+            "label": "Возврат выполнен",
+            "badge_class": "sf-status-badge sf-status-badge--info",
+        },
     }
 
     @classmethod
@@ -109,10 +121,7 @@ class DashboardOrderPresenter:
     def get_available_status_choices(cls, order: Order) -> list[tuple[str, str, bool]]:
         current_status_key = cls.get_status_key(order)
         allowed_transitions = cls.STATUS_TRANSITIONS[current_status_key]
-        return [
-            (value, label, value in allowed_transitions)
-            for value, label in cls.STATUS_CHOICES
-        ]
+        return [(value, label, value in allowed_transitions) for value, label in cls.STATUS_CHOICES]
 
     @classmethod
     def build_staff_guidance(cls, order: Order) -> list[str]:

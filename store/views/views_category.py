@@ -3,7 +3,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from store.mixins import ModeratorRequiredMixin
 from store.models import Category
-from store.services import PermissionService, CategoryService, ProductDisplayService
+from store.services import CategoryService, PermissionService, ProductDisplayService
 from store.services.catalog_service import enrich_products
 
 

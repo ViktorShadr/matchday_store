@@ -1,4 +1,5 @@
 from typing import Optional
+
 from django.db.models import QuerySet
 
 from store.models import Cart, CartItem, ProductVariant
@@ -35,17 +36,13 @@ class CartRepository(ICartRepository):
         self, cart: Cart, product_variant: ProductVariant, defaults: dict
     ) -> tuple[CartItem, bool]:
         """Получить или создать элемент корзины."""
-        return CartItem.objects.get_or_create(
-            cart=cart, product_variant=product_variant, defaults=defaults
-        )
+        return CartItem.objects.get_or_create(cart=cart, product_variant=product_variant, defaults=defaults)
 
     def update_or_create_cart_item(
         self, cart: Cart, product_variant: ProductVariant, defaults: dict
     ) -> tuple[CartItem, bool]:
         """Обновить или создать элемент корзины."""
-        return CartItem.objects.update_or_create(
-            cart=cart, product_variant=product_variant, defaults=defaults
-        )
+        return CartItem.objects.update_or_create(cart=cart, product_variant=product_variant, defaults=defaults)
 
     def delete_cart_item(self, cart: Cart, product_variant_id: int) -> bool:
         """Удалить элемент корзины."""

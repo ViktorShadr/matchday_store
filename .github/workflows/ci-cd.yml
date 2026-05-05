@@ -1,0 +1,182 @@
+name: CI-CD
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  POETRY_VERSION: "2.3.2"
+
+jobs:
+  ci:
+    name: CI checks and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: matchday_store_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d matchday_store_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SECRET_KEY: django-insecure-ci-only
+      DEBUG: "True"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      CSRF_TRUSTED_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
+      SITE_URL: http://localhost:8000
+      DB_NAME: matchday_store_ci
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/0
+      CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/0
+      CACHE_URL: redis://127.0.0.1:6379/1
+      EMAIL_HOST_USER: ""
+      EMAIL_HOST_PASSWORD: ""
+      DEFAULT_FROM_EMAIL: noreply@example.com
+      STAFF_ORDER_NOTIFICATION_EMAILS: ""
+      SENTRY_DSN: ""
+      LOG_JSON: "False"
+      RUN_SMOKE_E2E: "0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: poetry
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Validate Poetry metadata
+        run: poetry check --lock
+
+      - name: Install dependencies
+        run: poetry install --with lint --no-interaction --no-ansi --no-root
+
+      - name: Run Black check
+        timeout-minutes: 5
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            .venv/bin/black --check --target-version py312 "$file" || status=$?
+          done < <(find config store users orders payments -name '*.py' -print0)
+          .venv/bin/black --check --target-version py312 manage.py || status=$?
+          exit "$status"
+
+      - name: Run isort check
+        timeout-minutes: 5
+        run: .venv/bin/isort --check-only config store users orders payments manage.py
+
+      - name: Run flake8 check
+        timeout-minutes: 5
+        run: >-
+          .venv/bin/flake8
+          config store users orders payments manage.py
+          --exclude=.git,.venv,__pycache__,staticfiles,media,*/migrations/*
+          --max-line-length=119
+          --extend-ignore=E203,W503
+
+      - name: Check migrations
+        run: .venv/bin/python manage.py makemigrations --check --dry-run
+
+      - name: Run Django system check
+        run: .venv/bin/python manage.py check
+
+      - name: Run Django tests
+        run: .venv/bin/python manage.py test --verbosity 2
+
+  docker:
+    name: Docker build and GHCR push
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: ci
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Normalize image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/matchday_store:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image (develop) / Build and push image (main)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.image.outputs.name }}
+
+  deploy:
+    name: Deploy to production server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          port: ${{ secrets.SERVER_PORT }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd /opt/matchday_store
+            docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" -p "${{ secrets.GHCR_TOKEN }}"
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f

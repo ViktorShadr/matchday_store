@@ -1,6 +1,5 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 
-
 MODERATOR_GROUP_NAMES = ("Модераторы", "moderators")
 
 

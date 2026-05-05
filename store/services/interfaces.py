@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 
 class ICheckoutService(ABC):
     """Интерфейс для сервиса оформления заказа (ISP)."""
