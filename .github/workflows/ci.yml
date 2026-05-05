@@ -75,14 +75,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: poetry
-
-      - name: Install Poetry
-        run: python -m pip install "poetry==${POETRY_VERSION}"
 
       - name: Configure Poetry
         run: poetry config virtualenvs.in-project true
