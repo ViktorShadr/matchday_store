@@ -671,6 +671,7 @@ class CheckoutFlowTest(TestCase):
             last_name="Сергеев",
             phone="+79990002233",
             is_active=True,
+            is_email_confirmed=True,
         )
         second_cart = Cart.objects.create(user=second_user)
         CartItem.objects.create(cart=second_cart, product_variant=self.variant, quantity=1)
@@ -1200,6 +1201,7 @@ class OrderConcurrencyTest(TransactionTestCase):
             last_name="Параллельный",
             phone="+79990000001",
             is_active=True,
+            is_email_confirmed=True,
         )
         category = Category.objects.create(name="Параллельные тесты")
         product = Product.objects.create(name="Параллельный товар", category=category)
@@ -1372,6 +1374,7 @@ class OrderConcurrencyTest(TransactionTestCase):
                 last_name=str(index),
                 phone="+79990000001",
                 is_active=True,
+                is_email_confirmed=True,
             )
             cart = Cart.objects.create(user=user)
             CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=1)
