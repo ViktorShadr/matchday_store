@@ -71,7 +71,6 @@ class ProductImageForm(forms.ModelForm):
         model = ProductImage
         fields = ["image", "alt_text", "is_primary"]
         widgets = {
-            "image": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "image": forms.ClearableFileInput(
                 attrs={
                     "class": "form-control",

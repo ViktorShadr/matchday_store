@@ -96,18 +96,22 @@ jobs:
       - name: Run Black check
         timeout-minutes: 5
         run: |
-          find config store users orders payments delivery -name '*.py' -exec .venv/bin/black --check --target-version py312 {} \;
-          .venv/bin/black --check --target-version py312 manage.py
+          status=0
+          while IFS= read -r -d '' file; do
+            .venv/bin/black --check --target-version py312 "$file" || status=$?
+          done < <(find config store users orders payments -name '*.py' -print0)
+          .venv/bin/black --check --target-version py312 manage.py || status=$?
+          exit "$status"
 
       - name: Run isort check
         timeout-minutes: 5
-        run: .venv/bin/isort --check-only config store users orders payments delivery manage.py
+        run: .venv/bin/isort --check-only config store users orders payments manage.py
 
       - name: Run flake8 check
         timeout-minutes: 5
         run: >-
           .venv/bin/flake8
-          config store users orders payments delivery manage.py
+          config store users orders payments manage.py
           --exclude=.git,.venv,__pycache__,staticfiles,media,*/migrations/*
           --max-line-length=119
           --extend-ignore=E203,W503

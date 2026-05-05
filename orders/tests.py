@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor
-from decimal import Decimal
 from datetime import datetime
 from decimal import Decimal
 from io import StringIO
@@ -8,12 +7,10 @@ from time import sleep
 from unittest.mock import patch
 
 from django.conf import settings
-from django.core.management import call_command, CommandError
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.cache import cache
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import CommandError, call_command
 from django.db import close_old_connections
 from django.test import (
     RequestFactory,
