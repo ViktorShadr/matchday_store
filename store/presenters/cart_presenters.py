@@ -31,7 +31,7 @@ class CartItemPresenter:
             "price": variant.price,
             "price_formatted": f"{variant.price} ₽",
             "quantity": cart_item.quantity,
-            "max_quantity": variant.quantity,
+            "max_quantity": variant.available_quantity,
             "total_price": cart_item.total_price,
             "total_price_formatted": f"{cart_item.total_price} ₽",
             "image": getattr(variant.image.image if variant.image else None, "url", None),

@@ -26,7 +26,7 @@ class ProductAdmin(admin.ModelAdmin):
 class ProductVariantAdmin(admin.ModelAdmin):
     """Настройки админ-интерфейса для ProductVariant."""
 
-    list_display = ["product", "size", "color", "price", "quantity"]
+    list_display = ["product", "size", "color", "price", "quantity", "reserved_quantity", "available_quantity"]
     list_filter = ["size", "color", "product"]
     search_fields = ["product__name", "size", "color"]
     ordering = ["product", "size", "color"]

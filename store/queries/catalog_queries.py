@@ -1,4 +1,4 @@
-from django.db.models import Min, Prefetch, Q, Sum, Value
+from django.db.models import F, Min, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 
 from store.models import Product, ProductVariant
@@ -33,7 +33,10 @@ class CatalogQueryService:
 
         if sort in {"price_asc", "price_desc"}:
             queryset = queryset.annotate(
-                min_available_variant_price=Min("variants__price", filter=Q(variants__quantity__gt=0)),
+                min_available_variant_price=Min(
+                    "variants__price",
+                    filter=Q(variants__quantity__gt=F("variants__reserved_quantity")),
+                ),
                 min_variant_price=Coalesce("min_available_variant_price", Min("variants__price")),
             )
 

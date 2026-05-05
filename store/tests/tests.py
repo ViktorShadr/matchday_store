@@ -1,14 +1,22 @@
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
-from django.test import TestCase, Client
-from django.urls import reverse
-from users.models import User
-from django.core.management import call_command
+from io import BytesIO
+
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.db import close_old_connections
+from django.test import Client, TestCase, TransactionTestCase, skipUnlessDBFeature
+from django.urls import reverse
 from django.contrib.auth.models import Group
+from PIL import Image
 
 from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.models import Payment
+from store.application import CartContextResolver
+from store.forms import ProductImageForm, ProductVariantForm
 from store.models import Cart, CartItem, Category, Product, ProductVariant, ProductImage
+from users.models import User
 
 
 class CategoryModelTest(TestCase):
@@ -90,6 +98,53 @@ class ProductImageModelTest(TestCase):
         self.assertEqual(str(self.image), expected)
 
 
+class ProductImageFormValidationTest(TestCase):
+    """Тесты ограничений загрузки изображений товара."""
+
+    @staticmethod
+    def _image_upload(name="product.png", content_type="image/png", extra_bytes=b""):
+        image_buffer = BytesIO()
+        Image.new("RGB", (1, 1), color="white").save(image_buffer, format="PNG")
+        return SimpleUploadedFile(name, image_buffer.getvalue() + extra_bytes, content_type=content_type)
+
+    def test_accepts_valid_image(self):
+        form = ProductImageForm(
+            data={"alt_text": "Фото товара", "is_primary": "on"},
+            files={"image": self._image_upload()},
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_rejects_file_above_size_limit(self):
+        form = ProductImageForm(
+            data={"alt_text": "Большое фото", "is_primary": ""},
+            files={"image": self._image_upload(extra_bytes=b"0" * ProductImageForm.MAX_FILE_SIZE)},
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("image", form.errors)
+        self.assertIn("Размер изображения", str(form.errors["image"]))
+
+    def test_rejects_spoofed_non_image_file(self):
+        form = ProductImageForm(
+            data={"alt_text": "Не фото", "is_primary": ""},
+            files={"image": SimpleUploadedFile("product.jpg", b"not an image", content_type="image/jpeg")},
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("image", form.errors)
+
+    def test_rejects_disallowed_extension(self):
+        form = ProductImageForm(
+            data={"alt_text": "Файл", "is_primary": ""},
+            files={"image": self._image_upload(name="product.bmp", content_type="image/png")},
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("image", form.errors)
+        self.assertIn("Допустимые форматы", str(form.errors["image"]))
+
+
 class ProductVariantModelTest(TestCase):
     """Тесты для ProductVariantModelTest."""
 
@@ -125,16 +180,36 @@ class ProductVariantModelTest(TestCase):
                 product=self.product, size="L", color="Красный", price=Decimal("1999.99"), quantity=5, image=self.image
             )
 
-    def test_product_variant_price_validator(self):
-        # Проверяем, что отрицательная цена не проходит валидацию при full_clean
+    def test_product_variant_price_validator_rejects_non_positive_values(self):
         """Проверяет сценарий 'product variant price validator'."""
-        from django.core.exceptions import ValidationError
+        invalid_prices = [Decimal("-100"), Decimal("0.00")]
+        for price in invalid_prices:
+            with self.subTest(price=price):
+                variant = ProductVariant(
+                    product=self.product,
+                    size="M",
+                    color="Синий",
+                    price=price,
+                    quantity=5,
+                    image=self.image,
+                )
+                with self.assertRaises(ValidationError):
+                    variant.full_clean()
 
-        variant = ProductVariant(
-            product=self.product, size="M", color="Синий", price=Decimal("-100"), quantity=5, image=self.image
+    def test_product_variant_form_rejects_zero_price(self):
+        form = ProductVariantForm(
+            data={
+                "size": "M",
+                "color": "Синий",
+                "price": "0.00",
+                "quantity": "5",
+                "image": "",
+            },
+            product=self.product,
         )
-        with self.assertRaises(ValidationError):
-            variant.full_clean()
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("price", form.errors)
 
 
 class MainViewTest(TestCase):
@@ -281,10 +356,15 @@ class ProductListViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         products = list(response.context["products"])
-        lower_priced_index = next(index for index, product in enumerate(products) if product.pk == lower_priced_product.pk)
+        lower_priced_index = next(
+            index for index, product in enumerate(products) if product.pk == lower_priced_product.pk
+        )
         conflicted_index = next(index for index, product in enumerate(products) if product.pk == conflicted_product.pk)
         self.assertLess(lower_priced_index, conflicted_index)
-        self.assertEqual(next(product.display_price for product in products if product.pk == conflicted_product.pk), Decimal("1005.00"))
+        self.assertEqual(
+            next(product.display_price for product in products if product.pk == conflicted_product.pk),
+            Decimal("1005.00"),
+        )
 
     def test_product_list_sort_by_name_asc(self):
         """Список должен сортироваться по названию А-Я."""
@@ -730,6 +810,7 @@ class DashboardOrdersManagementTest(TestCase):
             color="Синий",
             price=Decimal("1500.00"),
             quantity=10,
+            reserved_quantity=1,
         )
         self.order = Order.objects.create(
             number="ORD-TEST-0001",
@@ -830,11 +911,12 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.status, Order.Status.DELIVERED)
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
         self.assertIsNotNone(self.order.issued_at)
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 9)
+        self.assertEqual(self.variant.reserved_quantity, 0)
 
     def test_order_cancel_from_dashboard_uses_cancellation_service(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
-        self.variant.quantity = 9
-        self.variant.save(update_fields=["quantity", "updated_at"])
 
         response = self.client.post(
             reverse("store:dashboard_order_status_update", kwargs={"pk": self.order.pk}),
@@ -849,6 +931,7 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertIsNotNone(self.order.cancelled_at)
         self.assertEqual(self.variant.quantity, 10)
+        self.assertEqual(self.variant.reserved_quantity, 0)
 
     def test_cancelled_order_cannot_be_reopened_from_dashboard(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
@@ -1131,7 +1214,7 @@ class CartPageRenderingTest(TestCase):
         response = self.client.get(reverse("store:cart"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Данный товар закончился")
+        self.assertContains(response, "Товар снят с продажи")
         self.assertNotContains(
             response,
             reverse("store:product_detail", kwargs={"pk": self.product.pk}),
@@ -1271,4 +1354,64 @@ class CartMergeOnLoginSignalTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Cart.objects.filter(pk=session_cart.pk).exists())
         merged_item = CartItem.objects.get(cart=user_cart, product_variant=self.variant)
+        self.assertEqual(merged_item.quantity, 5)
+
+
+@skipUnlessDBFeature("has_select_for_update")
+class CartMergeConcurrencyTest(TransactionTestCase):
+    """Тесты конкурентного объединения корзин."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="merge-parallel@example.com",
+            password="mergepass123",
+            is_active=True,
+        )
+        category = Category.objects.create(name="Параллельный мерч")
+        product = Product.objects.create(name="Параллельный шарф", category=category)
+        image = ProductImage.objects.create(
+            product=product,
+            image=SimpleUploadedFile("parallel-merge.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("1200.00"),
+            quantity=5,
+            image=image,
+        )
+        self.user_cart = Cart.objects.create(user=self.user)
+        CartItem.objects.create(cart=self.user_cart, product_variant=self.variant, quantity=2)
+        self.session_cart = Cart.objects.create(session_key="parallel-session")
+        CartItem.objects.create(cart=self.session_cart, product_variant=self.variant, quantity=4)
+
+    @staticmethod
+    def _merge_once(user_cart_id, session_key):
+        close_old_connections()
+        try:
+            user_cart = Cart.objects.get(pk=user_cart_id)
+            CartContextResolver().merge_session_cart_into_user_cart(user_cart, session_key)
+            return "ok"
+        except Exception as exc:
+            return f"error:{exc}"
+        finally:
+            close_old_connections()
+
+    def test_parallel_merge_same_session_cart_is_idempotent(self):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(
+                executor.map(
+                    lambda _: self._merge_once(self.user_cart.pk, "parallel-session"),
+                    range(2),
+                )
+            )
+
+        self.assertEqual(results, ["ok", "ok"])
+        self.assertFalse(Cart.objects.filter(pk=self.session_cart.pk).exists())
+        self.assertEqual(CartItem.objects.filter(cart=self.user_cart, product_variant=self.variant).count(), 1)
+        merged_item = CartItem.objects.get(cart=self.user_cart, product_variant=self.variant)
         self.assertEqual(merged_item.quantity, 5)

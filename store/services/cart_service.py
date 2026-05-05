@@ -84,15 +84,16 @@ class CartService:
             if not product_variant.product.is_on_sale:
                 raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
 
-            # Проверяем наличие товара
-            if product_variant.quantity < quantity:
+            available_quantity = product_variant.available_quantity
+            # Проверяем доступный остаток с учетом резервов активных заказов.
+            if available_quantity < quantity:
                 logger.warning(
                     f"Insufficient stock: variant {product_variant_id}, "
-                    f"available {product_variant.quantity}, requested {quantity}"
+                    f"available {available_quantity}, requested {quantity}"
                 )
                 raise InsufficientStockError(
-                    f"Недостаточно товара на складе. Доступно: {product_variant.quantity}",
-                    available_quantity=product_variant.quantity,
+                    f"Недостаточно товара на складе. Доступно: {available_quantity}",
+                    available_quantity=available_quantity,
                 )
 
             cart_item, created = self.cart_repository.get_or_create_cart_item(
@@ -103,14 +104,14 @@ class CartService:
                 # Товар уже в корзине, обновляем количество
                 new_quantity = cart_item.quantity + quantity
 
-                if product_variant.quantity < new_quantity:
+                if available_quantity < new_quantity:
                     logger.warning(
                         f"Insufficient stock for update: variant {product_variant_id}, "
-                        f"available {product_variant.quantity}, requested {new_quantity}"
+                        f"available {available_quantity}, requested {new_quantity}"
                     )
                     raise InsufficientStockError(
-                        f"Недостаточно товара на складе. Доступно: {product_variant.quantity}",
-                        available_quantity=product_variant.quantity,
+                        f"Недостаточно товара на складе. Доступно: {available_quantity}",
+                        available_quantity=available_quantity,
                     )
 
                 cart_item.quantity = new_quantity
@@ -161,14 +162,15 @@ class CartService:
             if quantity < 1:
                 raise ValueError("Количество должно быть больше 0")
 
-            if product_variant.quantity < quantity:
+            available_quantity = product_variant.available_quantity
+            if available_quantity < quantity:
                 logger.warning(
                     f"Insufficient stock for update: variant {product_variant_id}, "
-                    f"available {product_variant.quantity}, requested {quantity}"
+                    f"available {available_quantity}, requested {quantity}"
                 )
                 raise InsufficientStockError(
-                    f"Недостаточно товара на складе. Доступно: {product_variant.quantity}",
-                    available_quantity=product_variant.quantity,
+                    f"Недостаточно товара на складе. Доступно: {available_quantity}",
+                    available_quantity=available_quantity,
                 )
 
             cart_item, created = self.cart_repository.update_or_create_cart_item(
@@ -246,12 +248,21 @@ class CartService:
         ).prefetch_related('product_variant__product__images').all():
             variant = item.product_variant
             product = variant.product
-            in_stock = variant.quantity > 0
+            available_quantity = variant.available_quantity
+            in_stock = available_quantity > 0
             is_available = bool(product.is_on_sale and in_stock)
+            has_requested_quantity = item.quantity <= available_quantity
             size = _clean_variant_value(variant.size)
             color = _clean_variant_value(variant.color)
             variant_parts = [part for part in (size, color) if part]
             variant_label = " / ".join(variant_parts)
+            availability_message = ""
+            if not product.is_on_sale:
+                availability_message = "Товар снят с продажи"
+            elif not in_stock:
+                availability_message = "Данный товар закончился"
+            elif not has_requested_quantity:
+                availability_message = f"Доступно: {available_quantity} шт."
 
             # Get product image
             image_url = None
@@ -273,10 +284,10 @@ class CartService:
                 'total_price': item.total_price,
                 'total_price_formatted': f"{item.total_price:,}".replace(",", " "),
                 'image': image_url,
-                'max_quantity': variant.quantity if is_available else 0,
+                'max_quantity': available_quantity if is_available else 0,
                 'is_available': is_available,
                 'is_on_sale': product.is_on_sale,
                 'in_stock': in_stock,
-                'availability_message': "" if is_available else "Данный товар закончился",
+                'availability_message': availability_message,
             })
         return items

@@ -2,9 +2,9 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
-from store.models import Cart
+from store.models import Cart, CartItem
 from store.repositories import CartRepository, ICartRepository
 from store.services.cart_exceptions import CartOperationError
 
@@ -81,14 +81,43 @@ class CartContextResolver:
             if not session_cart:
                 return
 
-            for item in session_cart.items.select_related("product_variant").all():
-                available_quantity = item.product_variant.quantity
+            locked_carts = {
+                cart.pk: cart
+                for cart in Cart.objects.select_for_update()
+                .filter(pk__in=[user_cart.pk, session_cart.pk])
+                .order_by("pk")
+            }
+            locked_user_cart = locked_carts.get(user_cart.pk)
+            locked_session_cart = locked_carts.get(session_cart.pk)
+            if locked_user_cart is None or locked_session_cart is None:
+                return
+
+            items = list(
+                locked_session_cart.items.select_related("product_variant").select_for_update().order_by("pk")
+            )
+
+            for item in items:
+                available_quantity = item.product_variant.available_quantity
                 if available_quantity < 1:
                     continue
 
-                cart_item, created = self.cart_repository.get_or_create_cart_item(
-                    user_cart, item.product_variant, {"quantity": item.quantity}
+                cart_item = (
+                    locked_user_cart.items.select_for_update().filter(product_variant=item.product_variant).first()
                 )
+                created = False
+                if cart_item is None:
+                    try:
+                        with transaction.atomic():
+                            cart_item = CartItem.objects.create(
+                                cart=locked_user_cart,
+                                product_variant=item.product_variant,
+                                quantity=item.quantity,
+                            )
+                            created = True
+                    except IntegrityError:
+                        cart_item = locked_user_cart.items.select_for_update().get(
+                            product_variant=item.product_variant
+                        )
 
                 if created and cart_item.quantity > available_quantity:
                     cart_item.quantity = available_quantity
@@ -105,7 +134,7 @@ class CartContextResolver:
                         cart_item.quantity,
                     )
 
-            self.cart_repository.delete_cart(session_cart)
+            self.cart_repository.delete_cart(locked_session_cart)
             logger.info("Session cart %s... merged and deleted", session_key[:8])
         except Exception as exc:
             logger.error("Error merging carts: %s", exc, exc_info=True)

@@ -749,9 +749,9 @@ class UserViewsTest(TestCase):
         self.assertNotContains(response, "В обработке")
 
     def test_user_can_cancel_own_order_from_orders_page(self):
-        """Отмена из UI должна проходить через доменный сервис и возвращать остатки."""
-        self.variant.quantity = 8
-        self.variant.save(update_fields=["quantity"])
+        """Отмена из UI должна проходить через доменный сервис и снимать резерв."""
+        self.variant.reserved_quantity = 2
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
         order = Order.objects.create(
             number="ORD-CANCEL-UI-1",
             user=self.user,
@@ -783,6 +783,7 @@ class UserViewsTest(TestCase):
         self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
         self.assertEqual(self.variant.quantity, 10)
+        self.assertEqual(self.variant.reserved_quantity, 0)
         self.assertContains(response, "Заказ успешно отменен")
 
     def test_user_cannot_cancel_another_users_order(self):
