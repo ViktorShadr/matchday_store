@@ -1,9 +1,13 @@
+from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
 from uuid import uuid4
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.db.models import F
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from orders.application.checkout_context import CheckoutContext
@@ -13,6 +17,11 @@ from orders.repositories import IOrderRepository, IPaymentRepository, OrderRepos
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
 from store.repositories import IProductVariantRepository, ProductVariantRepository
+from store.repositories import IProductVariantRepository
+from store.repositories import ProductVariantRepository
+from orders.repositories import IOrderRepository, IPaymentRepository
+from orders.repositories import OrderRepository, PaymentRepository
+from store.models import ProductVariant
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
 
@@ -25,8 +34,67 @@ class OrderCancellationError(Exception):
     """Бизнес-ошибка отмены заказа."""
 
 
+class OrderIssueError(Exception):
+    """Бизнес-ошибка выдачи заказа."""
+
+
 class ManualPaymentUpdateError(Exception):
     """Бизнес-ошибка обновления оплаты заказа."""
+
+
+class OrderStockReservationService:
+    """Доменный сервис резервирования и списания складских остатков."""
+
+    @staticmethod
+    def reserve_variant(variant: ProductVariant, quantity: int) -> None:
+        updated = ProductVariant.objects.filter(
+            pk=variant.pk,
+            quantity__gte=F("reserved_quantity") + quantity,
+        ).update(
+            reserved_quantity=F("reserved_quantity") + quantity,
+            updated_at=timezone.now(),
+        )
+        if updated != 1:
+            raise CheckoutError(
+                f'Недостаточно товара "{variant.product.name}" на складе. '
+                f"Доступно: {variant.available_quantity} шт."
+            )
+        variant.reserved_quantity += quantity
+
+    @staticmethod
+    def release_variant_reservation(variant: ProductVariant, quantity: int) -> None:
+        updated = ProductVariant.objects.filter(
+            pk=variant.pk,
+            reserved_quantity__gte=quantity,
+        ).update(
+            reserved_quantity=F("reserved_quantity") - quantity,
+            updated_at=timezone.now(),
+        )
+        if updated != 1:
+            raise OrderCancellationError(
+                f'Невозможно снять резерв по товару "{variant.product.name}": '
+                "зарезервировано меньше, чем требуется для отмены."
+            )
+        variant.reserved_quantity -= quantity
+
+    @staticmethod
+    def issue_variant(variant: ProductVariant, quantity: int) -> None:
+        updated = ProductVariant.objects.filter(
+            pk=variant.pk,
+            quantity__gte=quantity,
+            reserved_quantity__gte=quantity,
+        ).update(
+            quantity=F("quantity") - quantity,
+            reserved_quantity=F("reserved_quantity") - quantity,
+            updated_at=timezone.now(),
+        )
+        if updated != 1:
+            raise OrderIssueError(
+                f'Невозможно выдать товар "{variant.product.name}": '
+                "физический остаток или резерв меньше количества в заказе."
+            )
+        variant.quantity -= quantity
+        variant.reserved_quantity -= quantity
 
 
 class CheckoutService(ICheckoutService):
@@ -35,6 +103,21 @@ class CheckoutService(ICheckoutService):
 
     Реализует DIP через dependency injection репозиториев.
     """
+
+    ACTIVE_ORDER_FINAL_STATUSES = frozenset(
+        {
+            Order.Status.CANCELLED,
+            Order.Status.DELIVERED,
+            Order.Status.REFUNDED,
+        }
+    )
+    ACTIVE_ORDER_FINAL_FULFILLMENT_STATUSES = frozenset(
+        {
+            Order.FulfillmentStatus.CANCELLED,
+            Order.FulfillmentStatus.DELIVERED,
+            Order.FulfillmentStatus.RETURNED,
+        }
+    )
 
     def __init__(
         self,
@@ -96,24 +179,88 @@ class CheckoutService(ICheckoutService):
 
         return None
 
+    @classmethod
+    def _count_active_unpaid_orders(cls, user_id: int) -> int:
+        """Посчитать открытые неоплаченные заказы пользователя."""
+        return (
+            Order.objects.filter(user_id=user_id)
+            .exclude(status__in=cls.ACTIVE_ORDER_FINAL_STATUSES)
+            .exclude(fulfillment_status__in=cls.ACTIVE_ORDER_FINAL_FULFILLMENT_STATUSES)
+            .exclude(payment_status=Order.PaymentStatus.SUCCEEDED)
+            .count()
+        )
+
+    @classmethod
+    def _ensure_active_order_limit(cls, user_id: int) -> None:
+        max_active_orders = settings.CHECKOUT_MAX_ACTIVE_ORDERS
+        if max_active_orders <= 0:
+            return
+
+        active_orders_count = cls._count_active_unpaid_orders(user_id)
+        if active_orders_count >= max_active_orders:
+            raise CheckoutError(
+                "У вас уже есть активные неоплаченные заказы. "
+                "Получите, оплатите или отмените один из них перед новым оформлением."
+            )
+
+    @staticmethod
+    def _ensure_sku_quantity_limit(cart_item, variant) -> None:
+        max_qty_per_sku = settings.CHECKOUT_MAX_QTY_PER_SKU
+        if max_qty_per_sku <= 0 or cart_item.quantity <= max_qty_per_sku:
+            return
+
+        raise CheckoutError(
+            f'Нельзя заказать более {max_qty_per_sku} шт. одного товара "{variant.product.name}" за раз.'
+        )
+
+    @staticmethod
+    def _lock_checkout_user(user_id: int):
+        return get_user_model().objects.select_for_update().only("id", "is_email_confirmed").get(pk=user_id)
+
+    @staticmethod
+    def _ensure_user_email_confirmed(user) -> None:
+        if user.is_email_confirmed:
+            return
+        raise CheckoutError("Подтвердите email в личном кабинете перед оформлением заказа.")
+
+    @staticmethod
+    def _ensure_stock_reserve_mode_enabled() -> None:
+        if getattr(settings, "STOCK_RESERVE_MODE_ENABLED", True):
+            return
+        raise CheckoutError("Оформление заказов временно недоступно. Повторите попытку позже.")
+
     def create_order_from_cart(
         self,
         checkout_context: CheckoutContext,
         cleaned_data,
         checkout_token: Optional[str] = None,
     ):
-        """Создать заказ, списать остатки и очистить корзину."""
+        """Создать заказ, зарезервировать остатки и очистить корзину."""
         payment_idempotency_key = self.build_checkout_idempotency_key(checkout_token, user_id=checkout_context.user_id)
 
         existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
         if existing_payment:
             return existing_payment.order
 
+        self._ensure_stock_reserve_mode_enabled()
+        self._ensure_active_order_limit(checkout_context.user_id)
+
         order = None
         unavailable_only_error = None
 
         try:
             with transaction.atomic():
+                locked_user = self._lock_checkout_user(checkout_context.user_id)
+                self._ensure_user_email_confirmed(locked_user)
+                existing_payment = self._find_existing_checkout_payment(
+                    checkout_token,
+                    checkout_context.user_id,
+                )
+                if existing_payment:
+                    return existing_payment.order
+                self._ensure_stock_reserve_mode_enabled()
+                self._ensure_active_order_limit(checkout_context.user_id)
+
                 cart = checkout_context.cart_context.cart
                 cart_items = list(
                     cart.items.select_related("product_variant__product").select_for_update().order_by("pk")
@@ -147,16 +294,25 @@ class CheckoutService(ICheckoutService):
                         skipped_cart_item_ids.append(cart_item.pk)
                         continue
 
-                    # Позиции, которые нельзя оформить (сняты с продажи или нулевой остаток),
+                    available_quantity = variant.available_quantity
+
+                    # Позиции, которые нельзя оформить (сняты с продажи или нулевой доступный остаток),
                     # исключаем из checkout и удаляем из корзины в этой же транзакции.
-                    if not variant.product.is_on_sale or variant.quantity <= 0:
+                    if not variant.product.is_on_sale or available_quantity <= 0:
                         skipped_cart_item_ids.append(cart_item.pk)
                         continue
 
-                    if variant.quantity < cart_item.quantity:
+                    self._ensure_sku_quantity_limit(cart_item, variant)
+
+                    if available_quantity < cart_item.quantity:
                         raise CheckoutError(
                             f'Недостаточно товара "{variant.product.name}" на складе. '
-                            f"Доступно: {variant.quantity} шт."
+                            f"Доступно: {available_quantity} шт."
+                        )
+
+                    if variant.price <= 0:
+                        raise CheckoutError(
+                            f'Некорректная цена для товара "{variant.product.name}". ' "Обратитесь в поддержку."
                         )
 
                     line_total = variant.price * cart_item.quantity
@@ -221,8 +377,7 @@ class CheckoutService(ICheckoutService):
 
                     for cart_item in processable_cart_items:
                         variant = locked_variants[cart_item.product_variant_id]
-                        variant.quantity -= cart_item.quantity
-                        variant.save(update_fields=["quantity", "updated_at"])
+                        OrderStockReservationService.reserve_variant(variant, cart_item.quantity)
 
                     processable_cart_item_ids = [item.pk for item in processable_cart_items]
                     if processable_cart_item_ids:
@@ -245,12 +400,13 @@ class CheckoutService(ICheckoutService):
 
 
 class OrderCancellationService:
-    """Сервис безопасной отмены заказа с возвратом остатков."""
+    """Сервис безопасной отмены заказа со снятием складского резерва."""
 
     CANCELLABLE_ORDER_STATUSES = frozenset(
         {
             Order.Status.PLACED,
             Order.Status.AWAITING_PAYMENT,
+            Order.Status.PROCESSING,
         }
     )
     CANCELLABLE_FULFILLMENT_STATUSES = frozenset(
@@ -298,7 +454,7 @@ class OrderCancellationService:
 
     def cancel_order(self, order_id: int, user_id: Optional[int] = None, actor=None) -> Order:
         """
-        Отменить заказ и вернуть остатки на склад.
+        Отменить заказ и снять складской резерв.
 
         Повторный вызов для уже отмененного заказа безопасен (идемпотентный no-op).
         """
@@ -330,8 +486,7 @@ class OrderCancellationService:
                 if variant is None:
                     continue
 
-                variant.quantity += order_item.quantity
-                variant.save(update_fields=["quantity", "updated_at"])
+                OrderStockReservationService.release_variant_reservation(variant, order_item.quantity)
 
             previous_order_status = order.status
             previous_fulfillment_status = order.fulfillment_status
@@ -374,6 +529,126 @@ class OrderCancellationService:
             OrderNotificationService.schedule_cancelled(order.id)
 
             return order
+
+
+class OrderIssueService:
+    """Сервис списания физического склада при фактической выдаче заказа."""
+
+    def __init__(self, product_variant_repository: Optional[IProductVariantRepository] = None):
+        self.product_variant_repository = product_variant_repository or ProductVariantRepository()
+
+    def consume_reserved_stock(self, order_id: int) -> Order:
+        """Списать физический склад и резерв по всем позициям заказа."""
+        with transaction.atomic():
+            try:
+                order = Order.objects.select_for_update().get(pk=order_id)
+            except Order.DoesNotExist as exc:
+                raise OrderIssueError("Заказ не найден.") from exc
+
+            order_items = list(order.items.select_related("product_variant").order_by("pk"))
+            variant_ids = sorted({item.product_variant_id for item in order_items if item.product_variant_id})
+            locked_variants = {
+                variant.id: variant for variant in self.product_variant_repository.get_variants_for_update(variant_ids)
+            }
+
+            for order_item in order_items:
+                if not order_item.product_variant_id:
+                    continue
+
+                variant = locked_variants.get(order_item.product_variant_id)
+                if variant is None:
+                    raise OrderIssueError(f"Товар из позиции заказа {order_item.pk} не найден на складе.")
+
+                OrderStockReservationService.issue_variant(variant, order_item.quantity)
+
+            return order
+
+
+def add_business_days(value, business_days: int):
+    """Return a local-time datetime after adding Monday-Friday business days."""
+    deadline = timezone.localtime(value) if timezone.is_aware(value) else timezone.make_aware(value)
+    if business_days <= 0:
+        return deadline
+
+    remaining_days = business_days
+    while remaining_days > 0:
+        deadline += timedelta(days=1)
+        if deadline.weekday() < 5:
+            remaining_days -= 1
+    return deadline
+
+
+class OrderAutoCancellationService:
+    """Auto-cancel expired pickup orders without direct stock mutations."""
+
+    ELIGIBLE_ORDER_STATUSES = OrderCancellationService.CANCELLABLE_ORDER_STATUSES
+    ELIGIBLE_FULFILLMENT_STATUSES = OrderCancellationService.CANCELLABLE_FULFILLMENT_STATUSES
+    NON_CANCELLABLE_PAYMENT_STATUSES = OrderCancellationService.NON_CANCELLABLE_PAYMENT_STATUSES
+
+    def __init__(self, cancellation_service: Optional[OrderCancellationService] = None):
+        self.cancellation_service = cancellation_service or OrderCancellationService()
+
+    @staticmethod
+    def get_order_retention_started_at(order: Order):
+        return order.confirmed_at or order.created_at
+
+    @classmethod
+    def get_pickup_deadline(cls, order: Order, *, business_days: Optional[int] = None):
+        retention_business_days = (
+            settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS if business_days is None else business_days
+        )
+        return add_business_days(cls.get_order_retention_started_at(order), retention_business_days)
+
+    @classmethod
+    def is_pickup_deadline_expired(cls, order: Order, *, now=None, business_days: Optional[int] = None) -> bool:
+        current_time = timezone.localtime(now or timezone.now())
+        return current_time >= cls.get_pickup_deadline(order, business_days=business_days)
+
+    def cancel_expired_pickup_orders(
+        self,
+        *,
+        now=None,
+        business_days: Optional[int] = None,
+        batch_size: Optional[int] = None,
+    ) -> dict[str, int]:
+        current_time = now or timezone.now()
+        retention_business_days = (
+            settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS if business_days is None else business_days
+        )
+        max_orders = settings.ORDER_AUTO_CANCEL_BATCH_SIZE if batch_size is None else batch_size
+        rough_cutoff = current_time - timedelta(days=max(retention_business_days, 0))
+
+        candidate_orders = list(
+            Order.objects.filter(
+                delivery_method=Order.DeliveryMethod.PICKUP,
+                status__in=self.ELIGIBLE_ORDER_STATUSES,
+                fulfillment_status__in=self.ELIGIBLE_FULFILLMENT_STATUSES,
+            )
+            .annotate(retention_started_at=Coalesce("confirmed_at", "created_at"))
+            .filter(retention_started_at__lte=rough_cutoff)
+            .exclude(payment_status__in=self.NON_CANCELLABLE_PAYMENT_STATUSES)
+            .order_by("retention_started_at", "pk")[:max_orders]
+        )
+
+        result = {
+            "scanned": len(candidate_orders),
+            "cancelled": 0,
+            "skipped": 0,
+            "failed": 0,
+        }
+        for order in candidate_orders:
+            if not self.is_pickup_deadline_expired(order, now=current_time, business_days=retention_business_days):
+                result["skipped"] += 1
+                continue
+
+            try:
+                self.cancellation_service.cancel_order(order_id=order.pk)
+            except OrderCancellationError:
+                result["failed"] += 1
+            else:
+                result["cancelled"] += 1
+
+        return result
 
 
 class ManualPaymentUpdateService:

@@ -58,6 +58,13 @@ class CheckoutForm(forms.Form):
         ),
     )
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        if user is not None:
+            self.fields["email"].initial = user.email
+            self.fields["email"].disabled = True
+
     @staticmethod
     def _normalize_whitespace(value: str) -> str:
         """Убрать лишние пробелы и привести строку к компактному виду."""
@@ -85,6 +92,8 @@ class CheckoutForm(forms.Form):
         return recipient_name
 
     def clean_email(self):
+        if self.user is not None:
+            return self._normalize_whitespace(self.user.email)
         return self._normalize_whitespace(self.cleaned_data["email"])
 
     def clean_phone(self):

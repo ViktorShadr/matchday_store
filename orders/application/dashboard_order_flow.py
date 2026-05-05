@@ -10,6 +10,8 @@ from orders.services import (
     ManualPaymentUpdateService,
     OrderCancellationError,
     OrderCancellationService,
+    OrderIssueError,
+    OrderIssueService,
 )
 from store.presenters import DashboardOrderPresenter
 
@@ -41,9 +43,11 @@ class DashboardOrderFlowService:
         self,
         cancellation_service: OrderCancellationService | None = None,
         payment_service: ManualPaymentUpdateService | None = None,
+        issue_service: OrderIssueService | None = None,
     ):
         self.cancellation_service = cancellation_service or OrderCancellationService()
         self.payment_service = payment_service or ManualPaymentUpdateService()
+        self.issue_service = issue_service or OrderIssueService()
 
     @staticmethod
     def validate_status_key(next_status: str) -> bool:
@@ -117,6 +121,12 @@ class DashboardOrderFlowService:
 
             previous_order_status = order.status
             previous_fulfillment_status = order.fulfillment_status
+            if next_status == "issued":
+                try:
+                    self.issue_service.consume_reserved_stock(order_id=order.pk)
+                except OrderIssueError as exc:
+                    raise DashboardOrderFlowError(str(exc)) from exc
+
             DashboardOrderPresenter.apply_status(order, next_status)
             order.save(update_fields=["fulfillment_status", "status", "issued_at", "cancelled_at", "updated_at"])
             OrderStatusTransition.log_if_changed(

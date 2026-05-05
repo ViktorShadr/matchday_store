@@ -231,3 +231,10 @@ def send_order_notification(order_id: int, event_key: str) -> bool:
 )
 def send_staff_new_order_notification(order_id: int) -> bool:
     return send_staff_new_order_notification_sync(order_id, raise_on_error=True)
+
+
+@shared_task
+def auto_cancel_expired_pickup_orders() -> dict[str, int]:
+    from orders.services import OrderAutoCancellationService
+
+    return OrderAutoCancellationService().cancel_expired_pickup_orders()

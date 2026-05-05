@@ -1,4 +1,6 @@
 from django.conf import settings
+from decimal import Decimal
+
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.urls import reverse
@@ -93,6 +95,7 @@ class ProductVariant(models.Model):
         color (str): Цвет варианта
         price (Decimal): Цена варианта
         quantity (int): Количество на складе
+        reserved_quantity (int): Количество, зарезервированное под активные заказы
         image (ProductImage): Основное изображение варианта (необязательно)
         created_at (datetime): Дата создания
         updated_at (datetime): Дата последнего обновления
@@ -108,9 +111,10 @@ class ProductVariant(models.Model):
     price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(0)],
+        validators=[MinValueValidator(Decimal("0.01"))],
     )
     quantity = models.PositiveIntegerField(default=0)
+    reserved_quantity = models.PositiveIntegerField(default=0)
     image = models.ForeignKey(
         "ProductImage",
         on_delete=models.SET_NULL,
@@ -125,6 +129,11 @@ class ProductVariant(models.Model):
         """Возвращает строковое представление объекта."""
         return f"{self.product.name} ({self.size}, {self.color})"
 
+    @property
+    def available_quantity(self) -> int:
+        """Количество, доступное для новых заказов."""
+        return max((self.quantity or 0) - (self.reserved_quantity or 0), 0)
+
     class Meta:
         """Мета-настройки класса."""
 
@@ -134,6 +143,14 @@ class ProductVariant(models.Model):
             models.UniqueConstraint(
                 fields=["product", "size", "color"],
                 name="unique_product_variant_size_color",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(reserved_quantity__lte=models.F("quantity")),
+                name="product_variant_reserved_lte_quantity",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(price__gt=0),
+                name="product_variant_price_gt_zero",
             ),
         ]
 

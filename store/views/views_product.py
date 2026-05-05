@@ -126,9 +126,9 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
 
         # Variants data
         variants = list(product.variants.all())
-        available_variants = [variant for variant in variants if variant.quantity > 0]
+        available_variants = [variant for variant in variants if variant.available_quantity > 0]
         variant_prices = [v.price for v in variants if v.price]
-        variant_quantities = [v.quantity for v in variants if v.quantity > 0]
+        variant_quantities = [v.available_quantity for v in variants if v.available_quantity > 0]
 
         gallery_images = list(getattr(product, "gallery_images", []))
         prepared_gallery_images = [

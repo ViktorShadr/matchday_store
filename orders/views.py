@@ -88,6 +88,12 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
             "phone": user.phone or "",
         }
 
+    def get_form_kwargs(self):
+        """Передать пользователя в форму, чтобы email checkout был email аккаунта."""
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
     def get_context_data(self, **kwargs):
         """Сформировать контекст страницы оформления."""
         context = super().get_context_data(**kwargs)

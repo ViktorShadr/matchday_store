@@ -109,6 +109,22 @@ poetry run python manage.py check
 - `LOG_JSON` (`True` в production, `False` в debug)
 - `GUNICORN_LOG_LEVEL` (`info` по умолчанию)
 
+Для временного деплоя по HTTP/IP без TLS:
+
+- `ALLOWED_HOSTS=37.1.80.117`
+- `CSRF_TRUSTED_ORIGINS=http://37.1.80.117`
+- `SITE_URL=http://37.1.80.117`
+- `CSRF_COOKIE_SECURE=False`
+- `SESSION_COOKIE_SECURE=False`
+
+Для production за HTTPS-доменом:
+
+- `CSRF_TRUSTED_ORIGINS=https://your-domain.example`
+- `SITE_URL=https://your-domain.example`
+- `CSRF_COOKIE_SECURE=True`
+- `SESSION_COOKIE_SECURE=True`
+- `USE_X_FORWARDED_PROTO=True`, если TLS завершается на внешнем reverse proxy
+
 В production каждый ответ включает `X-Request-ID`; тот же идентификатор прокидывается в Celery-задачи и попадает в логи.
 
 ## Backup и restore check

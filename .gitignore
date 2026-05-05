@@ -68,3 +68,5 @@ Thumbs.db
 
 # Operational artifacts
 /backups/
+docker/nginx/auth/.htpasswd
+docker/nginx/auth/.htpasswd
