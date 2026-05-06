@@ -33,6 +33,84 @@
     }
 })();
 
+// Mobile footer accordion
+(function() {
+    const root = document.querySelector('[data-footer-accordion]');
+    if (!root || typeof window.matchMedia !== 'function') {
+        return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 767.98px)');
+    const sections = Array.from(root.querySelectorAll('[data-footer-accordion-section]'))
+        .map((section) => {
+            const button = section.querySelector('[data-footer-accordion-trigger]');
+            const panel = section.querySelector('[data-footer-accordion-panel]');
+
+            if (!button || !panel) {
+                return null;
+            }
+
+            return { button, panel };
+        })
+        .filter(Boolean);
+
+    if (!sections.length) {
+        return;
+    }
+
+    function setSectionState(section, expanded, persist) {
+        section.button.setAttribute('aria-expanded', String(expanded));
+        section.panel.hidden = !expanded;
+
+        if (persist) {
+            section.button.dataset.footerExpanded = String(expanded);
+        }
+    }
+
+    function getStoredState(section) {
+        if (!section.button.dataset.footerExpanded) {
+            const defaultOpen = section.button.getAttribute('data-footer-default-open') === 'true';
+            section.button.dataset.footerExpanded = String(defaultOpen);
+        }
+
+        return section.button.dataset.footerExpanded === 'true';
+    }
+
+    function syncFooterAccordion() {
+        if (mediaQuery.matches) {
+            root.classList.add('is-ready');
+            sections.forEach((section) => {
+                setSectionState(section, getStoredState(section), false);
+            });
+            return;
+        }
+
+        root.classList.remove('is-ready');
+        sections.forEach((section) => {
+            setSectionState(section, true, false);
+        });
+    }
+
+    sections.forEach((section) => {
+        section.button.addEventListener('click', () => {
+            if (!mediaQuery.matches) {
+                return;
+            }
+
+            const expanded = section.button.getAttribute('aria-expanded') === 'true';
+            setSectionState(section, !expanded, true);
+        });
+    });
+
+    syncFooterAccordion();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', syncFooterAccordion);
+    } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(syncFooterAccordion);
+    }
+})();
+
 // Product card sliders (catalog cards only)
 (function() {
     const cardSwipers = document.querySelectorAll('[data-sf-product-swiper]');
