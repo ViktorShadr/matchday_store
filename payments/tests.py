@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -6,6 +7,7 @@ from django.test import TestCase
 from orders.models import Address, Order
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
+from payments.services import PaymentStatusSyncService
 
 User = get_user_model()
 
@@ -52,6 +54,16 @@ class PaymentWorkflowTest(TestCase):
         self.order.refresh_from_db()
 
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.SUCCEEDED)
+
+    def test_workflow_syncs_order_payment_status_once(self):
+        with patch.object(
+            PaymentStatusSyncService,
+            "sync_order_payment_status",
+            wraps=PaymentStatusSyncService.sync_order_payment_status,
+        ) as mock_sync:
+            self.create_payment(status=Payment.Status.SUCCEEDED)
+
+        self.assertEqual(mock_sync.call_count, 1)
 
     def test_last_unsuccessful_payment_status_is_applied_to_order(self):
         """Проверяет сценарий 'last unsuccessful payment status is applied to order'."""
@@ -144,3 +156,16 @@ class PaymentSignalsSyncTest(TestCase):
         self.order.refresh_from_db()
         pending_payment.refresh_from_db()
         self.assertEqual(self.order.payment_status, Order.PaymentStatus.PENDING)
+
+    def test_direct_payment_save_does_not_reopen_cancelled_order_payment_status(self):
+        self.order.status = Order.Status.CANCELLED
+        self.order.payment_status = Order.PaymentStatus.CANCELLED
+        self.order.save(update_fields=["status", "payment_status", "updated_at"])
+        payment = self._create_payment_directly(status=Payment.Status.PENDING)
+
+        payment.status = Payment.Status.REQUIRES_ACTION
+        payment.save(update_fields=["status", "updated_at"])
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.order.payment_status, Order.PaymentStatus.CANCELLED)

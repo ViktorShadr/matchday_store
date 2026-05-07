@@ -4,11 +4,8 @@ from django.views.generic import RedirectView
 from store.views.views_cart import AddToCartView, RemoveFromCartView, UpdateCartView
 from store.views.views_cart_page import CartView
 from store.views.views_category import (
-    CategoryCreateView,
-    CategoryDeleteView,
     CategoryDetailView,
     CategoryListView,
-    CategoryUpdateView,
 )
 from store.views.views_dashboard import (
     DashboardHomeView,
@@ -42,11 +39,8 @@ from store.views.views_legal import (
 )
 from store.views.views_product import (
     MainView,
-    ProductCreateView,
-    ProductDeleteView,
     ProductDetailsView,
     ProductListView,
-    ProductUpdateView,
 )
 
 app_name = "store"
@@ -203,15 +197,9 @@ urlpatterns = [
         RedirectView.as_view(pattern_name="store:warehouse_image_delete", permanent=False),
     ),
     path("products/", ProductListView.as_view(), name="product_list"),
-    path("products/create/", ProductCreateView.as_view(), name="product_create"),
     path("products/<int:pk>/", ProductDetailsView.as_view(), name="product_detail"),
-    path("products/<int:pk>/edit/", ProductUpdateView.as_view(), name="product_edit"),
-    path("products/<int:pk>/delete/", ProductDeleteView.as_view(), name="product_delete"),
     path("categories/", CategoryListView.as_view(), name="category_list"),
-    path("categories/create/", CategoryCreateView.as_view(), name="category_create"),
     path("categories/<int:pk>/", CategoryDetailView.as_view(), name="category_detail"),
-    path("categories/<int:pk>/edit/", CategoryUpdateView.as_view(), name="category_edit"),
-    path("categories/<int:pk>/delete/", CategoryDeleteView.as_view(), name="category_delete"),
     # Корзина
     path("cart/", CartView.as_view(), name="cart"),
     path("cart/add/", AddToCartView.as_view(), name="add_to_cart"),

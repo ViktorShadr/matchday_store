@@ -514,61 +514,6 @@ class ProductDetailsViewTest(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class ProductUpdateViewTest(TestCase):
-    """Тесты для ProductUpdateViewTest."""
-
-    def setUp(self):
-        """Подготавливает тестовые данные перед выполнением тестов."""
-        self.client = Client()
-        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123", is_active=True)
-        self.staff_user = User.objects.create_user(
-            email="staffuser@example.com", password="staffpass123", is_staff=True, is_active=True
-        )
-        # Создаем группу "Модераторы" и добавляем staff пользователя
-        from django.contrib.auth.models import Group
-
-        moderator_group, created = Group.objects.get_or_create(name="Модераторы")
-        self.staff_user.groups.add(moderator_group)
-        self.category = Category.objects.create(name="Футболки")
-        self.product = Product.objects.create(
-            name="Тестовая футболка", description="Описание товара", category=self.category
-        )
-
-    def test_product_update_view_requires_staff(self):
-        """Проверяет сценарий 'product update view requires staff'."""
-        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
-        self.assertEqual(response.status_code, 302)  # Redirect to login
-
-    def test_product_update_view_denied_for_regular_user(self):
-        """Проверяет сценарий 'product update view denied for regular user'."""
-        self.client.login(email="testuser@example.com", password="testpass123")
-        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
-        self.assertEqual(response.status_code, 403)
-
-    def test_product_update_view_allowed_for_staff(self):
-        """Проверяет сценарий 'product update view allowed for staff'."""
-        self.client.login(email="staffuser@example.com", password="staffpass123")
-        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
-        self.assertEqual(response.status_code, 200)
-
-    def test_product_update_view_template(self):
-        """Проверяет сценарий 'product update view template'."""
-        self.client.login(email="staffuser@example.com", password="staffpass123")
-        response = self.client.get(reverse("store:product_edit", kwargs={"pk": self.product.pk}))
-        self.assertTemplateUsed(response, "main_page/product_update.html")
-
-    def test_product_update_form_submission(self):
-        """Проверяет сценарий 'product update form submission'."""
-        self.client.login(email="staffuser@example.com", password="staffpass123")
-        response = self.client.post(
-            reverse("store:product_edit", kwargs={"pk": self.product.pk}),
-            {"name": "Обновленная футболка", "description": "Обновленное описание", "category": self.category.pk},
-        )
-        self.product.refresh_from_db()
-        self.assertEqual(self.product.name, "Обновленная футболка")
-        self.assertEqual(response.status_code, 302)
-
-
 class ModeratorDashboardAccessTest(TestCase):
     """Тесты доступа к модераторскому дашборду и складу."""
 
@@ -1045,56 +990,23 @@ class ModeratorGroupCommandTest(TestCase):
         self.assertTrue(expected_permissions.issubset(group_permissions))
 
 
-class ProductDeleteViewTest(TestCase):
-    """Тесты для ProductDeleteViewTest."""
+class OldCatalogCrudRoutesRemovedTest(TestCase):
+    """Старые CRUD endpoints витрины заменены dashboard-flow."""
 
-    def setUp(self):
-        """Подготавливает тестовые данные перед выполнением тестов."""
-        self.client = Client()
-        self.user = User.objects.create_user(email="testuser@example.com", password="testpass123", is_active=True)
-        self.staff_user = User.objects.create_user(
-            email="staffuser@example.com", password="staffpass123", is_staff=True, is_active=True
-        )
-        # Создаем группу "Модераторы" и добавляем staff пользователя
-        from django.contrib.auth.models import Group
+    def test_old_product_and_category_crud_routes_are_not_registered(self):
+        removed_paths = [
+            "/products/create/",
+            "/products/1/edit/",
+            "/products/1/delete/",
+            "/categories/create/",
+            "/categories/1/edit/",
+            "/categories/1/delete/",
+        ]
 
-        moderator_group, created = Group.objects.get_or_create(name="Модераторы")
-        self.staff_user.groups.add(moderator_group)
-        self.category = Category.objects.create(name="Футболки")
-        self.product = Product.objects.create(
-            name="Тестовая футболка", description="Описание товара", category=self.category
-        )
-
-    def test_product_delete_view_requires_staff(self):
-        """Проверяет сценарий 'product delete view requires staff'."""
-        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
-        self.assertEqual(response.status_code, 302)  # Redirect to login
-
-    def test_product_delete_view_denied_for_regular_user(self):
-        """Проверяет сценарий 'product delete view denied for regular user'."""
-        self.client.login(email="testuser@example.com", password="testpass123")
-        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
-        self.assertEqual(response.status_code, 403)
-
-    def test_product_delete_view_allowed_for_staff(self):
-        """Проверяет сценарий 'product delete view allowed for staff'."""
-        self.client.login(email="staffuser@example.com", password="staffpass123")
-        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
-        self.assertEqual(response.status_code, 200)
-
-    def test_product_delete_view_template(self):
-        """Проверяет сценарий 'product delete view template'."""
-        self.client.login(email="staffuser@example.com", password="staffpass123")
-        response = self.client.get(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
-        self.assertTemplateUsed(response, "main_page/product_delete.html")
-
-    def test_product_delete_confirmation(self):
-        """Проверяет сценарий 'product delete confirmation'."""
-        self.client.login(email="staffuser@example.com", password="staffpass123")
-        initial_count = Product.objects.count()
-        response = self.client.post(reverse("store:product_delete", kwargs={"pk": self.product.pk}))
-        self.assertEqual(Product.objects.count(), initial_count - 1)
-        self.assertEqual(response.status_code, 302)
+        for path in removed_paths:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 404)
 
 
 class AddToCartSaleStateTest(TestCase):
