@@ -23,7 +23,7 @@ from django.test import (
 from django.urls import reverse
 from django.utils import timezone
 
-from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService
+from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService, OrderStatusPolicy
 from orders.forms import CheckoutForm
 from orders.models import Order, OrderItem, OrderStatusTransition
 from orders.services import (
@@ -33,6 +33,8 @@ from orders.services import (
     OrderAutoCancellationService,
     OrderCancellationError,
     OrderCancellationService,
+    OrderIssueError,
+    OrderIssueService,
 )
 from orders.tasks import (
     NotificationDeliveryError,
@@ -45,7 +47,6 @@ from orders.tasks import (
 from payments.models import Payment
 from store.application import CartContext, CartContextResolver
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
-from store.presenters import DashboardOrderPresenter
 from users.models import User
 
 
@@ -107,6 +108,45 @@ class CheckoutFormValidationTest(SimpleTestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertTrue(form.fields["email"].disabled)
         self.assertEqual(form.cleaned_data["email"], "buyer@example.com")
+
+
+class OrderStatusPolicyTest(SimpleTestCase):
+    """Тесты доменной политики staff-статусов заказа."""
+
+    def test_resolves_dashboard_status_key_from_order_state(self):
+        order = Order(
+            status=Order.Status.PROCESSING,
+            fulfillment_status=Order.FulfillmentStatus.RESERVED,
+            payment_status=Order.PaymentStatus.PENDING,
+        )
+
+        self.assertEqual(OrderStatusPolicy.get_status_key(order), "ready")
+
+        order.fulfillment_status = Order.FulfillmentStatus.DELIVERED
+        self.assertEqual(OrderStatusPolicy.get_status_key(order), "issued")
+
+        order.status = Order.Status.CANCELLED
+        self.assertEqual(OrderStatusPolicy.get_status_key(order), "cancelled")
+
+    def test_transition_policy_blocks_final_status_changes(self):
+        self.assertTrue(OrderStatusPolicy.can_transition("ready", "issued"))
+        self.assertFalse(OrderStatusPolicy.can_transition("issued", "processing"))
+        self.assertTrue(OrderStatusPolicy.is_final_status_key("issued"))
+        self.assertTrue(OrderStatusPolicy.is_final_status_key("cancelled"))
+
+    def test_apply_status_updates_order_fields(self):
+        order = Order(
+            status=Order.Status.PLACED,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            payment_status=Order.PaymentStatus.SUCCEEDED,
+        )
+
+        OrderStatusPolicy.apply_status(order, "issued")
+
+        self.assertEqual(order.status, Order.Status.DELIVERED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
+        self.assertIsNotNone(order.issued_at)
+        self.assertIsNone(order.cancelled_at)
 
 
 @override_settings(RATELIMIT_ENABLE=False)
@@ -827,6 +867,35 @@ class OrderCancellationServiceTest(TestCase):
         self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertIsNotNone(order.cancelled_at)
 
+    def test_cancel_order_cancels_manual_payment_and_keeps_order_cancelled_after_payment_save(self):
+        order = self._create_order_with_item()
+        payment = Payment.objects.create(
+            order=order,
+            provider=Payment.Provider.MANUAL,
+            idempotency_key="cancel-manual-payment",
+            status=Payment.Status.PENDING,
+            amount=order.total_amount,
+            currency=order.currency,
+        )
+
+        self.service.cancel_order(order_id=order.id, user_id=self.user.id)
+
+        self.variant.refresh_from_db()
+        order.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertEqual(payment.status, Payment.Status.CANCELLED)
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+        payment.save()
+        order.refresh_from_db()
+
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+
     def test_cancel_order_creates_status_transition_audit(self):
         order = self._create_order_with_item()
 
@@ -916,6 +985,123 @@ class OrderCancellationServiceTest(TestCase):
         self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.SHIPPED)
         self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
         self.assertIsNone(order.cancelled_at)
+
+
+class OrderIssueServiceTest(TestCase):
+    """Тесты доменных guard-ов выдачи заказа."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="issue-buyer@example.com",
+            password="testpass123",
+            first_name="Ирина",
+            last_name="Выдача",
+            phone="+79990001122",
+            is_active=True,
+        )
+        self.category = Category.objects.create(name="Шарфы")
+        self.product = Product.objects.create(name="Шарф клуба", category=self.category)
+        self.image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("scarf.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("1000.00"),
+            quantity=5,
+            reserved_quantity=2,
+            image=self.image,
+        )
+        self.service = OrderIssueService()
+
+    def _create_order_with_item(
+        self,
+        *,
+        status=Order.Status.PROCESSING,
+        fulfillment_status=Order.FulfillmentStatus.RESERVED,
+        payment_status=Order.PaymentStatus.SUCCEEDED,
+    ):
+        order = Order.objects.create(
+            number=f"ORD-ISSUE-{Order.objects.count() + 1}",
+            user=self.user,
+            recipient_name="Ирина Выдача",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=status,
+            payment_status=payment_status,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("2000.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("2000.00"),
+            confirmed_at=timezone.now(),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=2,
+            line_total=Decimal("2000.00"),
+        )
+        return order
+
+    def test_consume_reserved_stock_rejects_non_issuable_order_status(self):
+        order = self._create_order_with_item(
+            status=Order.Status.PLACED,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+        )
+
+        with self.assertRaises(OrderIssueError):
+            self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    def test_consume_reserved_stock_rejects_order_without_successful_payment(self):
+        order = self._create_order_with_item(payment_status=Order.PaymentStatus.PENDING)
+
+        with self.assertRaises(OrderIssueError):
+            self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    def test_consume_reserved_stock_for_ready_paid_order(self):
+        order = self._create_order_with_item()
+
+        returned_order = self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(returned_order.id, order.id)
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+    def test_consume_reserved_stock_is_idempotent_for_already_issued_order(self):
+        order = self._create_order_with_item(
+            status=Order.Status.DELIVERED,
+            fulfillment_status=Order.FulfillmentStatus.DELIVERED,
+        )
+        self.variant.quantity = 3
+        self.variant.reserved_quantity = 0
+        self.variant.save(update_fields=["quantity", "reserved_quantity", "updated_at"])
+
+        returned_order = self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(returned_order.id, order.id)
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 0)
 
 
 @override_settings(ORDER_PICKUP_RETENTION_BUSINESS_DAYS=3, ORDER_AUTO_CANCEL_BATCH_SIZE=100)
@@ -1424,7 +1610,7 @@ class OrderConcurrencyTest(TransactionTestCase):
         """Параллельные staff-обновления статуса не должны нарушать flow."""
         order = self._create_cancellable_order()
         processing_started = Event()
-        original_apply_status = DashboardOrderPresenter.apply_status
+        original_apply_status = OrderStatusPolicy.apply_status
 
         def delayed_apply_status(order_obj, status_key):
             if status_key == "processing":
@@ -1433,7 +1619,7 @@ class OrderConcurrencyTest(TransactionTestCase):
             return original_apply_status(order_obj, status_key)
 
         with patch(
-            "orders.application.dashboard_order_flow.DashboardOrderPresenter.apply_status",
+            "orders.application.dashboard_order_flow.OrderStatusPolicy.apply_status",
             side_effect=delayed_apply_status,
         ):
             with ThreadPoolExecutor(max_workers=2) as executor:

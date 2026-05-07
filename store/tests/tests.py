@@ -13,9 +13,10 @@ from PIL import Image
 
 from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.models import Payment
-from store.application import CartContextResolver
+from store.application import CartContext, CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
+from store.services import InsufficientStockError, ProductNotOnSaleError
 from store.services.cart_service import CartService
 from users.models import User
 
@@ -1259,6 +1260,61 @@ class CartServiceItemsDetailsTest(TestCase):
         self.assertEqual(items[0]["variant_id"], self.variant.id)
         self.assertEqual(items[0]["max_quantity"], self.variant.available_quantity)
         self.assertEqual(items[0]["availability_message"], "")
+
+
+class CartServiceValidationTest(TestCase):
+    """Тесты общей валидации количества в CartService."""
+
+    def setUp(self):
+        self.category = Category.objects.create(name="Валидация корзины")
+        self.product = Product.objects.create(name="Тестовая футболка", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Черный",
+            price=Decimal("2500.00"),
+            quantity=2,
+        )
+        self.cart = Cart.objects.create(session_key="cart-validation-session")
+        self.cart_context = CartContext(
+            cart=self.cart,
+            user_id=None,
+            session_key=self.cart.session_key,
+            is_authenticated=False,
+        )
+        self.cart_service = CartService()
+
+    def test_add_item_preserves_insufficient_stock_error_message(self):
+        with self.assertRaises(InsufficientStockError) as context:
+            self.cart_service.add_item(self.cart_context, self.variant.pk, quantity=3)
+
+        self.assertEqual(str(context.exception), "Недостаточно товара на складе. Доступно: 2")
+        self.assertEqual(context.exception.available_quantity, 2)
+        self.assertFalse(CartItem.objects.filter(cart=self.cart).exists())
+
+    def test_add_item_validates_combined_quantity_for_existing_cart_item(self):
+        CartItem.objects.create(cart=self.cart, product_variant=self.variant, quantity=1)
+
+        with self.assertRaises(InsufficientStockError) as context:
+            self.cart_service.add_item(self.cart_context, self.variant.pk, quantity=2)
+
+        self.assertEqual(str(context.exception), "Недостаточно товара на складе. Доступно: 2")
+        self.assertEqual(self.cart.items.get(product_variant=self.variant).quantity, 1)
+
+    def test_update_item_quantity_preserves_positive_quantity_error(self):
+        with self.assertRaises(ValueError) as context:
+            self.cart_service.update_item_quantity(self.cart_context, self.variant.pk, quantity=0)
+
+        self.assertEqual(str(context.exception), "Количество должно быть больше 0")
+
+    def test_update_item_quantity_rejects_product_not_on_sale(self):
+        self.product.is_on_sale = False
+        self.product.save(update_fields=["is_on_sale"])
+
+        with self.assertRaises(ProductNotOnSaleError) as context:
+            self.cart_service.update_item_quantity(self.cart_context, self.variant.pk, quantity=1)
+
+        self.assertEqual(str(context.exception), "Товар снят с продажи и недоступен для заказа.")
 
 
 class LegalPagesCartCounterTest(TestCase):

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from django.db import transaction
 
 from orders.application.order_notification_service import OrderNotificationService
+from orders.application.order_status_policy import OrderStatusPolicy
 from orders.models import Order, OrderStatusTransition
 from orders.services import (
     ManualPaymentUpdateError,
@@ -13,7 +14,6 @@ from orders.services import (
     OrderIssueError,
     OrderIssueService,
 )
-from store.presenters import DashboardOrderPresenter
 
 audit_logger = logging.getLogger("audit")
 
@@ -51,11 +51,11 @@ class DashboardOrderFlowService:
 
     @staticmethod
     def validate_status_key(next_status: str) -> bool:
-        return next_status in DashboardOrderPresenter.STATUS_META
+        return OrderStatusPolicy.is_valid_status_key(next_status)
 
     @staticmethod
     def validate_payment_status_key(next_payment_status: str) -> bool:
-        return next_payment_status in {choice[0] for choice in DashboardOrderPresenter.PAYMENT_STATUS_CHOICES}
+        return next_payment_status in ManualPaymentUpdateService.ALLOWED_PAYMENT_STATUSES
 
     def update_order_status(
         self,
@@ -72,13 +72,12 @@ class DashboardOrderFlowService:
             except Order.DoesNotExist as exc:
                 raise DashboardOrderFlowError("Заказ не найден.") from exc
 
-            current_status = DashboardOrderPresenter.get_status_key(order)
+            current_status = OrderStatusPolicy.get_status_key(order)
 
-            if current_status in DashboardOrderPresenter.FINAL_STATUS_KEYS and next_status != current_status:
+            if OrderStatusPolicy.is_final_status_key(current_status) and next_status != current_status:
                 raise DashboardOrderFlowError("Нельзя изменить заказ после отмены или выдачи.")
 
-            allowed_transitions = DashboardOrderPresenter.STATUS_TRANSITIONS[current_status]
-            if next_status not in allowed_transitions:
+            if not OrderStatusPolicy.can_transition(current_status, next_status):
                 raise DashboardOrderFlowError("Недопустимый переход статуса для текущего состояния заказа.")
 
             if next_status == current_status:
@@ -127,7 +126,7 @@ class DashboardOrderFlowService:
                 except OrderIssueError as exc:
                     raise DashboardOrderFlowError(str(exc)) from exc
 
-            DashboardOrderPresenter.apply_status(order, next_status)
+            OrderStatusPolicy.apply_status(order, next_status)
             order.save(update_fields=["fulfillment_status", "status", "issued_at", "cancelled_at", "updated_at"])
             OrderStatusTransition.log_if_changed(
                 order=order,

@@ -23,11 +23,6 @@ class IPaymentRepository(ABC):
     """Абстрактный репозиторий для работы с платежами."""
 
     @abstractmethod
-    def create_payment(self, **kwargs) -> Payment:
-        """Создать платеж."""
-        pass
-
-    @abstractmethod
     def get_payment_by_idempotency_key(self, idempotency_key: str) -> Optional[Payment]:
         """Получить платеж по idempotency_key."""
         pass

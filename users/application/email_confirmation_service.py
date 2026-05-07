@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from users.models import User
+from users.tasks import send_confirmation_email, send_confirmation_email_sync
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +18,16 @@ class EmailConfirmationService:
     resend_cooldown_seconds = 60
 
     @staticmethod
-    def send_confirmation_email_with_fallback(user_email: str, confirmation_token: str) -> bool:
-        # Импортируем через users.views для совместимости с существующими patch в тестах.
-        from users import views as user_views
-
+    def send_confirmation_email_with_fallback(
+        user_email: str,
+        confirmation_token: str,
+        async_sender=None,
+        sync_sender=None,
+    ) -> bool:
+        async_sender = async_sender or send_confirmation_email
+        sync_sender = sync_sender or send_confirmation_email_sync
         try:
-            user_views.send_confirmation_email.delay(user_email, confirmation_token)
+            async_sender.delay(user_email, confirmation_token)
             return True
         except Exception:
             logger.exception(
@@ -30,7 +35,7 @@ class EmailConfirmationService:
                 user_email,
                 extra={"event": "confirmation_email_dispatch_failed"},
             )
-            return user_views.send_confirmation_email_sync(user_email, confirmation_token)
+            return sync_sender(user_email, confirmation_token)
 
     @staticmethod
     def generate_token() -> str:

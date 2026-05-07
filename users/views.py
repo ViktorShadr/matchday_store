@@ -18,24 +18,38 @@ from django_ratelimit.decorators import ratelimit
 
 from config.rate_limits import setting_rate
 from orders.application.checkout_session_service import CheckoutSessionService
+from orders.application.order_status_policy import OrderStatusPolicy
 from orders.models import Order
 from orders.services import OrderCancellationError, OrderCancellationService
 from store.mixins.cart_mixins import CartContextMixin
-from store.presenters import DashboardOrderPresenter
 from users.application import EmailConfirmationService
 from users.forms import ProfileDeleteConfirmForm, UserLoginForm, UserProfileForm, UserRegistrationForm
 from users.models import User
-from users.tasks import send_confirmation_email, send_confirmation_email_sync, send_welcome_email  # noqa: F401
+from users.tasks import send_welcome_email
 
 logger = logging.getLogger(__name__)
+
+USER_ORDER_STATUS_LABELS = {
+    "new": "Новый",
+    "processing": "В обработке",
+    "ready": "Готов к выдаче",
+    "issued": "Выдан",
+    "cancelled": "Отменен",
+}
+USER_PAYMENT_STATUS_LABELS = {
+    Order.PaymentStatus.PENDING: "Ожидает оплаты",
+    Order.PaymentStatus.SUCCEEDED: "Оплачен",
+    Order.PaymentStatus.FAILED: "Ошибка оплаты",
+    Order.PaymentStatus.CANCELLED: "Оплата отменена",
+    Order.PaymentStatus.REFUNDED: "Возврат выполнен",
+}
 
 
 def apply_user_order_status(order: Order) -> Order:
     """Подготовить витринный статус исполнения заказа для клиентских страниц."""
-    status_key = DashboardOrderPresenter.get_status_key(order)
-    status_meta = DashboardOrderPresenter.STATUS_META[status_key]
+    status_key = OrderStatusPolicy.get_status_key(order)
     order.user_work_status_key = status_key
-    order.user_work_status_label = status_meta["label"]
+    order.user_work_status_label = USER_ORDER_STATUS_LABELS[status_key]
     if status_key in {"ready", "issued"}:
         order.user_work_status_tone = "success"
     elif status_key == "cancelled":
@@ -43,8 +57,10 @@ def apply_user_order_status(order: Order) -> Order:
     else:
         order.user_work_status_tone = "neutral"
 
-    payment_meta = DashboardOrderPresenter.get_payment_meta(order)
-    order.user_payment_status_label = payment_meta["label"]
+    order.user_payment_status_label = USER_PAYMENT_STATUS_LABELS.get(
+        order.payment_status,
+        USER_PAYMENT_STATUS_LABELS[Order.PaymentStatus.PENDING],
+    )
     if order.payment_status in {Order.PaymentStatus.SUCCEEDED, Order.PaymentStatus.REFUNDED}:
         order.user_payment_status_tone = "success"
     elif order.payment_status in {Order.PaymentStatus.FAILED, Order.PaymentStatus.CANCELLED}:
