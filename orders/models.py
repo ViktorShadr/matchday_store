@@ -63,7 +63,7 @@ class Order(models.Model):
 
     Attributes:
         number (str): Уникальный номер заказа
-        user (User): Пользователь, сделавший заказ
+        user (User): Пользователь, сделавший заказ (необязательно для гостевого заказа)
         email (str): Email заказчика
         phone (str): Номер телефона заказчика
         status (str): Статус заказа (из Status.choices)
@@ -129,7 +129,13 @@ class Order(models.Model):
         PVZ = "pvz", "Пункт выдачи"
 
     number = models.CharField(max_length=32, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="orders",
+        null=True,
+        blank=True,
+    )
     recipient_name = models.CharField(max_length=255, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=32)

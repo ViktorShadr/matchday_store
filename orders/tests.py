@@ -192,19 +192,55 @@ class CheckoutFlowTest(TestCase):
         request.session.save()
         return request
 
-    def test_checkout_requires_authentication(self):
-        """Гость должен быть перенаправлен на логин."""
+    def _prepare_guest_cart(self, quantity=2):
+        session_key = self.client.session.session_key
+        cart = Cart.objects.create(session_key=session_key)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=quantity)
+        return cart
+
+    def test_guest_checkout_page_is_available(self):
+        """Гость может открыть оформление заказа с session-cart."""
+        self._prepare_guest_cart()
+
         response = self.client.get(reverse("orders:checkout"))
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("users:login"), response.url)
-
-    def test_checkout_requires_authentication_shows_login_hint_message(self):
-        response = self.client.get(reverse("orders:checkout"), follow=True)
-
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
-        self.assertContains(response, "Войти в личный кабинет")
+        self.assertContains(response, "Данные покупателя")
+        self.assertContains(response, "Подтвердить заказ")
+        self.assertNotContains(response, "Чтобы оформить заказ, войдите")
+
+    def test_guest_checkout_creates_order_and_shows_registration_offer(self):
+        """Гостевой checkout создает заказ без пользователя и предлагает регистрацию после заказа."""
+        guest_cart = self._prepare_guest_cart()
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Гость Покупатель",
+                "email": "guest@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user__isnull=True, email="guest@example.com")
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+
+        self.variant.refresh_from_db()
+        guest_cart.refresh_from_db()
+        self.assertEqual(order.recipient_name, "Гость Покупатель")
+        self.assertEqual(order.total_amount, Decimal("3980.00"))
+        self.assertEqual(self.variant.reserved_quantity, 2)
+        self.assertEqual(guest_cart.items.count(), 0)
+
+        payment = Payment.objects.get(order=order)
+        self.assertTrue(payment.idempotency_key.startswith("checkout-session-"))
+
+        success_response = self.client.get(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.assertEqual(success_response.status_code, 200)
+        self.assertContains(success_response, "Личный кабинет")
+        self.assertContains(success_response, "Зарегистрируйтесь с email guest@example.com")
+        self.assertContains(success_response, reverse("users:registration"))
 
     def test_checkout_page_shows_commercial_pickup_terms(self):
         self.client.login(email="buyer@example.com", password="testpass123")
@@ -308,17 +344,18 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(self.variant.reserved_quantity, 0)
         self.assertEqual(self.cart.items.count(), 1)
 
-    def test_checkout_redirects_to_profile_when_email_not_confirmed(self):
+    def test_checkout_allows_unconfirmed_account(self):
         self.user.is_email_confirmed = False
         self.user.save(update_fields=["is_email_confirmed"])
         self.client.login(email="buyer@example.com", password="testpass123")
 
-        response = self.client.get(reverse("orders:checkout"), follow=True)
+        response = self.client.get(reverse("orders:checkout"))
 
-        self.assertRedirects(response, reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
-        self.assertContains(response, "Подтвердите email в личном кабинете перед оформлением заказа.")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Оформление заказа")
+        self.assertNotContains(response, "Подтвердите email в личном кабинете перед оформлением заказа.")
 
-    def test_checkout_service_rejects_unconfirmed_email(self):
+    def test_checkout_service_allows_unconfirmed_account(self):
         self.user.is_email_confirmed = False
         self.user.save(update_fields=["is_email_confirmed"])
         service = CheckoutService()
@@ -328,21 +365,20 @@ class CheckoutFlowTest(TestCase):
             cart_context=self.cart_context_resolver.resolve_request(request),
         )
 
-        with self.assertRaisesRegex(CheckoutError, "Подтвердите email"):
-            service.create_order_from_cart(
-                checkout_context,
-                cleaned_data={
-                    "recipient_name": "Иван Иванов",
-                    "email": "buyer@example.com",
-                    "phone": "+79990001122",
-                    "customer_comment": "",
-                },
-            )
+        order = service.create_order_from_cart(
+            checkout_context,
+            cleaned_data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
 
-        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.assertEqual(order.user_id, self.user.id)
         self.variant.refresh_from_db()
-        self.assertEqual(self.variant.reserved_quantity, 0)
-        self.assertEqual(self.cart.items.count(), 1)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+        self.assertEqual(self.cart.items.count(), 0)
 
     def test_checkout_ignores_tampered_email_and_uses_account_email(self):
         self.client.login(email="buyer@example.com", password="testpass123")

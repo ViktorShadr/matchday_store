@@ -1,5 +1,5 @@
-from datetime import timedelta
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
 from uuid import uuid4
@@ -158,29 +158,47 @@ class CheckoutService(ICheckoutService):
         return str(value)
 
     @staticmethod
-    def build_checkout_idempotency_key(checkout_token: Optional[str], user_id: Optional[int] = None) -> str:
-        """Собрать idempotency key для checkout с учетом пользователя."""
+    def build_checkout_idempotency_key(
+        checkout_token: Optional[str],
+        user_id: Optional[int] = None,
+        session_key: Optional[str] = None,
+    ) -> str:
+        """Собрать idempotency key для checkout с учетом пользователя или гостевой сессии."""
         if checkout_token:
             if user_id is not None:
                 return f"checkout-{user_id}-{checkout_token}"
+            if session_key:
+                return f"checkout-session-{session_key}-{checkout_token}"
             return f"checkout-{checkout_token}"
         return uuid4().hex
 
-    def _find_existing_checkout_payment(self, checkout_token: Optional[str], user_id: int):
+    def _find_existing_checkout_payment(
+        self,
+        checkout_token: Optional[str],
+        user_id: Optional[int],
+        session_key: Optional[str] = None,
+    ):
         """Найти уже созданный payment для checkout (новый и legacy ключи)."""
         if not checkout_token:
             return None
 
-        current_key = self.build_checkout_idempotency_key(checkout_token, user_id=user_id)
-        existing_payment = self.payment_repository.get_payment_by_idempotency_key(current_key)
-        if existing_payment and existing_payment.order.user_id == user_id:
-            return existing_payment
+        lookup_keys = [
+            self.build_checkout_idempotency_key(
+                checkout_token,
+                user_id=user_id,
+                session_key=session_key,
+            )
+        ]
 
         # Backward compatibility for keys created before user-scoped idempotency.
         legacy_key = self.build_checkout_idempotency_key(checkout_token)
-        existing_legacy_payment = self.payment_repository.get_payment_by_idempotency_key(legacy_key)
-        if existing_legacy_payment and existing_legacy_payment.order.user_id == user_id:
-            return existing_legacy_payment
+        if legacy_key not in lookup_keys:
+            lookup_keys.append(legacy_key)
+
+        for lookup_key in lookup_keys:
+            existing_payment = self.payment_repository.get_payment_by_idempotency_key(lookup_key)
+            if existing_payment and existing_payment.order.user_id == user_id:
+                return existing_payment
 
         return None
 
@@ -197,6 +215,9 @@ class CheckoutService(ICheckoutService):
 
     @classmethod
     def _ensure_active_order_limit(cls, user_id: int) -> None:
+        if user_id is None:
+            return
+
         max_active_orders = settings.CHECKOUT_MAX_ACTIVE_ORDERS
         if max_active_orders <= 0:
             return
@@ -220,13 +241,7 @@ class CheckoutService(ICheckoutService):
 
     @staticmethod
     def _lock_checkout_user(user_id: int):
-        return get_user_model().objects.select_for_update().only("id", "is_email_confirmed").get(pk=user_id)
-
-    @staticmethod
-    def _ensure_user_email_confirmed(user) -> None:
-        if user.is_email_confirmed:
-            return
-        raise CheckoutError("Подтвердите email в личном кабинете перед оформлением заказа.")
+        return get_user_model().objects.select_for_update().only("id").get(pk=user_id)
 
     @staticmethod
     def _ensure_stock_reserve_mode_enabled() -> None:
@@ -300,10 +315,18 @@ class CheckoutService(ICheckoutService):
             skipped_cart_item_ids=skipped_cart_item_ids,
         )
 
-    def _create_order(self, checkout_context: CheckoutContext, cleaned_data, cart, subtotal_amount: Decimal) -> Order:
+    def _create_order(
+        self,
+        checkout_context: CheckoutContext,
+        cleaned_data,
+        cart,
+        subtotal_amount: Decimal,
+        *,
+        user=None,
+    ) -> Order:
         return self.order_repository.create_order(
             number=self.build_order_number(),
-            user=checkout_context.user,
+            user=user if user is not None else checkout_context.user_for_order,
             recipient_name=cleaned_data["recipient_name"],
             email=cleaned_data["email"],
             phone=cleaned_data["phone"],
@@ -364,9 +387,17 @@ class CheckoutService(ICheckoutService):
         checkout_token: Optional[str] = None,
     ):
         """Создать заказ, зарезервировать остатки и очистить корзину."""
-        payment_idempotency_key = self.build_checkout_idempotency_key(checkout_token, user_id=checkout_context.user_id)
+        payment_idempotency_key = self.build_checkout_idempotency_key(
+            checkout_token,
+            user_id=checkout_context.user_id,
+            session_key=checkout_context.session_key,
+        )
 
-        existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
+        existing_payment = self._find_existing_checkout_payment(
+            checkout_token,
+            checkout_context.user_id,
+            checkout_context.session_key,
+        )
         if existing_payment:
             return existing_payment.order
 
@@ -378,11 +409,14 @@ class CheckoutService(ICheckoutService):
 
         try:
             with transaction.atomic():
-                locked_user = self._lock_checkout_user(checkout_context.user_id)
-                self._ensure_user_email_confirmed(locked_user)
+                locked_user = None
+                if checkout_context.user_id is not None:
+                    locked_user = self._lock_checkout_user(checkout_context.user_id)
+
                 existing_payment = self._find_existing_checkout_payment(
                     checkout_token,
                     checkout_context.user_id,
+                    checkout_context.session_key,
                 )
                 if existing_payment:
                     return existing_payment.order
@@ -415,6 +449,7 @@ class CheckoutService(ICheckoutService):
                         cleaned_data,
                         cart,
                         order_lines.subtotal_amount,
+                        user=locked_user,
                     )
                     self._create_order_items(order, order_lines.order_items)
                     self._create_manual_payment(order, order_lines.subtotal_amount, payment_idempotency_key)
@@ -423,7 +458,11 @@ class CheckoutService(ICheckoutService):
                     self._schedule_notifications_on_commit(order)
         except IntegrityError as exc:
             if checkout_token:
-                existing_payment = self._find_existing_checkout_payment(checkout_token, checkout_context.user_id)
+                existing_payment = self._find_existing_checkout_payment(
+                    checkout_token,
+                    checkout_context.user_id,
+                    checkout_context.session_key,
+                )
                 if existing_payment:
                     return existing_payment.order
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc

@@ -504,7 +504,7 @@ class UserViewsTest(TestCase):
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Подтвердите email для оформления заказов")
+        self.assertContains(response, "Подтвердите email для истории заказов")
         self.assertContains(response, reverse("users:resend_confirmation"))
 
     def test_profile_detail_hides_email_confirmation_prompt_for_confirmed_user(self):
@@ -514,7 +514,7 @@ class UserViewsTest(TestCase):
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Подтвердите email для оформления заказов")
+        self.assertNotContains(response, "Подтвердите email для истории заказов")
 
     def test_profile_detail_view_other_profile_denied(self):
         """Проверяет сценарий 'profile detail view other profile denied'."""
@@ -684,6 +684,63 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Отменить заказ")
         self.assertNotContains(response, "ORD-OTHER-1")
 
+    def test_user_order_list_shows_confirmed_guest_orders_with_same_email(self):
+        """После подтверждения email личный кабинет показывает гостевые заказы с этим email."""
+        self.user.is_email_confirmed = True
+        self.user.save(update_fields=["is_email_confirmed"])
+        guest_order = Order.objects.create(
+            number="ORD-GUEST-EMAIL-1",
+            user=None,
+            recipient_name="Гость",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            total_amount="1500.00",
+        )
+        OrderItem.objects.create(
+            order=guest_order,
+            product_variant=self.variant,
+            product_name_snapshot="Шарф",
+            unit_price="1500.00",
+            quantity=1,
+            line_total="1500.00",
+        )
+        Order.objects.create(
+            number="ORD-GUEST-OTHER-1",
+            user=None,
+            recipient_name="Другой гость",
+            email="guest-other@example.com",
+            phone="+79991111111",
+            status=Order.Status.PLACED,
+            total_amount="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ORD-GUEST-EMAIL-1")
+        self.assertContains(response, "Гость")
+        self.assertNotContains(response, "ORD-GUEST-OTHER-1")
+        self.assertNotContains(response, "Отменить заказ")
+
+    def test_user_order_list_hides_guest_orders_until_email_is_confirmed(self):
+        Order.objects.create(
+            number="ORD-GUEST-UNCONFIRMED-1",
+            user=None,
+            recipient_name="Гость",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            total_amount="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "ORD-GUEST-UNCONFIRMED-1")
+
     def test_user_order_list_reflects_current_workflow_status(self):
         """Список заказов должен показывать статус исполнения, а не только общий status."""
         Order.objects.create(
@@ -735,6 +792,39 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Ожидает оплаты")
         self.assertContains(response, "Отменить заказ")
         self.assertContains(response, "Шарф")
+
+    def test_user_order_detail_shows_confirmed_guest_order_without_cancel_action(self):
+        self.user.is_email_confirmed = True
+        self.user.save(update_fields=["is_email_confirmed"])
+        order = Order.objects.create(
+            number="ORD-GUEST-DETAIL-1",
+            user=None,
+            recipient_name="Гость",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            total_amount="1500.00",
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot="Шарф",
+            unit_price="1500.00",
+            quantity=1,
+            line_total="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_detail", kwargs={"pk": order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ORD-GUEST-DETAIL-1")
+        self.assertContains(response, "Шарф")
+        self.assertNotContains(response, "Отменить заказ")
 
     def test_user_order_detail_reflects_current_workflow_status(self):
         order = Order.objects.create(

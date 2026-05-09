@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -40,7 +39,7 @@ cart_context_resolver = CartContextResolver()
     ),
     name="dispatch",
 )
-class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
+class CheckoutView(CartContextMixin, FormView):
     """Страница оформления заказа для MVP-сценария самовывоза."""
 
     template_name = "orders/checkout.html"
@@ -49,20 +48,9 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
 
     def dispatch(self, request, *args, **kwargs):
         """Не допускать оформление с пустой корзиной."""
-        if not request.user.is_authenticated:
-            messages.info(request, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
-            return self.handle_no_permission()
-
         if request.method == "POST" and getattr(request, "limited", False):
             messages.error(request, "Слишком много попыток оформления заказа. Повторите чуть позже.")
             return redirect(reverse("orders:checkout"))
-
-        if not request.user.is_email_confirmed:
-            messages.warning(
-                request,
-                "Подтвердите email в личном кабинете перед оформлением заказа.",
-            )
-            return redirect(reverse("users:profile_detail", kwargs={"pk": request.user.pk}))
 
         cart_context = cart_context_resolver.resolve_request(request)
         cart_summary = cart_service.get_cart_summary(cart_context)
@@ -82,6 +70,9 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
     def get_initial(self):
         """Подставить данные пользователя в форму."""
         user = self.request.user
+        if not user.is_authenticated:
+            return {}
+
         return {
             "recipient_name": f"{user.first_name} {user.last_name}".strip() or user.email,
             "email": user.email,
@@ -91,7 +82,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
     def get_form_kwargs(self):
         """Передать пользователя в форму, чтобы email checkout был email аккаунта."""
         kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
+        kwargs["user"] = self.request.user if self.request.user.is_authenticated else None
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -117,7 +108,10 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
 
         try:
             order = checkout_service.create_order_from_cart(
-                CheckoutContext(user=self.request.user, cart_context=self.cart_context),
+                CheckoutContext(
+                    user=self.request.user if self.request.user.is_authenticated else None,
+                    cart_context=self.cart_context,
+                ),
                 form.cleaned_data,
                 checkout_token=submitted_token,
             )
@@ -134,7 +128,7 @@ class CheckoutView(LoginRequiredMixin, CartContextMixin, FormView):
         return redirect(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
 
 
-class CheckoutSuccessView(LoginRequiredMixin, CartContextMixin, TemplateView):
+class CheckoutSuccessView(CartContextMixin, TemplateView):
     """Подтверждение успешно оформленного заказа."""
 
     template_name = "orders/checkout_success.html"
@@ -143,9 +137,12 @@ class CheckoutSuccessView(LoginRequiredMixin, CartContextMixin, TemplateView):
         """Вернуть оформленный заказ текущего пользователя."""
         context = super().get_context_data(**kwargs)
         try:
-            order = Order.objects.prefetch_related("items").get(pk=self.kwargs["pk"], user=self.request.user)
+            order = Order.objects.prefetch_related("items").get(pk=self.kwargs["pk"])
         except Order.DoesNotExist as exc:
             raise Http404 from exc
+
+        if not CheckoutSessionService().can_access_order(self.request, order):
+            raise Http404
 
         context["order"] = order
         context["order_items"] = order.items.order_by("pk")

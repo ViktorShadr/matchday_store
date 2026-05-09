@@ -90,6 +90,29 @@
                 </div>
             {% endif %}
 
+            {% if not user.is_authenticated %}
+                <div class="sf-success-order-card mt-4">
+                    <div class="sf-section-head mb-3">
+                        <div>
+                            <h2 class="sf-section-title mb-2">Личный кабинет</h2>
+                            <p class="sf-section-subtitle mb-0">
+                                Зарегистрируйтесь с email {{ order.email }}, чтобы отслеживать заказы, бонусы,
+                                акции и новые поступления товара.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="sf-success-actions mt-0">
+                        <a href="{% url 'users:registration' %}?email={{ order.email|urlencode }}" class="btn btn-primary">
+                            Зарегистрироваться
+                        </a>
+                        <a href="{% url 'users:login' %}" class="btn btn-secondary">
+                            Уже есть аккаунт
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+
             <div class="sf-success-actions">
                 <a href="{% url 'store:product_list' %}" class="btn btn-primary">
                     Вернуться в каталог

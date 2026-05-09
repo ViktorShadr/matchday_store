@@ -38,14 +38,21 @@ def _build_dashboard_order_detail_url(order: Order) -> str:
 
 def _build_order_notification_content(order: Order, event_key: str) -> tuple[str, str]:
     order_number = order.number or str(order.pk)
-    detail_url = _build_order_detail_url(order)
     brand_name = settings.STORE_BRAND_NAME
     pickup_retention_label = format_business_days_label(settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS)
     base_lines = [
         f"Заказ: {order_number}",
         f"Сумма: {order.total_amount} {order.currency}",
-        f"Детали заказа: {detail_url}",
     ]
+    if order.user_id:
+        base_lines.append(f"Детали заказа: {_build_order_detail_url(order)}")
+    else:
+        base_lines.extend(
+            [
+                "Сохраните номер заказа для связи с магазином.",
+                "После регистрации и подтверждения этого email заказ появится в личном кабинете.",
+            ]
+        )
 
     if event_key == "created":
         subject = f"Заказ {order_number} принят"
