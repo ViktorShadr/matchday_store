@@ -1,8 +1,7 @@
 from uuid import uuid4
 
-from django.conf import settings
-
 from orders.models import Order
+from store.site_contacts import build_pickup_location
 
 
 class CheckoutSessionService:
@@ -38,13 +37,7 @@ class CheckoutSessionService:
 
     @staticmethod
     def build_pickup_location() -> dict[str, str]:
-        return {
-            "code": settings.STORE_PICKUP_LOCATION_CODE,
-            "name": settings.STORE_PICKUP_LOCATION_NAME,
-            "address": settings.STORE_PICKUP_ADDRESS,
-            "hours": settings.STORE_PICKUP_HOURS,
-            "phone": settings.STORE_PICKUP_PHONE,
-        }
+        return build_pickup_location()
 
     def mark_checkout_processed(self, request, submitted_token: str, order_id: int) -> None:
         request.session[self.checkout_processed_session_key] = {

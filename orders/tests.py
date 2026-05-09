@@ -206,6 +206,18 @@ class CheckoutFlowTest(TestCase):
         self.assertContains(response, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
         self.assertContains(response, "Войти в личный кабинет")
 
+    def test_checkout_page_shows_commercial_pickup_terms(self):
+        self.client.login(email="buyer@example.com", password="testpass123")
+
+        response = self.client.get(reverse("orders:checkout"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Оплата производится при получении заказа.")
+        self.assertContains(response, settings.STORE_PICKUP_LOCATION_NAME)
+        self.assertContains(response, "Резерв хранится 3 рабочих дня.")
+        self.assertNotContains(response, "После оформления пользователь должен ясно видеть итог покупки.")
+        self.assertNotContains(response, "Checkout должен быть простым и не вызывать сомнений.")
+
     @override_settings(
         RATELIMIT_ENABLE=True,
         RATELIMIT_CHECKOUT_IP_RATE="1/m",
@@ -699,6 +711,8 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(success_response.status_code, 200)
         self.assertContains(success_response, "Самовывоз")
         self.assertContains(success_response, settings.STORE_PICKUP_LOCATION_NAME)
+        self.assertContains(success_response, "Срок хранения резерва")
+        self.assertContains(success_response, "3 рабочих дня")
         self.assertContains(success_response, "Шарф ФК Шинник")
         self.assertContains(success_response, "Ожидает оплаты")
 

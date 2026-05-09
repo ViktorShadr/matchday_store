@@ -52,14 +52,14 @@ class ProductModelTest(TestCase):
         """Подготавливает тестовые данные перед выполнением тестов."""
         self.category = Category.objects.create(name="Футболки", description="Спортивные футболки")
         self.product = Product.objects.create(
-            name="Футболка Manchester United",
+            name="Футболка ФК Шинник",
             description="Официальная футболка домашнего комплекта",
             category=self.category,
         )
 
     def test_product_creation(self):
         """Проверяет сценарий 'product creation'."""
-        self.assertEqual(self.product.name, "Футболка Manchester United")
+        self.assertEqual(self.product.name, "Футболка ФК Шинник")
         self.assertEqual(self.product.category, self.category)
         self.assertTrue(self.product.is_on_sale)
         self.assertTrue(self.product.created_at)
@@ -67,7 +67,7 @@ class ProductModelTest(TestCase):
 
     def test_product_str_method(self):
         """Проверяет сценарий 'product str method'."""
-        self.assertEqual(str(self.product), "Футболка Manchester United")
+        self.assertEqual(str(self.product), "Футболка ФК Шинник")
 
     def test_product_without_category(self):
         """Проверяет сценарий 'product without category'."""
