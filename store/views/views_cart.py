@@ -74,6 +74,28 @@ def build_error_response(exception: CartException) -> JsonResponse:
     )
 
 
+def build_success_response(request, wants_json: bool, message: str, payload: dict):
+    if wants_json:
+        return JsonResponse({"success": True, "message": message, **payload})
+    messages.success(request, message)
+    return redirect(get_safe_redirect_url(request))
+
+
+def build_cart_error_response(request, wants_json: bool, exception: CartException):
+    if wants_json:
+        return build_error_response(exception)
+    messages.error(request, str(exception))
+    return redirect(get_safe_redirect_url(request))
+
+
+def build_cart_item_missing_response(request, wants_json: bool):
+    message = "Товар не найден в корзине"
+    if wants_json:
+        return JsonResponse({"success": False, "error": message}, status=404)
+    messages.warning(request, message)
+    return redirect(get_safe_redirect_url(request))
+
+
 class AddToCartView(View):
     """
     Добавление товара в корзину.
@@ -113,37 +135,23 @@ class AddToCartView(View):
             cart_item = cart_service.add_item(cart_context, variant_id, quantity)
             cart = cart_context.cart
             success_message = f'Товар "{cart_item.product_variant.product.name}" добавлен в корзину'
-
-            if wants_json:
-                return JsonResponse(
-                    {
-                        "success": True,
-                        "message": success_message,
-                        "cart_total": cart.total_items,
-                    }
-                )
-            messages.success(request, success_message)
-            return redirect(get_safe_redirect_url(request))
+            return build_success_response(
+                request,
+                wants_json,
+                success_message,
+                {"cart_total": cart.total_items},
+            )
 
         except (ProductVariantNotFoundError, ProductNotOnSaleError, InvalidQuantityError, InsufficientStockError) as e:
             logger.warning(f"Validation error in add_to_cart: {e}")
-            if wants_json:
-                return build_error_response(e)
-            messages.error(request, str(e))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, e)
         except CartOperationError as e:
             logger.error(f"Operation error in add_to_cart: {e}")
-            if wants_json:
-                return build_error_response(e)
-            messages.error(request, str(e))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, e)
         except Exception as e:
             logger.error(f"Unexpected error in add_to_cart: {e}", exc_info=True)
             error = CartOperationError("Произошла ошибка при добавлении товара")
-            if wants_json:
-                return build_error_response(error)
-            messages.error(request, str(error))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, error)
 
 
 class UpdateCartView(View):
@@ -185,40 +193,28 @@ class UpdateCartView(View):
             cart_item = cart_service.update_item_quantity(cart_context, variant_id, quantity)
             cart = cart_context.cart
             success_message = "Количество товара обновлено"
-
-            if wants_json:
-                return JsonResponse(
-                    {
-                        "success": True,
-                        "message": success_message,
-                        "item_total": float(cart_item.total_price),
-                        "item_quantity": cart_item.quantity,
-                        "cart_total": float(cart.total_price),
-                        "cart_items": cart.total_items,
-                    }
-                )
-            messages.success(request, success_message)
-            return redirect(get_safe_redirect_url(request))
+            return build_success_response(
+                request,
+                wants_json,
+                success_message,
+                {
+                    "item_total": float(cart_item.total_price),
+                    "item_quantity": cart_item.quantity,
+                    "cart_total": float(cart.total_price),
+                    "cart_items": cart.total_items,
+                },
+            )
 
         except (ProductVariantNotFoundError, ProductNotOnSaleError, InvalidQuantityError, InsufficientStockError) as e:
             logger.warning(f"Validation error in update_cart: {e}")
-            if wants_json:
-                return build_error_response(e)
-            messages.error(request, str(e))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, e)
         except CartOperationError as e:
             logger.error(f"Operation error in update_cart: {e}")
-            if wants_json:
-                return build_error_response(e)
-            messages.error(request, str(e))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, e)
         except Exception as e:
             logger.error(f"Unexpected error in update_cart: {e}", exc_info=True)
             error = CartOperationError("Произошла ошибка при обновлении")
-            if wants_json:
-                return build_error_response(error)
-            messages.error(request, str(error))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, error)
 
 
 class RemoveFromCartView(View):
@@ -258,40 +254,26 @@ class RemoveFromCartView(View):
             if success:
                 cart = cart_context.cart
                 success_message = "Товар удален из корзины"
-                if wants_json:
-                    return JsonResponse(
-                        {
-                            "success": True,
-                            "message": success_message,
-                            "cart_total": float(cart.total_price),
-                            "cart_items": cart.total_items,
-                        }
-                    )
-                messages.success(request, success_message)
-                return redirect(get_safe_redirect_url(request))
+                return build_success_response(
+                    request,
+                    wants_json,
+                    success_message,
+                    {
+                        "cart_total": float(cart.total_price),
+                        "cart_items": cart.total_items,
+                    },
+                )
 
             logger.warning(f"Item not found in cart: variant_id {variant_id}")
-            if wants_json:
-                return JsonResponse({"success": False, "error": "Товар не найден в корзине"}, status=404)
-            messages.warning(request, "Товар не найден в корзине")
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_item_missing_response(request, wants_json)
 
         except (ProductVariantNotFoundError, InvalidQuantityError) as e:
             logger.warning(f"Validation error in remove_from_cart: {e}")
-            if wants_json:
-                return build_error_response(e)
-            messages.error(request, str(e))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, e)
         except CartOperationError as e:
             logger.error(f"Operation error in remove_from_cart: {e}")
-            if wants_json:
-                return build_error_response(e)
-            messages.error(request, str(e))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, e)
         except Exception as e:
             logger.error(f"Unexpected error in remove_from_cart: {e}", exc_info=True)
             error = CartOperationError("Произошла ошибка при удалении товара")
-            if wants_json:
-                return build_error_response(error)
-            messages.error(request, str(error))
-            return redirect(get_safe_redirect_url(request))
+            return build_cart_error_response(request, wants_json, error)

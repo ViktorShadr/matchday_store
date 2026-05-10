@@ -1,7 +1,7 @@
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
+from django.views.generic import DetailView, ListView, TemplateView
 
-from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin, ModeratorRequiredMixin
+from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin
 from store.mixins.cart_mixins import CartContextMixin
 from store.models import Category, InfoCard, Product
 from store.queries import CatalogQueryService
@@ -168,84 +168,4 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
         context["total_stock"] = total_stock
         context["low_stock"] = 0 < total_stock <= 5
 
-        return context
-
-
-class ProductUpdateView(ModeratorRequiredMixin, UpdateView):
-    """
-    Редактирование товара (только для персонала).
-
-    Позволяет сотрудникам редактировать основную информацию о товаре.
-
-    Fields:
-        name, description, category: Основные поля товара
-
-    Returns:
-        HttpResponseRedirect: Перенаправление на страницу товара после сохранения
-    """
-
-    model = Product
-    template_name = "main_page/product_update.html"
-    fields = ["name", "description", "category"]
-    context_object_name = "product"
-
-    def get_success_url(self):
-        """Возвращает URL для перенаправления после успешного действия."""
-        return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
-
-    def get_context_data(self, **kwargs):
-        """Формирует контекст для шаблона."""
-        context = super().get_context_data(**kwargs)
-        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
-        return context
-
-
-class ProductCreateView(ModeratorRequiredMixin, CreateView):
-    """
-    Создание нового товара (только для персонала).
-
-    Позволяет сотрудникам создавать новые товары в каталоге.
-
-    Fields:
-        name, description, category: Основные поля товара
-
-    Returns:
-        HttpResponseRedirect: Перенаправление на страницу созданного товара
-    """
-
-    model = Product
-    template_name = "main_page/product_create.html"
-    fields = ["name", "description", "category"]
-    context_object_name = "product"
-
-    def get_success_url(self):
-        """Возвращает URL для перенаправления после успешного действия."""
-        return reverse_lazy("store:product_detail", kwargs={"pk": self.object.pk})
-
-    def get_context_data(self, **kwargs):
-        """Формирует контекст для шаблона."""
-        context = super().get_context_data(**kwargs)
-        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
-        return context
-
-
-class ProductDeleteView(ModeratorRequiredMixin, DeleteView):
-    """
-    Удаление товара (только для персонала).
-
-    Позволяет сотрудникам удалять товары из каталога.
-
-    Returns:
-        HttpResponseRedirect: Перенаправление на список товаров после удаления
-    """
-
-    model = Product
-    template_name = "main_page/product_delete.html"
-    context_object_name = "product"
-    success_url = reverse_lazy("store:product_list")
-
-    def get_context_data(self, **kwargs):
-        """Формирует контекст для шаблона."""
-        context = super().get_context_data(**kwargs)
-        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context

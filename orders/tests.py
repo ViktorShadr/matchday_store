@@ -23,7 +23,7 @@ from django.test import (
 from django.urls import reverse
 from django.utils import timezone
 
-from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService
+from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService, OrderStatusPolicy
 from orders.forms import CheckoutForm
 from orders.models import Order, OrderItem, OrderStatusTransition
 from orders.services import (
@@ -33,6 +33,8 @@ from orders.services import (
     OrderAutoCancellationService,
     OrderCancellationError,
     OrderCancellationService,
+    OrderIssueError,
+    OrderIssueService,
 )
 from orders.tasks import (
     NotificationDeliveryError,
@@ -45,7 +47,6 @@ from orders.tasks import (
 from payments.models import Payment
 from store.application import CartContext, CartContextResolver
 from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
-from store.presenters import DashboardOrderPresenter
 from users.models import User
 
 
@@ -109,6 +110,45 @@ class CheckoutFormValidationTest(SimpleTestCase):
         self.assertEqual(form.cleaned_data["email"], "buyer@example.com")
 
 
+class OrderStatusPolicyTest(SimpleTestCase):
+    """Тесты доменной политики staff-статусов заказа."""
+
+    def test_resolves_dashboard_status_key_from_order_state(self):
+        order = Order(
+            status=Order.Status.PROCESSING,
+            fulfillment_status=Order.FulfillmentStatus.RESERVED,
+            payment_status=Order.PaymentStatus.PENDING,
+        )
+
+        self.assertEqual(OrderStatusPolicy.get_status_key(order), "ready")
+
+        order.fulfillment_status = Order.FulfillmentStatus.DELIVERED
+        self.assertEqual(OrderStatusPolicy.get_status_key(order), "issued")
+
+        order.status = Order.Status.CANCELLED
+        self.assertEqual(OrderStatusPolicy.get_status_key(order), "cancelled")
+
+    def test_transition_policy_blocks_final_status_changes(self):
+        self.assertTrue(OrderStatusPolicy.can_transition("ready", "issued"))
+        self.assertFalse(OrderStatusPolicy.can_transition("issued", "processing"))
+        self.assertTrue(OrderStatusPolicy.is_final_status_key("issued"))
+        self.assertTrue(OrderStatusPolicy.is_final_status_key("cancelled"))
+
+    def test_apply_status_updates_order_fields(self):
+        order = Order(
+            status=Order.Status.PLACED,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            payment_status=Order.PaymentStatus.SUCCEEDED,
+        )
+
+        OrderStatusPolicy.apply_status(order, "issued")
+
+        self.assertEqual(order.status, Order.Status.DELIVERED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.DELIVERED)
+        self.assertIsNotNone(order.issued_at)
+        self.assertIsNone(order.cancelled_at)
+
+
 @override_settings(RATELIMIT_ENABLE=False)
 class CheckoutFlowTest(TestCase):
     """Тесты MVP checkout flow."""
@@ -152,19 +192,138 @@ class CheckoutFlowTest(TestCase):
         request.session.save()
         return request
 
-    def test_checkout_requires_authentication(self):
-        """Гость должен быть перенаправлен на логин."""
+    def _prepare_guest_cart(self, quantity=2):
+        session_key = self.client.session.session_key
+        cart = Cart.objects.create(session_key=session_key)
+        CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=quantity)
+        return cart
+
+    def test_guest_checkout_page_is_available(self):
+        """Гость может открыть оформление заказа с session-cart."""
+        self._prepare_guest_cart()
+
         response = self.client.get(reverse("orders:checkout"))
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("users:login"), response.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Данные покупателя")
+        self.assertContains(response, "Подтвердить заказ")
+        self.assertNotContains(response, "Чтобы оформить заказ, войдите")
 
-    def test_checkout_requires_authentication_shows_login_hint_message(self):
-        response = self.client.get(reverse("orders:checkout"), follow=True)
+    def test_guest_checkout_creates_order_and_shows_registration_offer(self):
+        """Гостевой checkout создает заказ без пользователя и предлагает регистрацию после заказа."""
+        guest_cart = self._prepare_guest_cart()
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Гость Покупатель",
+                "email": "guest@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user__isnull=True, email="guest@example.com")
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+
+        self.variant.refresh_from_db()
+        guest_cart.refresh_from_db()
+        self.assertEqual(order.recipient_name, "Гость Покупатель")
+        self.assertEqual(order.total_amount, Decimal("3980.00"))
+        self.assertEqual(self.variant.reserved_quantity, 2)
+        self.assertEqual(guest_cart.items.count(), 0)
+
+        payment = Payment.objects.get(order=order)
+        self.assertTrue(payment.idempotency_key.startswith("checkout-session-"))
+
+        success_response = self.client.get(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.assertEqual(success_response.status_code, 200)
+        self.assertContains(success_response, "Личный кабинет")
+        self.assertContains(success_response, "Зарегистрируйтесь с email guest@example.com")
+        self.assertContains(success_response, reverse("users:registration"))
+
+    def test_guest_empty_cart_fallback_rechecks_idempotency_with_session_key(self):
+        """Fallback гостевой корзины должен найти session-scoped payment."""
+        service = CheckoutService()
+        checkout_token = "guest-race-token"
+        session_key = "guest-race-session"
+        guest_cart = Cart.objects.create(session_key=session_key)
+        existing_order = Order.objects.create(
+            number="ORD-GUEST-RACE",
+            user=None,
+            recipient_name="Гость Покупатель",
+            email="guest@example.com",
+            phone="+79990001122",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+            subtotal_amount=Decimal("3980.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("3980.00"),
+            source_cart_id=guest_cart.id,
+            confirmed_at=timezone.now(),
+        )
+        Payment.objects.create(
+            order=existing_order,
+            provider=Payment.Provider.MANUAL,
+            idempotency_key=service.build_checkout_idempotency_key(
+                checkout_token,
+                session_key=session_key,
+            ),
+            status=Payment.Status.PENDING,
+            amount=existing_order.total_amount,
+            currency=existing_order.currency,
+        )
+        checkout_context = CheckoutContext(
+            user=None,
+            cart_context=CartContext(
+                cart=guest_cart,
+                user_id=None,
+                session_key=session_key,
+                is_authenticated=False,
+            ),
+        )
+        cleaned_data = {
+            "recipient_name": "Гость Покупатель",
+            "email": "guest@example.com",
+            "phone": "+79990001122",
+            "customer_comment": "",
+        }
+
+        real_lookup = service._find_existing_checkout_payment
+        lookup_call_count = 0
+
+        def delayed_lookup(*args, **kwargs):
+            nonlocal lookup_call_count
+            lookup_call_count += 1
+            if lookup_call_count <= 2:
+                return None
+            return real_lookup(*args, **kwargs)
+
+        with patch.object(service, "_find_existing_checkout_payment", side_effect=delayed_lookup):
+            order = service.create_order_from_cart(
+                checkout_context,
+                cleaned_data,
+                checkout_token=checkout_token,
+            )
+
+        self.assertEqual(order.pk, existing_order.pk)
+        self.assertEqual(lookup_call_count, 3)
+
+    def test_checkout_page_shows_commercial_pickup_terms(self):
+        self.client.login(email="buyer@example.com", password="testpass123")
+
+        response = self.client.get(reverse("orders:checkout"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Чтобы оформить заказ, войдите в аккаунт или зарегистрируйтесь.")
-        self.assertContains(response, "Войти в личный кабинет")
+        self.assertContains(response, "Оплата производится при получении заказа.")
+        self.assertContains(response, settings.STORE_PICKUP_LOCATION_NAME)
+        self.assertContains(response, "Резерв хранится 3 рабочих дня.")
+        self.assertNotContains(response, "После оформления пользователь должен ясно видеть итог покупки.")
+        self.assertNotContains(response, "Checkout должен быть простым и не вызывать сомнений.")
 
     @override_settings(
         RATELIMIT_ENABLE=True,
@@ -256,17 +415,18 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(self.variant.reserved_quantity, 0)
         self.assertEqual(self.cart.items.count(), 1)
 
-    def test_checkout_redirects_to_profile_when_email_not_confirmed(self):
+    def test_checkout_allows_unconfirmed_account(self):
         self.user.is_email_confirmed = False
         self.user.save(update_fields=["is_email_confirmed"])
         self.client.login(email="buyer@example.com", password="testpass123")
 
-        response = self.client.get(reverse("orders:checkout"), follow=True)
+        response = self.client.get(reverse("orders:checkout"))
 
-        self.assertRedirects(response, reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
-        self.assertContains(response, "Подтвердите email в личном кабинете перед оформлением заказа.")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Оформление заказа")
+        self.assertNotContains(response, "Подтвердите email в личном кабинете перед оформлением заказа.")
 
-    def test_checkout_service_rejects_unconfirmed_email(self):
+    def test_checkout_service_allows_unconfirmed_account(self):
         self.user.is_email_confirmed = False
         self.user.save(update_fields=["is_email_confirmed"])
         service = CheckoutService()
@@ -276,21 +436,20 @@ class CheckoutFlowTest(TestCase):
             cart_context=self.cart_context_resolver.resolve_request(request),
         )
 
-        with self.assertRaisesRegex(CheckoutError, "Подтвердите email"):
-            service.create_order_from_cart(
-                checkout_context,
-                cleaned_data={
-                    "recipient_name": "Иван Иванов",
-                    "email": "buyer@example.com",
-                    "phone": "+79990001122",
-                    "customer_comment": "",
-                },
-            )
+        order = service.create_order_from_cart(
+            checkout_context,
+            cleaned_data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
 
-        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.assertEqual(order.user_id, self.user.id)
         self.variant.refresh_from_db()
-        self.assertEqual(self.variant.reserved_quantity, 0)
-        self.assertEqual(self.cart.items.count(), 1)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+        self.assertEqual(self.cart.items.count(), 0)
 
     def test_checkout_ignores_tampered_email_and_uses_account_email(self):
         self.client.login(email="buyer@example.com", password="testpass123")
@@ -659,6 +818,8 @@ class CheckoutFlowTest(TestCase):
         self.assertEqual(success_response.status_code, 200)
         self.assertContains(success_response, "Самовывоз")
         self.assertContains(success_response, settings.STORE_PICKUP_LOCATION_NAME)
+        self.assertContains(success_response, "Срок хранения резерва")
+        self.assertContains(success_response, "3 рабочих дня")
         self.assertContains(success_response, "Шарф ФК Шинник")
         self.assertContains(success_response, "Ожидает оплаты")
 
@@ -827,6 +988,35 @@ class OrderCancellationServiceTest(TestCase):
         self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertIsNotNone(order.cancelled_at)
 
+    def test_cancel_order_cancels_manual_payment_and_keeps_order_cancelled_after_payment_save(self):
+        order = self._create_order_with_item()
+        payment = Payment.objects.create(
+            order=order,
+            provider=Payment.Provider.MANUAL,
+            idempotency_key="cancel-manual-payment",
+            status=Payment.Status.PENDING,
+            amount=order.total_amount,
+            currency=order.currency,
+        )
+
+        self.service.cancel_order(order_id=order.id, user_id=self.user.id)
+
+        self.variant.refresh_from_db()
+        order.refresh_from_db()
+        payment.refresh_from_db()
+
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertEqual(payment.status, Payment.Status.CANCELLED)
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+        payment.save()
+        order.refresh_from_db()
+
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+
     def test_cancel_order_creates_status_transition_audit(self):
         order = self._create_order_with_item()
 
@@ -916,6 +1106,123 @@ class OrderCancellationServiceTest(TestCase):
         self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.SHIPPED)
         self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
         self.assertIsNone(order.cancelled_at)
+
+
+class OrderIssueServiceTest(TestCase):
+    """Тесты доменных guard-ов выдачи заказа."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="issue-buyer@example.com",
+            password="testpass123",
+            first_name="Ирина",
+            last_name="Выдача",
+            phone="+79990001122",
+            is_active=True,
+        )
+        self.category = Category.objects.create(name="Шарфы")
+        self.product = Product.objects.create(name="Шарф клуба", category=self.category)
+        self.image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("scarf.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("1000.00"),
+            quantity=5,
+            reserved_quantity=2,
+            image=self.image,
+        )
+        self.service = OrderIssueService()
+
+    def _create_order_with_item(
+        self,
+        *,
+        status=Order.Status.PROCESSING,
+        fulfillment_status=Order.FulfillmentStatus.RESERVED,
+        payment_status=Order.PaymentStatus.SUCCEEDED,
+    ):
+        order = Order.objects.create(
+            number=f"ORD-ISSUE-{Order.objects.count() + 1}",
+            user=self.user,
+            recipient_name="Ирина Выдача",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=status,
+            payment_status=payment_status,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("2000.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("2000.00"),
+            confirmed_at=timezone.now(),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=2,
+            line_total=Decimal("2000.00"),
+        )
+        return order
+
+    def test_consume_reserved_stock_rejects_non_issuable_order_status(self):
+        order = self._create_order_with_item(
+            status=Order.Status.PLACED,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+        )
+
+        with self.assertRaises(OrderIssueError):
+            self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    def test_consume_reserved_stock_rejects_order_without_successful_payment(self):
+        order = self._create_order_with_item(payment_status=Order.PaymentStatus.PENDING)
+
+        with self.assertRaises(OrderIssueError):
+            self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    def test_consume_reserved_stock_for_ready_paid_order(self):
+        order = self._create_order_with_item()
+
+        returned_order = self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(returned_order.id, order.id)
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+    def test_consume_reserved_stock_is_idempotent_for_already_issued_order(self):
+        order = self._create_order_with_item(
+            status=Order.Status.DELIVERED,
+            fulfillment_status=Order.FulfillmentStatus.DELIVERED,
+        )
+        self.variant.quantity = 3
+        self.variant.reserved_quantity = 0
+        self.variant.save(update_fields=["quantity", "reserved_quantity", "updated_at"])
+
+        returned_order = self.service.consume_reserved_stock(order_id=order.id)
+
+        self.variant.refresh_from_db()
+        self.assertEqual(returned_order.id, order.id)
+        self.assertEqual(self.variant.quantity, 3)
+        self.assertEqual(self.variant.reserved_quantity, 0)
 
 
 @override_settings(ORDER_PICKUP_RETENTION_BUSINESS_DAYS=3, ORDER_AUTO_CANCEL_BATCH_SIZE=100)
@@ -1424,7 +1731,7 @@ class OrderConcurrencyTest(TransactionTestCase):
         """Параллельные staff-обновления статуса не должны нарушать flow."""
         order = self._create_cancellable_order()
         processing_started = Event()
-        original_apply_status = DashboardOrderPresenter.apply_status
+        original_apply_status = OrderStatusPolicy.apply_status
 
         def delayed_apply_status(order_obj, status_key):
             if status_key == "processing":
@@ -1433,7 +1740,7 @@ class OrderConcurrencyTest(TransactionTestCase):
             return original_apply_status(order_obj, status_key)
 
         with patch(
-            "orders.application.dashboard_order_flow.DashboardOrderPresenter.apply_status",
+            "orders.application.dashboard_order_flow.OrderStatusPolicy.apply_status",
             side_effect=delayed_apply_status,
         ):
             with ThreadPoolExecutor(max_workers=2) as executor:

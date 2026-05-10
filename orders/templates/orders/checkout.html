@@ -120,9 +120,11 @@
                 <div class="sf-checkout-note-card">
                     <h3 class="sf-checkout-note-title">Важно</h3>
                     <ul class="sf-checkout-note-list">
-                        <li>Проверь контактные данные перед подтверждением.</li>
-                        <li>После оформления пользователь должен ясно видеть итог покупки.</li>
-                        <li>Checkout должен быть простым и не вызывать сомнений.</li>
+                        <li>Оплата производится при получении заказа.</li>
+                        <li>Самовывоз: {{ pickup_location.name }}, {{ pickup_location.address }}.</li>
+                        <li>Забрать заказ можно после уведомления о готовности.</li>
+                        <li>Резерв хранится {{ store_contacts.pickup_retention_label }}.</li>
+                        <li>Возьмите с собой номер заказа.</li>
                     </ul>
                 </div>
             </aside>

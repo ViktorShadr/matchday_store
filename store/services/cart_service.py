@@ -53,6 +53,36 @@ class CartService:
         self.cart_repository = cart_repository or CartRepository()
         self.product_variant_repository = product_variant_repository or ProductVariantRepository()
 
+    @staticmethod
+    def _validate_variant_quantity(
+        product_variant,
+        quantity: int,
+        *,
+        product_variant_id,
+        stock_log_label: str,
+        validate_positive: bool = False,
+    ) -> int:
+        if validate_positive and quantity < 1:
+            raise ValueError("Количество должно быть больше 0")
+
+        if not product_variant.product.is_on_sale:
+            raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
+
+        available_quantity = product_variant.available_quantity
+        if available_quantity < quantity:
+            logger.warning(
+                "%s: variant %s, available %s, requested %s",
+                stock_log_label,
+                product_variant_id,
+                available_quantity,
+                quantity,
+            )
+            raise InsufficientStockError(
+                f"Недостаточно товара на складе. Доступно: {available_quantity}",
+                available_quantity=available_quantity,
+            )
+        return available_quantity
+
     @transaction.atomic
     def add_item(self, cart_context: CartContext, product_variant_id, quantity=1):
         """
@@ -81,20 +111,12 @@ class CartService:
 
             logger.info("User %s adding variant %s qty %s", cart_context.actor_label, product_variant_id, quantity)
 
-            if not product_variant.product.is_on_sale:
-                raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
-
-            available_quantity = product_variant.available_quantity
-            # Проверяем доступный остаток с учетом резервов активных заказов.
-            if available_quantity < quantity:
-                logger.warning(
-                    f"Insufficient stock: variant {product_variant_id}, "
-                    f"available {available_quantity}, requested {quantity}"
-                )
-                raise InsufficientStockError(
-                    f"Недостаточно товара на складе. Доступно: {available_quantity}",
-                    available_quantity=available_quantity,
-                )
+            self._validate_variant_quantity(
+                product_variant,
+                quantity,
+                product_variant_id=product_variant_id,
+                stock_log_label="Insufficient stock",
+            )
 
             cart_item, created = self.cart_repository.get_or_create_cart_item(
                 cart_context.cart, product_variant, {"quantity": quantity}
@@ -104,15 +126,12 @@ class CartService:
                 # Товар уже в корзине, обновляем количество
                 new_quantity = cart_item.quantity + quantity
 
-                if available_quantity < new_quantity:
-                    logger.warning(
-                        f"Insufficient stock for update: variant {product_variant_id}, "
-                        f"available {available_quantity}, requested {new_quantity}"
-                    )
-                    raise InsufficientStockError(
-                        f"Недостаточно товара на складе. Доступно: {available_quantity}",
-                        available_quantity=available_quantity,
-                    )
+                self._validate_variant_quantity(
+                    product_variant,
+                    new_quantity,
+                    product_variant_id=product_variant_id,
+                    stock_log_label="Insufficient stock for update",
+                )
 
                 cart_item.quantity = new_quantity
                 cart_item.save()
@@ -158,22 +177,13 @@ class CartService:
                 "User %s updating variant %s qty to %s", cart_context.actor_label, product_variant_id, quantity
             )
 
-            if not product_variant.product.is_on_sale:
-                raise ProductNotOnSaleError("Товар снят с продажи и недоступен для заказа.")
-
-            if quantity < 1:
-                raise ValueError("Количество должно быть больше 0")
-
-            available_quantity = product_variant.available_quantity
-            if available_quantity < quantity:
-                logger.warning(
-                    f"Insufficient stock for update: variant {product_variant_id}, "
-                    f"available {available_quantity}, requested {quantity}"
-                )
-                raise InsufficientStockError(
-                    f"Недостаточно товара на складе. Доступно: {available_quantity}",
-                    available_quantity=available_quantity,
-                )
+            self._validate_variant_quantity(
+                product_variant,
+                quantity,
+                product_variant_id=product_variant_id,
+                stock_log_label="Insufficient stock for update",
+                validate_positive=True,
+            )
 
             cart_item, created = self.cart_repository.update_or_create_cart_item(
                 cart_context.cart, product_variant, {"quantity": quantity}

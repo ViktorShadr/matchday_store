@@ -1,6 +1,10 @@
-from django.utils import timezone
-
 from orders.models import Order
+
+
+def _order_status_policy():
+    from orders.application.order_status_policy import OrderStatusPolicy
+
+    return OrderStatusPolicy
 
 
 class WarehouseProductPresenter:
@@ -63,14 +67,6 @@ class DashboardOrderPresenter:
         "issued": {"label": "Выдан", "badge_class": "sf-status-badge sf-status-badge--dark"},
         "cancelled": {"label": "Отменен", "badge_class": "sf-status-badge sf-status-badge--danger"},
     }
-    FINAL_STATUS_KEYS = frozenset({"issued", "cancelled"})
-    STATUS_TRANSITIONS = {
-        "new": frozenset({"new", "processing", "ready", "cancelled"}),
-        "processing": frozenset({"processing", "ready", "cancelled"}),
-        "ready": frozenset({"ready", "processing", "issued", "cancelled"}),
-        "issued": frozenset({"issued"}),
-        "cancelled": frozenset({"cancelled"}),
-    }
     PAYMENT_STATUS_CHOICES = (
         (Order.PaymentStatus.PENDING, "Ожидает оплаты"),
         (Order.PaymentStatus.SUCCEEDED, "Оплачен"),
@@ -100,15 +96,7 @@ class DashboardOrderPresenter:
 
     @classmethod
     def get_status_key(cls, order: Order) -> str:
-        if order.status == Order.Status.CANCELLED or order.fulfillment_status == Order.FulfillmentStatus.CANCELLED:
-            return "cancelled"
-        if order.fulfillment_status == Order.FulfillmentStatus.DELIVERED:
-            return "issued"
-        if order.fulfillment_status == Order.FulfillmentStatus.RESERVED:
-            return "ready"
-        if order.fulfillment_status in {Order.FulfillmentStatus.PACKING, Order.FulfillmentStatus.SHIPPED}:
-            return "processing"
-        return "new"
+        return _order_status_policy().get_status_key(order)
 
     @classmethod
     def get_payment_meta(cls, order: Order) -> dict:
@@ -120,7 +108,7 @@ class DashboardOrderPresenter:
     @classmethod
     def get_available_status_choices(cls, order: Order) -> list[tuple[str, str, bool]]:
         current_status_key = cls.get_status_key(order)
-        allowed_transitions = cls.STATUS_TRANSITIONS[current_status_key]
+        allowed_transitions = _order_status_policy().get_allowed_transitions(current_status_key)
         return [(value, label, value in allowed_transitions) for value, label in cls.STATUS_CHOICES]
 
     @classmethod
@@ -135,7 +123,7 @@ class DashboardOrderPresenter:
             guidance.append("Заказ собирается. После комплектации переведите его в «Готов к выдаче».")
         elif current_status_key == "ready":
             guidance.append("Свяжитесь с клиентом и сообщите, что заказ готов к самовывозу.")
-            if order.payment_status != Order.PaymentStatus.SUCCEEDED:
+            if not _order_status_policy().can_issue(order):
                 guidance.append("Перед выдачей подтвердите оплату через блок «Изменить оплату».")
             else:
                 guidance.append("Оплата подтверждена. Заказ можно выдать клиенту.")
@@ -148,42 +136,6 @@ class DashboardOrderPresenter:
             guidance.append("Сценарий MVP: самовывоз из магазина, доставка и онлайн-оплата не используются.")
 
         return guidance
-
-    @classmethod
-    def apply_status(cls, order: Order, status_key: str) -> None:
-        if status_key == "new":
-            order.fulfillment_status = Order.FulfillmentStatus.NEW
-            order.status = Order.Status.PLACED
-            order.issued_at = None
-            order.cancelled_at = None
-            return
-        if status_key == "processing":
-            order.fulfillment_status = Order.FulfillmentStatus.PACKING
-            order.status = Order.Status.PROCESSING
-            order.issued_at = None
-            order.cancelled_at = None
-            return
-        if status_key == "ready":
-            order.fulfillment_status = Order.FulfillmentStatus.RESERVED
-            order.status = Order.Status.PROCESSING
-            order.issued_at = None
-            order.cancelled_at = None
-            return
-        if status_key == "issued":
-            order.fulfillment_status = Order.FulfillmentStatus.DELIVERED
-            order.status = Order.Status.DELIVERED
-            if order.issued_at is None:
-                order.issued_at = timezone.now()
-            order.cancelled_at = None
-            return
-        if status_key == "cancelled":
-            order.fulfillment_status = Order.FulfillmentStatus.CANCELLED
-            order.status = Order.Status.CANCELLED
-            order.issued_at = None
-            if order.cancelled_at is None:
-                order.cancelled_at = timezone.now()
-            return
-        raise ValueError(f"Unsupported dashboard status: {status_key}")
 
     @classmethod
     def present(cls, order: Order) -> Order:

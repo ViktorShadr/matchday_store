@@ -6,6 +6,7 @@ from django.core.mail import send_mail
 from django.urls import reverse
 
 from orders.models import Order
+from store.site_contacts import format_business_days_label
 
 logger = logging.getLogger(__name__)
 STAFF_NEW_ORDER_EVENT_KEY = "staff_created"
@@ -37,22 +38,33 @@ def _build_dashboard_order_detail_url(order: Order) -> str:
 
 def _build_order_notification_content(order: Order, event_key: str) -> tuple[str, str]:
     order_number = order.number or str(order.pk)
-    detail_url = _build_order_detail_url(order)
+    brand_name = settings.STORE_BRAND_NAME
+    pickup_retention_label = format_business_days_label(settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS)
     base_lines = [
         f"Заказ: {order_number}",
         f"Сумма: {order.total_amount} {order.currency}",
-        f"Детали заказа: {detail_url}",
     ]
+    if order.user_id:
+        base_lines.append(f"Детали заказа: {_build_order_detail_url(order)}")
+    else:
+        base_lines.extend(
+            [
+                "Сохраните номер заказа для связи с магазином.",
+                "После регистрации и подтверждения этого email заказ появится в личном кабинете.",
+            ]
+        )
 
     if event_key == "created":
         subject = f"Заказ {order_number} принят"
         lines = [
-            "Спасибо за заказ в Matchday Store.",
+            f"Спасибо за заказ в официальном магазине {brand_name}.",
             "Мы приняли ваш заказ и начали его обработку.",
             f"Самовывоз: {settings.STORE_PICKUP_LOCATION_NAME}",
             f"Адрес: {settings.STORE_PICKUP_ADDRESS}",
             f"Часы работы: {settings.STORE_PICKUP_HOURS}",
             "Оплата производится при получении.",
+            f"Резерв хранится {pickup_retention_label}.",
+            "Забрать заказ можно после уведомления о готовности.",
         ]
     elif event_key == "cancelled":
         subject = f"Заказ {order_number} отменен"
@@ -60,6 +72,7 @@ def _build_order_notification_content(order: Order, event_key: str) -> tuple[str
             "Ваш заказ отменен.",
             "Если отмена произошла по ошибке, оформите новый заказ или свяжитесь с магазином.",
             f"Телефон магазина: {settings.STORE_PICKUP_PHONE}",
+            f"Email поддержки: {settings.STORE_SUPPORT_EMAIL}",
         ]
     elif event_key == "ready":
         subject = f"Заказ {order_number} готов к выдаче"
@@ -117,7 +130,7 @@ def _build_staff_new_order_notification_content(order: Order) -> tuple[str, str]
     customer_comment = order.customer_comment.strip() if order.customer_comment else "—"
 
     lines = [
-        "Новый заказ в Matchday Store.",
+        f"Новый заказ в магазине {settings.STORE_BRAND_NAME}.",
         "",
         f"Номер заказа: {order_number}",
         f"Сумма заказа: {order.total_amount} {order.currency}",

@@ -1,7 +1,5 @@
-from django.urls import reverse_lazy
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+from django.views.generic import DetailView, ListView
 
-from store.mixins import ModeratorRequiredMixin
 from store.models import Category
 from store.services import CategoryService, PermissionService, ProductDisplayService
 from store.services.catalog_service import enrich_products
@@ -63,85 +61,5 @@ class CategoryDetailView(DetailView):
         context["products"] = enrich_products(products)
         context["products_prepared"] = [ProductDisplayService.prepare_category_product(p) for p in products]
         context["category_data"] = CategoryService.enrich_category(self.object, self.request.user)
-        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
-        return context
-
-
-class CategoryCreateView(ModeratorRequiredMixin, CreateView):
-    """
-    Создание новой категории (только для модераторов).
-
-    Позволяет модераторам создавать новые категории.
-
-    Fields:
-        name, description: Поля категории
-
-    Returns:
-        HttpResponseRedirect: Перенаправление на страницу созданной категории
-    """
-
-    model = Category
-    template_name = "main_page/category_create.html"
-    fields = ["name", "description"]
-    context_object_name = "category"
-
-    def get_success_url(self):
-        """Возвращает URL для перенаправления после успешного действия."""
-        return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
-
-    def get_context_data(self, **kwargs):
-        """Формирует контекст для шаблона."""
-        context = super().get_context_data(**kwargs)
-        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
-        return context
-
-
-class CategoryUpdateView(ModeratorRequiredMixin, UpdateView):
-    """
-    Редактирование категории (только для модераторов).
-
-    Позволяет модераторам редактировать информацию о категории.
-
-    Fields:
-        name, description: Поля категории
-
-    Returns:
-        HttpResponseRedirect: Перенаправление на страницу категории после сохранения
-    """
-
-    model = Category
-    template_name = "main_page/category_update.html"
-    fields = ["name", "description"]
-    context_object_name = "category"
-
-    def get_success_url(self):
-        """Возвращает URL для перенаправления после успешного действия."""
-        return reverse_lazy("store:category_detail", kwargs={"pk": self.object.pk})
-
-    def get_context_data(self, **kwargs):
-        """Формирует контекст для шаблона."""
-        context = super().get_context_data(**kwargs)
-        context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
-        return context
-
-
-class CategoryDeleteView(ModeratorRequiredMixin, DeleteView):
-    """
-    Удаление категории (только для модераторов).
-
-    Позволяет модераторам удалять категории.
-
-    Returns:
-        HttpResponseRedirect: Перенаправление на список категорий после удаления
-    """
-
-    model = Category
-    template_name = "main_page/category_delete.html"
-    context_object_name = "category"
-    success_url = reverse_lazy("store:category_list")
-
-    def get_context_data(self, **kwargs):
-        """Формирует контекст для шаблона."""
-        context = super().get_context_data(**kwargs)
         context["user_permissions"] = PermissionService.get_user_permissions(self.request.user)
         return context

@@ -49,11 +49,6 @@ class ICartRepository(ABC):
         pass
 
     @abstractmethod
-    def delete_cart_items(self, cart: Cart) -> int:
-        """Удалить все элементы корзины."""
-        pass
-
-    @abstractmethod
     def delete_cart(self, cart: Cart) -> None:
         """Удалить корзину."""
         pass

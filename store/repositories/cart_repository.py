@@ -53,12 +53,6 @@ class CartRepository(ICartRepository):
         except CartItem.DoesNotExist:
             return False
 
-    def delete_cart_items(self, cart: Cart) -> int:
-        """Удалить все элементы корзины."""
-        count = cart.items.count()
-        cart.items.all().delete()
-        return count
-
     def delete_cart(self, cart: Cart) -> None:
         """Удалить корзину."""
         cart.delete()

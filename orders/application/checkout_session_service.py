@@ -1,8 +1,7 @@
 from uuid import uuid4
 
-from django.conf import settings
-
 from orders.models import Order
+from store.site_contacts import build_pickup_location
 
 
 class CheckoutSessionService:
@@ -24,9 +23,13 @@ class CheckoutSessionService:
             return None
 
         try:
-            return Order.objects.get(pk=order_id, user=request.user)
+            order = Order.objects.get(pk=order_id)
         except Order.DoesNotExist:
             return None
+
+        if self.can_access_order(request, order):
+            return order
+        return None
 
     def get_or_create_checkout_token(self, request) -> str:
         token = request.session.get(self.checkout_token_session_key)
@@ -38,13 +41,18 @@ class CheckoutSessionService:
 
     @staticmethod
     def build_pickup_location() -> dict[str, str]:
-        return {
-            "code": settings.STORE_PICKUP_LOCATION_CODE,
-            "name": settings.STORE_PICKUP_LOCATION_NAME,
-            "address": settings.STORE_PICKUP_ADDRESS,
-            "hours": settings.STORE_PICKUP_HOURS,
-            "phone": settings.STORE_PICKUP_PHONE,
-        }
+        return build_pickup_location()
+
+    def has_processed_order(self, request, order_id: int) -> bool:
+        processed_checkout = request.session.get(self.checkout_processed_session_key) or {}
+        return str(processed_checkout.get("order_id") or "") == str(order_id)
+
+    def can_access_order(self, request, order: Order) -> bool:
+        if request.user.is_authenticated and order.user_id == request.user.id:
+            return True
+        if order.user_id is None and self.has_processed_order(request, order.pk):
+            return True
+        return False
 
     def mark_checkout_processed(self, request, submitted_token: str, order_id: int) -> None:
         request.session[self.checkout_processed_session_key] = {

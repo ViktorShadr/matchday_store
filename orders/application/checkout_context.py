@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from store.application import CartContext
 
@@ -7,9 +8,23 @@ from store.application import CartContext
 class CheckoutContext:
     """Явный контекст checkout без привязки к Django request."""
 
-    user: object
+    user: Optional[object]
     cart_context: CartContext
 
     @property
-    def user_id(self) -> int:
-        return self.user.id
+    def is_authenticated(self) -> bool:
+        return self.user is not None and getattr(self.user, "is_authenticated", True)
+
+    @property
+    def user_id(self) -> Optional[int]:
+        if not self.is_authenticated:
+            return None
+        return getattr(self.user, "id", None)
+
+    @property
+    def user_for_order(self):
+        return self.user if self.is_authenticated else None
+
+    @property
+    def session_key(self) -> Optional[str]:
+        return self.cart_context.session_key
