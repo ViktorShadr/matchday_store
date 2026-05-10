@@ -54,7 +54,9 @@ class SalesFlowSmokeE2ETest(TestCase):
         user_password = "smokeuserpass123"
 
         with (
-            patch("users.views.send_confirmation_email") as mock_send_confirmation_email,
+            patch(
+                "users.application.email_confirmation_service.send_confirmation_email"
+            ) as mock_send_confirmation_email,
             patch("users.views.send_welcome_email") as mock_send_welcome_email,
             patch(
                 "orders.application.order_notification_service.send_order_notification"

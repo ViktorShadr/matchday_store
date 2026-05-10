@@ -47,7 +47,7 @@
                 <div class="col-12 col-sm-6 col-lg-2 sf-footer-desktop-section">
                     <h6 class="sf-footer-heading">Помощь</h6>
                     <ul class="sf-footer-links">
-                        <li><a href="mailto:support@matchday-store.com">Написать в поддержку</a></li>
+                        <li><a href="mailto:{{ store_contacts.support_email }}">Написать в поддержку</a></li>
                         {% if legal_page_urls.return_policy %}
                             <li><a href="{{ legal_page_urls.return_policy }}">Условия возврата</a></li>
                         {% endif %}
@@ -60,9 +60,10 @@
                 <div class="col-12 col-sm-6 col-lg-2 sf-footer-desktop-section">
                     <h6 class="sf-footer-heading">Контакты</h6>
                     <ul class="sf-footer-contacts">
-                        <li>Ярославль, стадион «Шинник»</li>
-                        <li><a href="mailto:support@matchday-store.com">support@matchday-store.com</a></li>
-                        <li>Ежедневно: 10:00 — 19:00</li>
+                        <li>{{ store_contacts.pickup_location.address }}</li>
+                        <li><a href="mailto:{{ store_contacts.support_email }}">{{ store_contacts.support_email }}</a></li>
+                        <li>{{ store_contacts.pickup_location.hours|linebreaksbr }}</li>
+                        <li>{{ store_contacts.pickup_location.phone }}</li>
                     </ul>
                 </div>
             </div>
@@ -119,7 +120,7 @@
                     </h6>
                     <div id="sf-footer-mobile-help" class="sf-footer-mobile-panel" data-footer-accordion-panel>
                         <ul class="sf-footer-links">
-                            <li><a href="mailto:support@matchday-store.com">Написать в поддержку</a></li>
+                            <li><a href="mailto:{{ store_contacts.support_email }}">Написать в поддержку</a></li>
                             {% if legal_page_urls.return_policy %}
                                 <li><a href="{{ legal_page_urls.return_policy }}">Условия возврата</a></li>
                             {% endif %}
@@ -146,9 +147,10 @@
                     </h6>
                     <div id="sf-footer-mobile-contacts" class="sf-footer-mobile-panel" data-footer-accordion-panel>
                         <ul class="sf-footer-contacts">
-                            <li>Ярославль, стадион «Шинник»</li>
-                            <li><a href="mailto:support@matchday-store.com">support@matchday-store.com</a></li>
-                            <li>Ежедневно: 10:00 — 19:00</li>
+                            <li>{{ store_contacts.pickup_location.address }}</li>
+                            <li><a href="mailto:{{ store_contacts.support_email }}">{{ store_contacts.support_email }}</a></li>
+                            <li>{{ store_contacts.pickup_location.hours|linebreaksbr }}</li>
+                            <li>{{ store_contacts.pickup_location.phone }}</li>
                         </ul>
                     </div>
                 </section>

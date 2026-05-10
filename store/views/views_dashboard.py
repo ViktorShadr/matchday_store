@@ -16,10 +16,8 @@ from store.models import Category, Product, ProductImage, ProductVariant
 from store.presenters import DashboardOrderPresenter, WarehouseProductPresenter, WarehouseUiPresenter
 from store.queries import DashboardOrderQueryService, WarehouseManagementQueryService, WarehouseQueryService
 
-DASHBOARD_ORDER_STATUS_CHOICES = DashboardOrderPresenter.STATUS_CHOICES
 DASHBOARD_ORDER_FILTERS = DashboardOrderPresenter.STATUS_FILTERS
 DASHBOARD_ORDER_STATUS_KEYS = DashboardOrderQueryService.STATUS_KEYS
-FINAL_DASHBOARD_ORDER_STATUS_KEYS = DashboardOrderPresenter.FINAL_STATUS_KEYS
 DASHBOARD_PAYMENT_STATUS_CHOICES = DashboardOrderPresenter.PAYMENT_STATUS_CHOICES
 DASHBOARD_PAYMENT_STATUS_KEYS = {choice[0] for choice in DASHBOARD_PAYMENT_STATUS_CHOICES}
 

@@ -7,7 +7,9 @@ class PaymentStatusSyncService:
     Сервис синхронизации статуса платежа с заказом.
 
     Обеспечивает согласованность статуса оплаты между объектом платежа
-    и заказом.
+    и заказом. Отмененный заказ не должен оживать из-за позднего
+    прямого сохранения Payment, поэтому cancellation имеет приоритет над
+    пересчетом по связанным платежам.
     """
 
     @staticmethod
@@ -54,7 +56,10 @@ class PaymentStatusSyncService:
         Returns:
             str: Актуальный статус оплаты
         """
-        payment_status = cls.resolve_order_payment_status(order)
+        if order.status == Order.Status.CANCELLED:
+            payment_status = Order.PaymentStatus.CANCELLED
+        else:
+            payment_status = cls.resolve_order_payment_status(order)
 
         if order.payment_status != payment_status:
             order.payment_status = payment_status

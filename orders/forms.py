@@ -60,9 +60,9 @@ class CheckoutForm(forms.Form):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.user = user
-        if user is not None:
-            self.fields["email"].initial = user.email
+        self.user = user if user is not None and getattr(user, "is_authenticated", True) else None
+        if self.user is not None:
+            self.fields["email"].initial = self.user.email
             self.fields["email"].disabled = True
 
     @staticmethod

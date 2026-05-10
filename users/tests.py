@@ -206,7 +206,7 @@ class UserViewsTest(TestCase):
         )
 
     @patch("users.views.send_welcome_email")
-    @patch("users.views.send_confirmation_email")
+    @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_registration_view_success(self, mock_confirmation_email, mock_welcome_email):
         """Проверяет сценарий 'registration view success'."""
         form_data = {"email": "newuser@example.com", "password1": "complexpass123", "password2": "complexpass123"}
@@ -226,8 +226,11 @@ class UserViewsTest(TestCase):
     def test_registration_view_uses_sync_fallback_when_celery_unavailable(self):
         form_data = {"email": "fallback@example.com", "password1": "complexpass123", "password2": "complexpass123"}
 
-        with patch("users.views.send_confirmation_email") as mock_confirmation_email:
-            with patch("users.views.send_confirmation_email_sync", return_value=True) as mock_confirmation_email_sync:
+        with patch("users.application.email_confirmation_service.send_confirmation_email") as mock_confirmation_email:
+            with patch(
+                "users.application.email_confirmation_service.send_confirmation_email_sync",
+                return_value=True,
+            ) as mock_confirmation_email_sync:
                 mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
                 with self.captureOnCommitCallbacks(execute=True):
                     response = self.client.post(reverse("users:registration"), data=form_data)
@@ -242,7 +245,7 @@ class UserViewsTest(TestCase):
         mock_confirmation_email.delay.assert_called_once_with("fallback@example.com", ANY)
         mock_confirmation_email_sync.assert_called_once_with("fallback@example.com", ANY)
 
-    @patch("users.views.send_confirmation_email")
+    @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_resend_confirmation_email_success_from_profile(self, mock_confirmation_email):
         self.client.login(email="user@example.com", password="userpass123")
         response = self.client.post(reverse("users:resend_confirmation"))
@@ -255,7 +258,7 @@ class UserViewsTest(TestCase):
         self.assertIsNotNone(self.user.email_token_created_at)
         mock_confirmation_email.delay.assert_called_once_with("user@example.com", ANY)
 
-    @patch("users.views.send_confirmation_email")
+    @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_resend_confirmation_email_throttled_from_profile(self, mock_confirmation_email):
         self.user.confirmation_email_last_sent_at = timezone.now()
         self.user.save(update_fields=["confirmation_email_last_sent_at"])
@@ -267,7 +270,7 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Повторная отправка будет доступна")
         mock_confirmation_email.delay.assert_not_called()
 
-    @patch("users.views.send_confirmation_email")
+    @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_resend_confirmation_email_not_sent_for_confirmed_user(self, mock_confirmation_email):
         self.user.is_email_confirmed = True
         self.user.save(update_fields=["is_email_confirmed"])
@@ -283,8 +286,11 @@ class UserViewsTest(TestCase):
         old_token = self.user.generate_email_token()
         self.client.login(email="user@example.com", password="userpass123")
 
-        with patch("users.views.send_confirmation_email") as mock_confirmation_email:
-            with patch("users.views.send_confirmation_email_sync", return_value=False) as mock_confirmation_email_sync:
+        with patch("users.application.email_confirmation_service.send_confirmation_email") as mock_confirmation_email:
+            with patch(
+                "users.application.email_confirmation_service.send_confirmation_email_sync",
+                return_value=False,
+            ) as mock_confirmation_email_sync:
                 mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
                 response = self.client.post(reverse("users:resend_confirmation"), follow=True)
 
@@ -408,7 +414,7 @@ class UserViewsTest(TestCase):
         RATELIMIT_REGISTRATION_IP_RATE="1/m",
         RATELIMIT_REGISTRATION_EMAIL_RATE="1/m",
     )
-    @patch("users.views.send_confirmation_email")
+    @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_registration_view_rate_limited(self, mock_confirmation_email):
         cache.clear()
         form_data = {
@@ -433,7 +439,7 @@ class UserViewsTest(TestCase):
         RATELIMIT_CONFIRM_RESEND_IP_RATE="1/m",
         RATELIMIT_CONFIRM_RESEND_USER_RATE="1/m",
     )
-    @patch("users.views.send_confirmation_email")
+    @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_resend_confirmation_email_rate_limited(self, mock_confirmation_email):
         cache.clear()
         self.client.login(email="user@example.com", password="userpass123")
@@ -498,7 +504,7 @@ class UserViewsTest(TestCase):
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Подтвердите email для оформления заказов")
+        self.assertContains(response, "Подтвердите email для истории заказов")
         self.assertContains(response, reverse("users:resend_confirmation"))
 
     def test_profile_detail_hides_email_confirmation_prompt_for_confirmed_user(self):
@@ -508,7 +514,7 @@ class UserViewsTest(TestCase):
         response = self.client.get(reverse("users:profile_detail", kwargs={"pk": self.user.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Подтвердите email для оформления заказов")
+        self.assertNotContains(response, "Подтвердите email для истории заказов")
 
     def test_profile_detail_view_other_profile_denied(self):
         """Проверяет сценарий 'profile detail view other profile denied'."""
@@ -678,6 +684,63 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Отменить заказ")
         self.assertNotContains(response, "ORD-OTHER-1")
 
+    def test_user_order_list_shows_confirmed_guest_orders_with_same_email(self):
+        """После подтверждения email личный кабинет показывает гостевые заказы с этим email."""
+        self.user.is_email_confirmed = True
+        self.user.save(update_fields=["is_email_confirmed"])
+        guest_order = Order.objects.create(
+            number="ORD-GUEST-EMAIL-1",
+            user=None,
+            recipient_name="Гость",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            total_amount="1500.00",
+        )
+        OrderItem.objects.create(
+            order=guest_order,
+            product_variant=self.variant,
+            product_name_snapshot="Шарф",
+            unit_price="1500.00",
+            quantity=1,
+            line_total="1500.00",
+        )
+        Order.objects.create(
+            number="ORD-GUEST-OTHER-1",
+            user=None,
+            recipient_name="Другой гость",
+            email="guest-other@example.com",
+            phone="+79991111111",
+            status=Order.Status.PLACED,
+            total_amount="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ORD-GUEST-EMAIL-1")
+        self.assertContains(response, "Гость")
+        self.assertNotContains(response, "ORD-GUEST-OTHER-1")
+        self.assertNotContains(response, "Отменить заказ")
+
+    def test_user_order_list_hides_guest_orders_until_email_is_confirmed(self):
+        Order.objects.create(
+            number="ORD-GUEST-UNCONFIRMED-1",
+            user=None,
+            recipient_name="Гость",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            total_amount="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "ORD-GUEST-UNCONFIRMED-1")
+
     def test_user_order_list_reflects_current_workflow_status(self):
         """Список заказов должен показывать статус исполнения, а не только общий status."""
         Order.objects.create(
@@ -729,6 +792,39 @@ class UserViewsTest(TestCase):
         self.assertContains(response, "Ожидает оплаты")
         self.assertContains(response, "Отменить заказ")
         self.assertContains(response, "Шарф")
+
+    def test_user_order_detail_shows_confirmed_guest_order_without_cancel_action(self):
+        self.user.is_email_confirmed = True
+        self.user.save(update_fields=["is_email_confirmed"])
+        order = Order.objects.create(
+            number="ORD-GUEST-DETAIL-1",
+            user=None,
+            recipient_name="Гость",
+            email=self.user.email,
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            total_amount="1500.00",
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot="Шарф",
+            unit_price="1500.00",
+            quantity=1,
+            line_total="1500.00",
+        )
+
+        self.client.login(email="user@example.com", password="userpass123")
+        response = self.client.get(reverse("users:order_detail", kwargs={"pk": order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ORD-GUEST-DETAIL-1")
+        self.assertContains(response, "Шарф")
+        self.assertNotContains(response, "Отменить заказ")
 
     def test_user_order_detail_reflects_current_workflow_status(self):
         order = Order.objects.create(
@@ -853,7 +949,7 @@ class UserIntegrationTest(TestCase):
         self.client = Client()
 
     @patch("users.views.send_welcome_email")
-    @patch("users.views.send_confirmation_email")
+    @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_full_user_flow(self, mock_confirmation_email, mock_welcome_email):
         # 1. Register new user
         """Проверяет сценарий 'full user flow'."""

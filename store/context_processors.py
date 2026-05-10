@@ -3,6 +3,7 @@ from django.urls import reverse
 
 from store.models import Page
 from store.services import PermissionService
+from store.site_contacts import build_store_contacts
 
 LEGAL_PAGE_URLS = (
     ("privacy-policy", "privacy_policy"),
@@ -32,4 +33,5 @@ def navigation_permissions(request):
     return {
         "navigation_permissions": PermissionService.get_user_permissions(request.user),
         "legal_page_urls": legal_page_urls,
+        "store_contacts": build_store_contacts(),
     }
