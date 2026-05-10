@@ -1,9 +1,9 @@
 from decimal import Decimal
 
-from django.db.models import Count, Min, Prefetch, Q, Sum, Value
+from django.db.models import Count, F, IntegerField, Min, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 
-from orders.models import Order
+from orders.models import Order, OrderItem
 from store.models import Category, Product, ProductImage
 
 
@@ -46,6 +46,12 @@ class WarehouseQueryService:
             .annotate(
                 variant_count=Count("variants", distinct=True),
                 stock_total=Coalesce(Sum("variants__quantity"), 0),
+                reserved_stock_total=Coalesce(Sum("variants__reserved_quantity"), 0),
+                available_stock_total=Coalesce(
+                    Sum(F("variants__quantity") - F("variants__reserved_quantity")),
+                    0,
+                    output_field=IntegerField(),
+                ),
                 min_price=Coalesce(Min("variants__price"), Value(Decimal("0.00"))),
             )
         )
@@ -65,11 +71,11 @@ class WarehouseQueryService:
             queryset = queryset.filter(category_id=int(selected_category))
 
         if selected_stock_filter == "in_stock":
-            queryset = queryset.filter(stock_total__gt=0)
+            queryset = queryset.filter(available_stock_total__gt=0)
         elif selected_stock_filter == "low_stock":
-            queryset = queryset.filter(stock_total__gt=0, stock_total__lt=5)
+            queryset = queryset.filter(available_stock_total__gt=0, available_stock_total__lt=5)
         elif selected_stock_filter == "out_of_stock":
-            queryset = queryset.filter(stock_total=0)
+            queryset = queryset.filter(available_stock_total=0)
 
         return queryset.order_by(*cls.SORT_OPTIONS[selected_sort])
 
@@ -83,6 +89,7 @@ class DashboardOrderQueryService:
 
     STATUS_KEYS = frozenset({"new", "processing", "ready", "issued", "cancelled"})
     ALL_FILTERS = frozenset({"all", *STATUS_KEYS})
+    PAYMENT_STATUS_FILTERS = frozenset({"", *Order.PaymentStatus.values})
 
     @staticmethod
     def apply_status_filter(queryset, status_filter: str):
@@ -109,8 +116,67 @@ class DashboardOrderQueryService:
         return "all"
 
     @classmethod
-    def build_orders_queryset(cls, status_filter: str = "all", search_query: str = ""):
+    def normalize_payment_status_filter(cls, payment_status_filter: str) -> str:
+        if payment_status_filter in cls.PAYMENT_STATUS_FILTERS:
+            return payment_status_filter
+        return ""
+
+    @classmethod
+    def build_orders_queryset(
+        cls,
+        status_filter: str = "all",
+        search_query: str = "",
+        payment_status_filter: str = "",
+    ):
         queryset = Order.objects.select_related("user").annotate(items_count=Count("items")).order_by("-created_at")
         if search_query:
-            queryset = queryset.filter(Q(number__icontains=search_query) | Q(email__icontains=search_query))
+            search_filter = (
+                Q(number__icontains=search_query)
+                | Q(email__icontains=search_query)
+                | Q(phone__icontains=search_query)
+                | Q(recipient_name__icontains=search_query)
+            )
+            digits_query = "".join(char for char in search_query if char.isdigit())
+            if digits_query:
+                search_filter |= Q(phone__icontains=digits_query)
+            queryset = queryset.filter(search_filter)
+        if payment_status_filter:
+            queryset = queryset.filter(payment_status=payment_status_filter)
         return cls.apply_status_filter(queryset, status_filter)
+
+
+class WarehouseReservationQueryService:
+    """Query-сервис активных заказов, удерживающих складской резерв."""
+
+    FINAL_ORDER_STATUSES = frozenset(
+        {
+            Order.Status.CANCELLED,
+            Order.Status.DELIVERED,
+            Order.Status.REFUNDED,
+        }
+    )
+    FINAL_FULFILLMENT_STATUSES = frozenset(
+        {
+            Order.FulfillmentStatus.CANCELLED,
+            Order.FulfillmentStatus.DELIVERED,
+            Order.FulfillmentStatus.RETURNED,
+        }
+    )
+
+    @classmethod
+    def get_active_reservation_items_by_variant(cls, variants) -> dict[int, list[OrderItem]]:
+        variant_ids = [variant.pk for variant in variants]
+        if not variant_ids:
+            return {}
+
+        reservation_items = (
+            OrderItem.objects.select_related("order")
+            .filter(product_variant_id__in=variant_ids)
+            .exclude(order__status__in=cls.FINAL_ORDER_STATUSES)
+            .exclude(order__fulfillment_status__in=cls.FINAL_FULFILLMENT_STATUSES)
+            .order_by("order__created_at", "pk")
+        )
+        items_by_variant: dict[int, list[OrderItem]] = {variant_id: [] for variant_id in variant_ids}
+        for item in reservation_items:
+            items_by_variant.setdefault(item.product_variant_id, []).append(item)
+        return items_by_variant

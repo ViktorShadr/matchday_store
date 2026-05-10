@@ -35,13 +35,24 @@
                             class="form-control"
                             name="q"
                             value="{{ search_query }}"
-                            placeholder="Поиск по номеру заказа / email"
+                            placeholder="Номер заказа, email, телефон или получатель"
                         >
                     </div>
-                    <div class="col-12 col-lg-4 d-flex gap-2">
+                    <div class="col-12 col-md-6 col-lg-2">
+                        <label class="form-label mb-1" for="paymentStatusFilter">Оплата</label>
+                        <select id="paymentStatusFilter" class="form-select" name="payment_status">
+                            <option value="">Любая оплата</option>
+                            {% for value, label in payment_status_filters %}
+                                <option value="{{ value }}" {% if current_payment_status_filter == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-2 d-flex gap-2">
                         <button type="submit" class="btn btn-primary flex-grow-1">Найти</button>
-                        {% if search_query %}
-                            <a class="btn btn-outline-primary" href="{% if current_status_filter and current_status_filter != 'all' %}?status={{ current_status_filter }}{% else %}{% url 'store:dashboard_orders' %}{% endif %}">
+                        {% if has_active_filters %}
+                            <a class="btn btn-outline-primary" href="{% url 'store:dashboard_orders' %}">
                                 Сброс
                             </a>
                         {% endif %}
@@ -56,6 +67,7 @@
                         <tr>
                             <th>№ заказа</th>
                             <th>Клиент</th>
+                            <th>Телефон</th>
                             <th>Дата</th>
                             <th>Сумма</th>
                             <th>Статус</th>
@@ -67,7 +79,17 @@
                         {% for order in orders %}
                             <tr>
                                 <td class="fw-semibold">#{{ order.number|default:order.pk }}</td>
-                                <td>{{ order.email|default:order.user.email }}</td>
+                                <td>
+                                    <div class="fw-semibold">{{ order.recipient_name|default:"—" }}</div>
+                                    <div class="small text-muted">{{ order.email|default:order.user.email }}</div>
+                                </td>
+                                <td>
+                                    {% if order.phone %}
+                                        <a href="tel:{{ order.phone }}" class="text-decoration-none">{{ order.phone }}</a>
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
                                 <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
                                 <td>{{ order.total_amount|floatformat:"-2" }} ₽</td>
                                 <td>
@@ -82,7 +104,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-5">
+                                <td colspan="8" class="text-center text-muted py-5">
                                     Заказы по выбранным фильтрам не найдены.
                                 </td>
                             </tr>

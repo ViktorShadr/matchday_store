@@ -21,12 +21,12 @@ class WarehouseProductPresenter:
         return f"{variant_count} {word}"
 
     @staticmethod
-    def resolve_stock_state(stock_total: int) -> tuple[str, str]:
-        if stock_total <= 0:
+    def resolve_stock_state(available_stock_total: int) -> tuple[str, str]:
+        if available_stock_total <= 0:
             return "out", "Нет в наличии"
-        if stock_total < 5:
-            return "low", f"Мало осталось: {stock_total}"
-        return "in", f"В наличии: {stock_total}"
+        if available_stock_total < 5:
+            return "low", f"Доступно: {available_stock_total}"
+        return "in", f"Доступно: {available_stock_total}"
 
     @classmethod
     def present_many(cls, products):
@@ -36,8 +36,13 @@ class WarehouseProductPresenter:
             product.sku = f"SKU-{product.pk}"
             product.variant_label = cls.format_variant_label(product.variant_count)
             stock_total = int(product.stock_total or 0)
+            reserved_stock_total = int(product.reserved_stock_total or 0)
+            available_stock_total = int(product.available_stock_total or 0)
             product.stock_total = stock_total
-            product.stock_state, product.stock_label = cls.resolve_stock_state(stock_total)
+            product.reserved_stock_total = reserved_stock_total
+            product.available_stock_total = available_stock_total
+            product.stock_state, product.stock_label = cls.resolve_stock_state(available_stock_total)
+            product.stock_detail_label = f"Физически: {stock_total} / Резерв: {reserved_stock_total}"
             prepared_products.append(product)
         return prepared_products
 
