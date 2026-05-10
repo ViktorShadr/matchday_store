@@ -431,7 +431,9 @@ class CheckoutService(ICheckoutService):
                         # Повторно проверяем idempotency после захвата блокировок:
                         # в параллельном submit первый запрос мог уже создать заказ и очистить корзину.
                         existing_payment = self._find_existing_checkout_payment(
-                            checkout_token, checkout_context.user_id
+                            checkout_token,
+                            checkout_context.user_id,
+                            checkout_context.session_key,
                         )
                         if existing_payment:
                             return existing_payment.order

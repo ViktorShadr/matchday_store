@@ -242,6 +242,77 @@ class CheckoutFlowTest(TestCase):
         self.assertContains(success_response, "Зарегистрируйтесь с email guest@example.com")
         self.assertContains(success_response, reverse("users:registration"))
 
+    def test_guest_empty_cart_fallback_rechecks_idempotency_with_session_key(self):
+        """Fallback гостевой корзины должен найти session-scoped payment."""
+        service = CheckoutService()
+        checkout_token = "guest-race-token"
+        session_key = "guest-race-session"
+        guest_cart = Cart.objects.create(session_key=session_key)
+        existing_order = Order.objects.create(
+            number="ORD-GUEST-RACE",
+            user=None,
+            recipient_name="Гость Покупатель",
+            email="guest@example.com",
+            phone="+79990001122",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+            subtotal_amount=Decimal("3980.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("3980.00"),
+            source_cart_id=guest_cart.id,
+            confirmed_at=timezone.now(),
+        )
+        Payment.objects.create(
+            order=existing_order,
+            provider=Payment.Provider.MANUAL,
+            idempotency_key=service.build_checkout_idempotency_key(
+                checkout_token,
+                session_key=session_key,
+            ),
+            status=Payment.Status.PENDING,
+            amount=existing_order.total_amount,
+            currency=existing_order.currency,
+        )
+        checkout_context = CheckoutContext(
+            user=None,
+            cart_context=CartContext(
+                cart=guest_cart,
+                user_id=None,
+                session_key=session_key,
+                is_authenticated=False,
+            ),
+        )
+        cleaned_data = {
+            "recipient_name": "Гость Покупатель",
+            "email": "guest@example.com",
+            "phone": "+79990001122",
+            "customer_comment": "",
+        }
+
+        real_lookup = service._find_existing_checkout_payment
+        lookup_call_count = 0
+
+        def delayed_lookup(*args, **kwargs):
+            nonlocal lookup_call_count
+            lookup_call_count += 1
+            if lookup_call_count <= 2:
+                return None
+            return real_lookup(*args, **kwargs)
+
+        with patch.object(service, "_find_existing_checkout_payment", side_effect=delayed_lookup):
+            order = service.create_order_from_cart(
+                checkout_context,
+                cleaned_data,
+                checkout_token=checkout_token,
+            )
+
+        self.assertEqual(order.pk, existing_order.pk)
+        self.assertEqual(lookup_call_count, 3)
+
     def test_checkout_page_shows_commercial_pickup_terms(self):
         self.client.login(email="buyer@example.com", password="testpass123")
 
