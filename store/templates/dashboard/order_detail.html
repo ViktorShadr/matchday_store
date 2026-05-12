@@ -32,6 +32,9 @@
                                             {% if item.size_snapshot or item.color_snapshot %}
                                                 · {{ item.size_snapshot|default:'—' }} / {{ item.color_snapshot|default:'—' }}
                                             {% endif %}
+                                            {% if item.sku_snapshot %}
+                                                · SKU: {{ item.sku_snapshot }}
+                                            {% endif %}
                                         </div>
                                     </div>
                                     <div class="fw-semibold">{{ item.line_total|floatformat:"-2" }} ₽</div>
@@ -116,6 +119,22 @@
                             <div>{{ order.customer_comment }}</div>
                         </div>
                     {% endif %}
+
+                    <div class="sf-surface p-4 mb-4">
+                        <h2 class="h4 mb-3">Внутренняя заметка</h2>
+                        <form method="post" action="{% url 'store:dashboard_order_staff_note_update' order.pk %}">
+                            {% csrf_token %}
+                            <label class="visually-hidden" for="staffNote">Внутренняя заметка</label>
+                            <textarea
+                                id="staffNote"
+                                name="staff_note"
+                                class="form-control"
+                                rows="4"
+                                placeholder="Информация для сотрудников, не видна покупателю"
+                            >{{ order.staff_note }}</textarea>
+                            <button type="submit" class="btn btn-outline-primary w-100 mt-3">Сохранить заметку</button>
+                        </form>
+                    </div>
 
                     <div class="sf-surface p-4 mb-4">
                         <h2 class="h4 mb-3">Следующий шаг</h2>

@@ -298,7 +298,7 @@ class CheckoutService(ICheckoutService):
                 OrderItem(
                     product_variant=variant,
                     product_name_snapshot=variant.product.name,
-                    sku_snapshot=str(variant.id),
+                    sku_snapshot=variant.sku or str(variant.id),
                     size_snapshot=self._normalize_snapshot_text(variant.size),
                     color_snapshot=self._normalize_snapshot_text(variant.color),
                     unit_price=variant.price,

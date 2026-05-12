@@ -24,27 +24,18 @@
                 </div>
 
                 <form method="get" class="sf-catalog-toolbar">
+                    {% if catalog_filters.category_id %}
+                        <input type="hidden" name="category_id" value="{{ catalog_filters.category_id }}">
+                    {% endif %}
+                    {% if catalog_filters.sort %}
+                        <input type="hidden" name="sort" value="{{ catalog_filters.sort }}">
+                    {% endif %}
                     <div class="sf-catalog-toolbar-main">
-                        {% if request.GET.q %}
-                            <input type="hidden" name="q" value="{{ request.GET.q }}">
-                        {% endif %}
-                        {% if request.GET.category_id %}
-                            <input type="hidden" name="category_id" value="{{ request.GET.category_id }}">
-                        {% endif %}
-
-                        {% if categories %}
+                        {% if catalog_category_links %}
                             <div class="sf-catalog-chips">
-                                <a href="
-                                        {% url 'store:product_list' %}{% if request.GET.sort %}?sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}{% if request.GET.sort %}&{% else %}?{% endif %}q={{ request.GET.q }}{% endif %}"
-                                   class="sf-filter-chip {% if not request.GET.category_id %}active{% endif %}">
-                                    Все
-                                </a>
-
-                                {% for c in categories %}
-                                    <a href="{% url 'store:product_list' %}?category_id=
-                                            {{ c.id }}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"
-                                       class="sf-filter-chip {% if request.GET.category_id == c.id|stringformat:'s' %}active{% endif %}">
-                                        {{ c.name }}
+                                {% for link in catalog_category_links %}
+                                    <a href="{{ link.url }}" class="sf-filter-chip {% if link.is_active %}active{% endif %}">
+                                        {{ link.name }}
                                     </a>
                                 {% endfor %}
                             </div>
@@ -118,6 +109,71 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label text-white-50 mb-1" for="catalogSearch">Поиск</label>
+                            <input
+                                    id="catalogSearch"
+                                    type="search"
+                                    name="q"
+                                    class="form-control"
+                                    value="{{ catalog_filters.query }}"
+                                    placeholder="Название, описание или SKU"
+                            >
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-2">
+                            <label class="form-label text-white-50 mb-1" for="catalogSize">Размер</label>
+                            <select id="catalogSize" name="size" class="form-select">
+                                <option value="">Любой размер</option>
+                                {% for size in catalog_available_sizes %}
+                                    <option value="{{ size }}" {% if catalog_filters.size == size %}selected{% endif %}>
+                                        {{ size }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label text-white-50 mb-1" for="catalogPriceMin">Цена от</label>
+                            <input
+                                    id="catalogPriceMin"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    name="price_min"
+                                    class="form-control"
+                                    value="{{ catalog_filters.price_min }}"
+                            >
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label text-white-50 mb-1" for="catalogPriceMax">Цена до</label>
+                            <input
+                                    id="catalogPriceMax"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    name="price_max"
+                                    class="form-control"
+                                    value="{{ catalog_filters.price_max }}"
+                            >
+                        </div>
+                        <div class="col-12 col-md-6 col-lg-2">
+                            <div class="form-check mb-2">
+                                <input
+                                        id="catalogInStock"
+                                        class="form-check-input"
+                                        type="checkbox"
+                                        name="in_stock"
+                                        value="1"
+                                        {% if catalog_filters.in_stock %}checked{% endif %}
+                                >
+                                <label class="form-check-label text-white" for="catalogInStock">
+                                    В наличии
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Применить</button>
+                        </div>
+                    </div>
                 </form>
             </div>
         </div>
@@ -125,13 +181,13 @@
 
     <section class="sf-section pt-0">
         <div class="container">
-            {% if request.GET.q or request.GET.category_id or request.GET.sort %}
+            {% if has_active_catalog_filters %}
                 <div class="sf-catalog-active-filters">
                     <div class="sf-catalog-active-filters-label">Активные параметры:</div>
 
                     <div class="sf-catalog-active-filters-list">
-                        {% if request.GET.q %}
-                            <span class="sf-active-filter">Поиск: {{ request.GET.q }}</span>
+                        {% if catalog_filters.query %}
+                            <span class="sf-active-filter">Поиск: {{ catalog_filters.query }}</span>
                         {% endif %}
 
                         {% if selected_category %}
@@ -140,13 +196,29 @@
                         </span>
                         {% endif %}
 
-                        {% if request.GET.sort %}
+                        {% if catalog_filters.size %}
+                            <span class="sf-active-filter">Размер: {{ catalog_filters.size }}</span>
+                        {% endif %}
+
+                        {% if catalog_filters.in_stock %}
+                            <span class="sf-active-filter">Только в наличии</span>
+                        {% endif %}
+
+                        {% if catalog_filters.price_min %}
+                            <span class="sf-active-filter">Цена от: {{ catalog_filters.price_min }} ₽</span>
+                        {% endif %}
+
+                        {% if catalog_filters.price_max %}
+                            <span class="sf-active-filter">Цена до: {{ catalog_filters.price_max }} ₽</span>
+                        {% endif %}
+
+                        {% if catalog_filters.sort %}
                             <span class="sf-active-filter">
                             Сортировка:
-                                {% if request.GET.sort == 'price_asc' %}сначала дешевле{% endif %}
-                                {% if request.GET.sort == 'price_desc' %}сначала дороже{% endif %}
-                                {% if request.GET.sort == 'name_asc' %}по названию А–Я{% endif %}
-                                {% if request.GET.sort == 'name_desc' %}по названию Я–А{% endif %}
+                                {% if catalog_filters.sort == 'price_asc' %}сначала дешевле{% endif %}
+                                {% if catalog_filters.sort == 'price_desc' %}сначала дороже{% endif %}
+                                {% if catalog_filters.sort == 'name_asc' %}по названию А–Я{% endif %}
+                                {% if catalog_filters.sort == 'name_desc' %}по названию Я–А{% endif %}
                         </span>
                         {% endif %}
 
@@ -172,9 +244,7 @@
                             <ul class="pagination justify-content-center">
                                 {% if page_obj.has_previous %}
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=
-
-                                                {{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
+                                        <a class="page-link" href="?{% if catalog_page_query %}{{ catalog_page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">
                                             Назад
                                         </a>
                                     </li>
@@ -187,9 +257,7 @@
                                         </li>
                                     {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
                                         <li class="page-item">
-                                            <a class="page-link" href="?page=
-
-                                                    {{ num }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
+                                            <a class="page-link" href="?{% if catalog_page_query %}{{ catalog_page_query }}&{% endif %}page={{ num }}">
                                                 {{ num }}
                                             </a>
                                         </li>
@@ -198,9 +266,7 @@
 
                                 {% if page_obj.has_next %}
                                     <li class="page-item">
-                                        <a class="page-link" href="?page=
-
-                                                {{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}{% if request.GET.category_id %}&category_id={{ request.GET.category_id }}{% endif %}">
+                                        <a class="page-link" href="?{% if catalog_page_query %}{{ catalog_page_query }}&{% endif %}page={{ page_obj.next_page_number }}">
                                             Вперёд
                                         </a>
                                     </li>

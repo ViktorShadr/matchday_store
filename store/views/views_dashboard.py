@@ -79,16 +79,15 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
     template_name = "dashboard/orders.html"
 
     @staticmethod
-    def _build_status_filter_links(search_query: str, payment_status_filter: str):
+    def _build_status_filter_links(active_filters: dict[str, str]):
         filters = []
         for key, label in DASHBOARD_ORDER_FILTERS:
             params = {}
             if key != "all":
                 params["status"] = key
-            if search_query:
-                params["q"] = search_query
-            if payment_status_filter:
-                params["payment_status"] = payment_status_filter
+            for query_key, value in active_filters.items():
+                if value:
+                    params[query_key] = value
             query_string = urlencode(params)
             filters.append(
                 {
@@ -108,18 +107,46 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
             self.request.GET.get("payment_status", "").strip()
         )
         search_query = self.request.GET.get("q", "").strip()
+        created_from = self.request.GET.get("created_from", "").strip()
+        created_to = self.request.GET.get("created_to", "").strip()
+        amount_min = self.request.GET.get("amount_min", "").strip()
+        amount_max = self.request.GET.get("amount_max", "").strip()
         orders_queryset = DashboardOrderQueryService.build_orders_queryset(
             status_filter=status_filter,
             search_query=search_query,
             payment_status_filter=payment_status_filter,
+            created_from=created_from,
+            created_to=created_to,
+            amount_min=amount_min,
+            amount_max=amount_max,
         )
+        active_filters = {
+            "q": search_query,
+            "payment_status": payment_status_filter,
+            "created_from": created_from,
+            "created_to": created_to,
+            "amount_min": amount_min,
+            "amount_max": amount_max,
+        }
         context["orders"] = DashboardOrderPresenter.present_many(list(orders_queryset))
         context["current_status_filter"] = status_filter
         context["current_payment_status_filter"] = payment_status_filter
         context["payment_status_filters"] = DASHBOARD_PAYMENT_STATUS_CHOICES
         context["search_query"] = search_query
-        context["status_filters"] = self._build_status_filter_links(search_query, payment_status_filter)
-        context["has_active_filters"] = bool(search_query or payment_status_filter or status_filter != "all")
+        context["created_from"] = created_from
+        context["created_to"] = created_to
+        context["amount_min"] = amount_min
+        context["amount_max"] = amount_max
+        context["status_filters"] = self._build_status_filter_links(active_filters)
+        context["has_active_filters"] = bool(
+            search_query
+            or payment_status_filter
+            or created_from
+            or created_to
+            or amount_min
+            or amount_max
+            or status_filter != "all"
+        )
         return context
 
 
@@ -196,6 +223,15 @@ class DashboardOrderPaymentStatusUpdateView(ModeratorRequiredMixin, View):
             if result.message:
                 messages.success(request, result.message)
 
+        return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
+
+class DashboardOrderStaffNoteUpdateView(ModeratorRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        order = get_object_or_404(Order, pk=self.kwargs["pk"])
+        order.staff_note = request.POST.get("staff_note", "").strip()
+        order.save(update_fields=["staff_note", "updated_at"])
+        messages.success(request, "Внутренняя заметка сохранена.")
         return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
 

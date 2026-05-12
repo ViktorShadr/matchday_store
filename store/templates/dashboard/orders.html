@@ -27,7 +27,7 @@
                     {% if current_status_filter and current_status_filter != 'all' %}
                         <input type="hidden" name="status" value="{{ current_status_filter }}">
                     {% endif %}
-                    <div class="col-12 col-lg-8">
+                    <div class="col-12 col-lg-4">
                         <label class="form-label mb-1" for="orderSearch">Поиск</label>
                         <input
                             id="orderSearch"
@@ -49,8 +49,24 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-12 col-md-6 col-lg-2 d-flex gap-2">
-                        <button type="submit" class="btn btn-primary flex-grow-1">Найти</button>
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label mb-1" for="createdFromFilter">Дата от</label>
+                        <input id="createdFromFilter" type="date" class="form-control" name="created_from" value="{{ created_from }}">
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label mb-1" for="createdToFilter">Дата до</label>
+                        <input id="createdToFilter" type="date" class="form-control" name="created_to" value="{{ created_to }}">
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-1">
+                        <label class="form-label mb-1" for="amountMinFilter">От ₽</label>
+                        <input id="amountMinFilter" type="number" min="0" step="1" class="form-control" name="amount_min" value="{{ amount_min }}">
+                    </div>
+                    <div class="col-6 col-md-3 col-lg-1">
+                        <label class="form-label mb-1" for="amountMaxFilter">До ₽</label>
+                        <input id="amountMaxFilter" type="number" min="0" step="1" class="form-control" name="amount_max" value="{{ amount_max }}">
+                    </div>
+                    <div class="col-12 d-flex gap-2 justify-content-end">
+                        <button type="submit" class="btn btn-primary">Найти</button>
                         {% if has_active_filters %}
                             <a class="btn btn-outline-primary" href="{% url 'store:dashboard_orders' %}">
                                 Сброс

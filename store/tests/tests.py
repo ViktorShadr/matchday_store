@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from io import BytesIO
 
@@ -9,6 +10,7 @@ from django.core.management import call_command
 from django.db import close_old_connections
 from django.test import Client, TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 
 from orders.models import Order, OrderItem, OrderStatusTransition
@@ -61,6 +63,9 @@ class ProductModelTest(TestCase):
         """Проверяет сценарий 'product creation'."""
         self.assertEqual(self.product.name, "Футболка ФК Шинник")
         self.assertEqual(self.product.category, self.category)
+        self.assertEqual(self.product.short_description, "")
+        self.assertIsNone(self.product.old_price)
+        self.assertEqual(self.product.material, "")
         self.assertTrue(self.product.is_on_sale)
         self.assertTrue(self.product.created_at)
         self.assertTrue(self.product.updated_at)
@@ -158,12 +163,19 @@ class ProductVariantModelTest(TestCase):
         test_image = SimpleUploadedFile("test_image.jpg", b"fake_image_data", content_type="image/jpeg")
         self.image = ProductImage.objects.create(product=self.product, image=test_image)
         self.variant = ProductVariant.objects.create(
-            product=self.product, size="L", color="Красный", price=Decimal("2999.99"), quantity=10, image=self.image
+            product=self.product,
+            sku="TSHIRT-RED-L",
+            size="L",
+            color="Красный",
+            price=Decimal("2999.99"),
+            quantity=10,
+            image=self.image,
         )
 
     def test_product_variant_creation(self):
         """Проверяет сценарий 'product variant creation'."""
         self.assertEqual(self.variant.product, self.product)
+        self.assertEqual(self.variant.sku, "TSHIRT-RED-L")
         self.assertEqual(self.variant.size, "L")
         self.assertEqual(self.variant.color, "Красный")
         self.assertEqual(self.variant.price, Decimal("2999.99"))
@@ -180,6 +192,19 @@ class ProductVariantModelTest(TestCase):
         with self.assertRaises(Exception):
             ProductVariant.objects.create(
                 product=self.product, size="L", color="Красный", price=Decimal("1999.99"), quantity=5, image=self.image
+            )
+
+    def test_product_variant_rejects_duplicate_nonblank_sku(self):
+        """Непустой SKU должен быть уникальным между вариантами."""
+        with self.assertRaises(Exception):
+            ProductVariant.objects.create(
+                product=self.product,
+                sku="TSHIRT-RED-L",
+                size="XL",
+                color="Красный",
+                price=Decimal("2999.99"),
+                quantity=5,
+                image=self.image,
             )
 
     def test_product_variant_price_validator_rejects_non_positive_values(self):
@@ -201,6 +226,7 @@ class ProductVariantModelTest(TestCase):
     def test_product_variant_form_rejects_zero_price(self):
         form = ProductVariantForm(
             data={
+                "sku": "TSHIRT-BLUE-M",
                 "size": "M",
                 "color": "Синий",
                 "price": "0.00",
@@ -212,6 +238,22 @@ class ProductVariantModelTest(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("price", form.errors)
+
+    def test_product_variant_form_trims_sku(self):
+        form = ProductVariantForm(
+            data={
+                "sku": "  TSHIRT-BLUE-M  ",
+                "size": "M",
+                "color": "Синий",
+                "price": "1999.00",
+                "quantity": "5",
+                "image": "",
+            },
+            product=self.product,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["sku"], "TSHIRT-BLUE-M")
 
 
 class MainViewTest(TestCase):
@@ -421,6 +463,56 @@ class ProductListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Скрытый товар")
 
+    def test_product_list_filters_by_size_stock_price_and_sku(self):
+        """Каталог должен фильтровать товары по размеру, наличию, цене и SKU."""
+        target_product = Product.objects.create(
+            name="Матчевая футболка",
+            short_description="Игровая форма",
+            description="Футболка для матча",
+            category=self.category,
+        )
+        target_variant = ProductVariant.objects.create(
+            product=target_product,
+            sku="MATCHDAY-M-001",
+            size="M",
+            color="Синий",
+            price=Decimal("2490.00"),
+            quantity=3,
+        )
+        out_of_stock_product = Product.objects.create(
+            name="Тренировочная футболка",
+            description="Нет в наличии",
+            category=self.category,
+        )
+        ProductVariant.objects.create(
+            product=out_of_stock_product,
+            sku="TRAINING-M-001",
+            size="M",
+            color="Синий",
+            price=Decimal("2390.00"),
+            quantity=0,
+        )
+
+        response = self.client.get(
+            reverse("store:product_list"),
+            {
+                "q": "футболка",
+                "size": "M",
+                "in_stock": "1",
+                "price_min": "2000",
+                "price_max": "2600",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, target_product.name)
+        self.assertContains(response, "Размер: M")
+        self.assertContains(response, "Только в наличии")
+        self.assertNotContains(response, out_of_stock_product.name)
+
+        sku_response = self.client.get(reverse("store:product_list"), {"q": target_variant.sku})
+        self.assertContains(sku_response, target_product.name)
+
 
 class ProductDetailsViewTest(TestCase):
     """Тесты для ProductDetailsViewTest."""
@@ -503,6 +595,36 @@ class ProductDetailsViewTest(TestCase):
         self.assertContains(response, 'data-sf-gallery-count="2"')
         self.assertContains(response, "data-sf-product-detail-main")
         self.assertContains(response, "data-sf-product-detail-thumbs")
+
+    def test_product_detail_shows_commercial_fields_and_variant_sku(self):
+        """Карточка товара должна показывать коммерческие атрибуты и реальный SKU."""
+        self.product.short_description = "Короткое описание для карточки"
+        self.product.old_price = Decimal("3499.00")
+        self.product.material = "Хлопок 100%"
+        self.product.size_guide = "L: 50-52"
+        self.product.care_instructions = "Стирать при 30 градусах"
+        self.product.save(
+            update_fields=[
+                "short_description",
+                "old_price",
+                "material",
+                "size_guide",
+                "care_instructions",
+                "updated_at",
+            ]
+        )
+        self.variant.sku = "DETAIL-L-001"
+        self.variant.save(update_fields=["sku", "updated_at"])
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Короткое описание для карточки")
+        self.assertContains(response, "3499,00 ₽")
+        self.assertContains(response, "DETAIL-L-001")
+        self.assertContains(response, "Хлопок 100%")
+        self.assertContains(response, "Размерная сетка")
+        self.assertContains(response, "Стирать при 30 градусах")
 
     def test_product_detail_view_404_when_product_not_on_sale(self):
         """Снятый с продажи товар не должен открываться на витрине."""
@@ -617,6 +739,7 @@ class WarehouseStockManagementTest(TestCase):
         )
         self.variant = ProductVariant.objects.create(
             product=self.product,
+            sku="SCARF-BLUE-001",
             size="One Size",
             color="Синий",
             price=Decimal("1990.00"),
@@ -660,6 +783,15 @@ class WarehouseStockManagementTest(TestCase):
         self.assertContains(response, self.product.name)
         self.assertContains(response, "Доступно: 3")
         self.assertContains(response, "Физически: 5 / Резерв: 2")
+
+    def test_warehouse_page_searches_and_displays_real_variant_sku(self):
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:warehouse_dashboard"), {"q": self.variant.sku})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.product.name)
+        self.assertContains(response, self.variant.sku)
 
     def test_product_manage_page_shows_variant_stock_breakdown_and_active_reserves(self):
         self.variant.reserved_quantity = 2
@@ -864,6 +996,37 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertContains(response, "+79001112233")
         self.assertNotContains(response, other_order.number)
 
+    def test_orders_dashboard_filters_by_created_date_and_amount(self):
+        other_order = Order.objects.create(
+            number="ORD-TEST-0003",
+            user=self.customer,
+            recipient_name="Другой покупатель",
+            email="other-date@example.com",
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("500.00"),
+        )
+        old_date = timezone.localdate() - timedelta(days=10)
+        old_datetime = timezone.make_aware(datetime.combine(old_date, time(hour=12)))
+        Order.objects.filter(pk=other_order.pk).update(created_at=old_datetime)
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(
+            reverse("store:dashboard_orders"),
+            {
+                "created_from": timezone.localdate().isoformat(),
+                "amount_min": "1000",
+                "amount_max": "1600",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.order.number)
+        self.assertNotContains(response, other_order.number)
+
     def test_order_detail_displays_operational_context(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
 
@@ -875,6 +1038,21 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertContains(response, "Комментарий клиента")
         self.assertContains(response, "Позвонить перед выдачей")
         self.assertContains(response, "Забрать до")
+
+    def test_order_detail_allows_staff_note_update(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_staff_note_update", kwargs={"pk": self.order.pk}),
+            data={"staff_note": "Клиент просил пакет к заказу"},
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.staff_note, "Клиент просил пакет к заказу")
+
+        detail_response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.assertContains(detail_response, "Клиент просил пакет к заказу")
 
     def test_order_status_update_from_dashboard_detail(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")

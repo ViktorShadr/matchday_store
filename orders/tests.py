@@ -350,6 +350,8 @@ class CheckoutFlowTest(TestCase):
 
     def test_checkout_creates_order_reserves_stock_and_clears_cart(self):
         """Оформление заказа должно создать order, payment и очистить корзину."""
+        self.variant.sku = "SCARF-ONE-SIZE-BLUE"
+        self.variant.save(update_fields=["sku", "updated_at"])
         self.client.login(email="buyer@example.com", password="testpass123")
 
         response = self.client.post(
@@ -381,6 +383,7 @@ class CheckoutFlowTest(TestCase):
 
         order_item = OrderItem.objects.get(order=order)
         self.assertEqual(order_item.product_name_snapshot, "Шарф ФК Шинник")
+        self.assertEqual(order_item.sku_snapshot, "SCARF-ONE-SIZE-BLUE")
         self.assertEqual(order_item.quantity, 2)
         self.assertEqual(order_item.line_total, Decimal("3980.00"))
 

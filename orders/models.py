@@ -78,6 +78,7 @@ class Order(models.Model):
         total_amount (Decimal): Итоговая сумма
         currency (str): Валюта
         customer_comment (str): Комментарий заказчика
+        staff_note (str): Внутренняя заметка сотрудников
         source_cart_id (int): ID корзины-источника
         confirmed_at (datetime): Дата подтверждения
         paid_at (datetime): Дата оплаты
@@ -169,6 +170,7 @@ class Order(models.Model):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     currency = models.CharField(max_length=3, default="RUB")
     customer_comment = models.TextField(blank=True)
+    staff_note = models.TextField(blank=True)
     source_cart_id = models.PositiveBigIntegerField(null=True, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
