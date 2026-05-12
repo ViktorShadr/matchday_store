@@ -9,6 +9,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, RedirectVie
 
 from orders.application import DashboardOrderFlowError, DashboardOrderFlowService
 from orders.models import Order
+from orders.services import OrderAutoCancellationService
 from store.application import WarehouseCrudService
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm
 from store.mixins import ModeratorRequiredMixin
@@ -78,7 +79,7 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
     template_name = "dashboard/orders.html"
 
     @staticmethod
-    def _build_status_filter_links(search_query: str):
+    def _build_status_filter_links(search_query: str, payment_status_filter: str):
         filters = []
         for key, label in DASHBOARD_ORDER_FILTERS:
             params = {}
@@ -86,6 +87,8 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
                 params["status"] = key
             if search_query:
                 params["q"] = search_query
+            if payment_status_filter:
+                params["payment_status"] = payment_status_filter
             query_string = urlencode(params)
             filters.append(
                 {
@@ -101,15 +104,22 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
         status_filter = DashboardOrderQueryService.normalize_status_filter(
             self.request.GET.get("status", "all").strip() or "all"
         )
+        payment_status_filter = DashboardOrderQueryService.normalize_payment_status_filter(
+            self.request.GET.get("payment_status", "").strip()
+        )
         search_query = self.request.GET.get("q", "").strip()
         orders_queryset = DashboardOrderQueryService.build_orders_queryset(
             status_filter=status_filter,
             search_query=search_query,
+            payment_status_filter=payment_status_filter,
         )
         context["orders"] = DashboardOrderPresenter.present_many(list(orders_queryset))
         context["current_status_filter"] = status_filter
+        context["current_payment_status_filter"] = payment_status_filter
+        context["payment_status_filters"] = DASHBOARD_PAYMENT_STATUS_CHOICES
         context["search_query"] = search_query
-        context["status_filters"] = self._build_status_filter_links(search_query)
+        context["status_filters"] = self._build_status_filter_links(search_query, payment_status_filter)
+        context["has_active_filters"] = bool(search_query or payment_status_filter or status_filter != "all")
         return context
 
 
@@ -137,6 +147,8 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         context["current_payment_status_label"] = payment_status_meta["label"]
         context["current_payment_status_badge"] = payment_status_meta["badge_class"]
         context["staff_guidance"] = DashboardOrderPresenter.build_staff_guidance(self.object)
+        if self.object.delivery_method == Order.DeliveryMethod.PICKUP:
+            context["pickup_deadline"] = OrderAutoCancellationService.get_pickup_deadline(self.object)
         context["status_transitions"] = self.object.status_transitions.select_related("changed_by").order_by(
             "-created_at",
             "-id",

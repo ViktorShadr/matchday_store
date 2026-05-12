@@ -62,6 +62,26 @@
                                         <a class="btn btn-danger btn-sm" href="{% url 'store:warehouse_variant_delete' variant.pk %}">Удалить</a>
                                     </div>
                                 </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-12 col-md-4">
+                                        <div class="border rounded-3 p-2 h-100">
+                                            <div class="small text-muted">Физический остаток</div>
+                                            <div class="fw-semibold">{{ variant.quantity }} шт.</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="border rounded-3 p-2 h-100">
+                                            <div class="small text-muted">Резерв</div>
+                                            <div class="fw-semibold">{{ variant.reserved_quantity }} шт.</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="border rounded-3 p-2 h-100">
+                                            <div class="small text-muted">Доступно к продаже</div>
+                                            <div class="fw-semibold">{{ variant.available_quantity }} шт.</div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <form method="post" action="{% url 'store:warehouse_variant_stock_update' variant.pk %}" class="row g-2 align-items-end">
                                     {% csrf_token %}
                                     <div class="col-12 col-md-5">
@@ -72,6 +92,21 @@
                                         <button type="submit" class="btn btn-primary w-100">Сохранить остаток</button>
                                     </div>
                                 </form>
+                                {% if variant.active_reservation_items %}
+                                    <div class="mt-3">
+                                        <div class="small text-muted mb-2">Активные резервы</div>
+                                        <div class="d-grid gap-2">
+                                            {% for item in variant.active_reservation_items %}
+                                                <div class="d-flex justify-content-between gap-3 small">
+                                                    <a href="{% url 'store:dashboard_order_detail' item.order.pk %}">
+                                                        #{{ item.order.number|default:item.order.pk }}
+                                                    </a>
+                                                    <span>{{ item.quantity }} шт.</span>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                {% endif %}
                             </div>
                         {% empty %}
                             <div class="text-muted">Варианты ещё не созданы.</div>

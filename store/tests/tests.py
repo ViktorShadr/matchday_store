@@ -15,7 +15,7 @@ from orders.models import Order, OrderItem, OrderStatusTransition
 from payments.models import Payment
 from store.application import CartContext, CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
-from store.models import Cart, CartItem, Category, Product, ProductImage, ProductVariant
+from store.models import Cart, CartItem, Category, Page, Product, ProductImage, ProductVariant
 from store.services import InsufficientStockError, ProductNotOnSaleError
 from store.services.cart_service import CartService
 from users.models import User
@@ -649,6 +649,8 @@ class WarehouseStockManagementTest(TestCase):
         self.assertEqual(self.variant.quantity, 5)
 
     def test_warehouse_page_shows_stock_summary(self):
+        self.variant.reserved_quantity = 2
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
         self.client.login(email="mod2@example.com", password="modpass123")
 
         response = self.client.get(reverse("store:warehouse_dashboard"))
@@ -656,6 +658,45 @@ class WarehouseStockManagementTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Склад")
         self.assertContains(response, self.product.name)
+        self.assertContains(response, "Доступно: 3")
+        self.assertContains(response, "Физически: 5 / Резерв: 2")
+
+    def test_product_manage_page_shows_variant_stock_breakdown_and_active_reserves(self):
+        self.variant.reserved_quantity = 2
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        customer = User.objects.create_user(email="stock-customer@example.com", password="customerpass123")
+        order = Order.objects.create(
+            number="ORD-STOCK-RESERVE",
+            user=customer,
+            recipient_name="Покупатель",
+            email=customer.email,
+            phone="+79001112233",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("3980.00"),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.pk),
+            unit_price=Decimal("1990.00"),
+            quantity=2,
+            line_total=Decimal("3980.00"),
+        )
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Физический остаток")
+        self.assertContains(response, "Резерв")
+        self.assertContains(response, "Доступно к продаже")
+        self.assertContains(response, "3 шт.")
+        self.assertContains(response, "Активные резервы")
+        self.assertContains(response, order.number)
 
     def test_product_manage_page_updates_main_product_form(self):
         self.client.login(email="mod2@example.com", password="modpass123")
@@ -773,6 +814,7 @@ class DashboardOrdersManagementTest(TestCase):
             delivery_amount=Decimal("0.00"),
             discount_amount=Decimal("0.00"),
             total_amount=Decimal("1500.00"),
+            customer_comment="Позвонить перед выдачей",
         )
         OrderItem.objects.create(
             order=self.order,
@@ -793,6 +835,46 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertContains(response, "Заказы")
         self.assertContains(response, self.order.number)
         self.assertContains(response, "Новый")
+
+    def test_orders_dashboard_searches_by_phone_and_filters_by_payment_status(self):
+        other_order = Order.objects.create(
+            number="ORD-TEST-0002",
+            user=self.customer,
+            recipient_name="Другой покупатель",
+            email="other-customer@example.com",
+            phone="+79998887766",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.SUCCEEDED,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("2500.00"),
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(
+            reverse("store:dashboard_orders"),
+            {
+                "q": "1112233",
+                "payment_status": Order.PaymentStatus.PENDING,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.order.number)
+        self.assertContains(response, "+79001112233")
+        self.assertNotContains(response, other_order.number)
+
+    def test_order_detail_displays_operational_context(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f"mailto:{self.customer.email}")
+        self.assertContains(response, "tel:+79001112233")
+        self.assertContains(response, "Комментарий клиента")
+        self.assertContains(response, "Позвонить перед выдачей")
+        self.assertContains(response, "Забрать до")
 
     def test_order_status_update_from_dashboard_detail(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
@@ -1248,6 +1330,21 @@ class LegalPagesCartCounterTest(TestCase):
         session.save()
         cart = Cart.objects.create(session_key=session.session_key)
         CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=3)
+        for slug, title in (
+            ("privacy-policy", "Политика конфиденциальности"),
+            ("terms-of-service", "Пользовательское соглашение"),
+            ("return-policy", "Условия возврата"),
+            ("offer", "Договор оферты"),
+        ):
+            Page.objects.update_or_create(
+                slug=slug,
+                defaults={
+                    "title": title,
+                    "lead": "Тестовая юридическая страница",
+                    "content": "<p>Тестовое содержание</p>",
+                    "is_published": True,
+                },
+            )
 
     def test_legal_pages_use_actual_cart_counter(self):
         legal_routes = [
