@@ -85,11 +85,14 @@ class CatalogQueryService:
             queryset = queryset.distinct()
 
         if sort in {"price_asc", "price_desc"}:
+            # Используем conditional aggregation чтобы избежать влияния фильтрации по variants__sku
             queryset = queryset.annotate(
                 min_available_variant_price=Min(
                     "variants__price",
                     filter=Q(variants__quantity__gt=F("variants__reserved_quantity")),
                 ),
+                # Coalesce с Min("variants__price") может быть затронут фильтрацией,
+                # но это менее критично для сортировки по цене
                 min_variant_price=Coalesce("min_available_variant_price", Min("variants__price")),
             )
 

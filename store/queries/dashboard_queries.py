@@ -36,9 +36,24 @@ class WarehouseQueryService:
         selected_sort: str = "updated_desc",
     ):
         selected_sort = cls.normalize_sort(selected_sort)
+        
+        # Сначала фильтруем продукты по поисковому запросу
+        base_queryset = Product.objects.select_related("category")
+        
+        if search_query:
+            search_filter = Q(name__icontains=search_query) | Q(variants__sku__icontains=search_query)
+            normalized_search_query = search_query.lower()
+            if normalized_search_query.startswith("sku-"):
+                normalized_search_query = normalized_search_query[4:]
+
+            if normalized_search_query.isdigit():
+                numeric_query = int(normalized_search_query)
+                search_filter |= Q(pk=numeric_query) | Q(variants__pk=numeric_query)
+            base_queryset = base_queryset.filter(search_filter).distinct()
+        
+        # Затем добавляем аннотации на отфильтрованном queryset
         queryset = (
-            Product.objects.select_related("category")
-            .prefetch_related(
+            base_queryset.prefetch_related(
                 Prefetch(
                     "images",
                     queryset=ProductImage.objects.order_by("-is_primary", "-created_at"),
@@ -57,17 +72,6 @@ class WarehouseQueryService:
                 min_price=Coalesce(Min("variants__price"), Value(Decimal("0.00"))),
             )
         )
-
-        if search_query:
-            search_filter = Q(name__icontains=search_query) | Q(variants__sku__icontains=search_query)
-            normalized_search_query = search_query.lower()
-            if normalized_search_query.startswith("sku-"):
-                normalized_search_query = normalized_search_query[4:]
-
-            if normalized_search_query.isdigit():
-                numeric_query = int(normalized_search_query)
-                search_filter |= Q(pk=numeric_query) | Q(variants__pk=numeric_query)
-            queryset = queryset.filter(search_filter).distinct()
 
         if selected_category.isdigit():
             queryset = queryset.filter(category_id=int(selected_category))
