@@ -14,8 +14,8 @@ class WarehouseQueryService:
         "updated_desc": ("-updated_at",),
         "name_asc": ("name",),
         "name_desc": ("-name",),
-        "stock_desc": ("-stock_total", "name"),
-        "stock_asc": ("stock_total", "name"),
+        "stock_desc": ("-available_stock_total", "name"),
+        "stock_asc": ("available_stock_total", "name"),
         "price_asc": ("min_price", "name"),
         "price_desc": ("-min_price", "name"),
     }
