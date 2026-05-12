@@ -20,10 +20,26 @@ class CategoryForm(forms.ModelForm):
 class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
-        fields = ["name", "description", "category"]
+        fields = [
+            "name",
+            "short_description",
+            "description",
+            "old_price",
+            "material",
+            "care_instructions",
+            "size_guide",
+            "category",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Название товара"}),
+            "short_description": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Короткое описание для карточки"}
+            ),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 5}),
+            "old_price": forms.NumberInput(attrs={"class": "form-control", "min": "0.01", "step": "0.01"}),
+            "material": forms.TextInput(attrs={"class": "form-control", "placeholder": "Например, хлопок 100%"}),
+            "care_instructions": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "size_guide": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "category": forms.Select(attrs={"class": "form-select"}),
         }
 
@@ -31,8 +47,9 @@ class ProductForm(forms.ModelForm):
 class ProductVariantForm(forms.ModelForm):
     class Meta:
         model = ProductVariant
-        fields = ["size", "color", "price", "quantity", "image"]
+        fields = ["sku", "size", "color", "price", "quantity", "image"]
         widgets = {
+            "sku": forms.TextInput(attrs={"class": "form-control", "placeholder": "Например, SHIN-SCARF-001"}),
             "size": forms.TextInput(attrs={"class": "form-control", "placeholder": "L"}),
             "color": forms.TextInput(attrs={"class": "form-control", "placeholder": "Синий"}),
             "price": forms.NumberInput(attrs={"class": "form-control", "min": "0.01", "step": "0.01"}),
@@ -53,6 +70,9 @@ class ProductVariantForm(forms.ModelForm):
         if price <= Decimal("0.00"):
             raise forms.ValidationError("Цена должна быть больше нуля.")
         return price
+
+    def clean_sku(self):
+        return (self.cleaned_data.get("sku") or "").strip()
 
     def clean_quantity(self):
         quantity = self.cleaned_data["quantity"]

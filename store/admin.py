@@ -16,9 +16,9 @@ class CategoryAdmin(admin.ModelAdmin):
 class ProductAdmin(admin.ModelAdmin):
     """Настройки админ-интерфейса для Product."""
 
-    list_display = ["name", "category", "is_on_sale", "created_at", "updated_at"]
+    list_display = ["name", "category", "old_price", "is_on_sale", "created_at", "updated_at"]
     list_filter = ["category", "is_on_sale", "created_at"]
-    search_fields = ["name", "description"]
+    search_fields = ["name", "short_description", "description", "material"]
     ordering = ["name"]
 
 
@@ -26,9 +26,9 @@ class ProductAdmin(admin.ModelAdmin):
 class ProductVariantAdmin(admin.ModelAdmin):
     """Настройки админ-интерфейса для ProductVariant."""
 
-    list_display = ["product", "size", "color", "price", "quantity", "reserved_quantity", "available_quantity"]
+    list_display = ["product", "sku", "size", "color", "price", "quantity", "reserved_quantity", "available_quantity"]
     list_filter = ["size", "color", "product"]
-    search_fields = ["product__name", "size", "color"]
+    search_fields = ["product__name", "sku", "size", "color"]
     ordering = ["product", "size", "color"]
 
 

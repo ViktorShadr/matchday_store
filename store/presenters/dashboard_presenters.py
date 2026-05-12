@@ -33,7 +33,12 @@ class WarehouseProductPresenter:
         prepared_products = []
         for product in products:
             product.preview_image = next(iter(product.images.all()), None)
-            product.sku = f"SKU-{product.pk}"
+            variant_skus = [variant.sku for variant in product.variants.all() if variant.sku]
+            product.sku = ", ".join(variant_skus[:2])
+            if len(variant_skus) > 2:
+                product.sku = f"{product.sku} +{len(variant_skus) - 2}"
+            if not product.sku:
+                product.sku = "SKU не указан"
             product.variant_label = cls.format_variant_label(product.variant_count)
             stock_total = int(product.stock_total or 0)
             reserved_stock_total = int(product.reserved_stock_total or 0)

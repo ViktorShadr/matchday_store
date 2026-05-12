@@ -133,7 +133,7 @@
                                     <select id="variantSelect" name="variant_id" class="form-select">
                                         {% for variant in available_variants %}
                                             <option value="{{ variant.id }}">
-                                                {{ variant.size|default:'Без размера' }} / {{ variant.color|default:'Без цвета' }} - {{ variant.price|floatformat:"-2" }} ₽
+                                                {{ variant.size|default:'Без размера' }} / {{ variant.color|default:'Без цвета' }} - {{ variant.price|floatformat:"-2" }} ₽{% if variant.sku %} · {{ variant.sku }}{% endif %} · {{ variant.available_quantity }} шт.
                                             </option>
                                         {% endfor %}
                                     </select>
@@ -143,6 +143,10 @@
                                 <div class="small text-muted mb-2">
                                     Размер: {{ available_variants.0.size|default:'Без размера' }}
                                     Цвет: {{ available_variants.0.color|default:'Без цвета' }}
+                                    {% if available_variants.0.sku %}
+                                        · SKU: {{ available_variants.0.sku }}
+                                    {% endif %}
+                                    · В наличии: {{ available_variants.0.available_quantity }} шт.
                                 </div>
                             {% endif %}
                             <input type="hidden" name="quantity" value="1">
@@ -167,6 +171,42 @@
                         Вернуться в каталог
                     </a>
                 </div>
+
+                {% if product.material or product.care_instructions or product.size_guide or variants %}
+                    <div class="sf-product-inline-description mb-3">
+                        <h2 class="sf-product-section-title sf-product-section-title--compact">Характеристики</h2>
+                        <div class="d-grid gap-2">
+                            {% if product.material %}
+                                <div class="d-flex justify-content-between gap-3">
+                                    <span class="text-muted">Материал</span>
+                                    <strong class="text-end">{{ product.material }}</strong>
+                                </div>
+                            {% endif %}
+                            {% if variants %}
+                                <div class="d-flex justify-content-between gap-3">
+                                    <span class="text-muted">Размеры</span>
+                                    <strong class="text-end">
+                                        {% for variant in variants %}
+                                            {{ variant.size|default:'—' }}{% if not forloop.last %}, {% endif %}
+                                        {% endfor %}
+                                    </strong>
+                                </div>
+                            {% endif %}
+                            {% if product.size_guide %}
+                                <div>
+                                    <div class="text-muted mb-1">Размерная сетка</div>
+                                    <div class="small">{{ product.size_guide|linebreaksbr }}</div>
+                                </div>
+                            {% endif %}
+                            {% if product.care_instructions %}
+                                <div>
+                                    <div class="text-muted mb-1">Уход</div>
+                                    <div class="small">{{ product.care_instructions|linebreaksbr }}</div>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
 
                 <div class="sf-product-inline-description">
                     <h2 class="sf-product-section-title sf-product-section-title--compact">Описание товара</h2>
