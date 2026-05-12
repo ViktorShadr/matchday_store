@@ -36,10 +36,10 @@ class WarehouseQueryService:
         selected_sort: str = "updated_desc",
     ):
         selected_sort = cls.normalize_sort(selected_sort)
-        
+
         # Сначала фильтруем продукты по поисковому запросу
         base_queryset = Product.objects.select_related("category")
-        
+
         if search_query:
             search_filter = Q(name__icontains=search_query) | Q(variants__sku__icontains=search_query)
             normalized_search_query = search_query.lower()
@@ -50,27 +50,24 @@ class WarehouseQueryService:
                 numeric_query = int(normalized_search_query)
                 search_filter |= Q(pk=numeric_query) | Q(variants__pk=numeric_query)
             base_queryset = base_queryset.filter(search_filter).distinct()
-        
+
         # Затем добавляем аннотации на отфильтрованном queryset
-        queryset = (
-            base_queryset.prefetch_related(
-                Prefetch(
-                    "images",
-                    queryset=ProductImage.objects.order_by("-is_primary", "-created_at"),
-                ),
-                Prefetch("variants", queryset=ProductVariant.objects.order_by("pk")),
-            )
-            .annotate(
-                variant_count=Count("variants", distinct=True),
-                stock_total=Coalesce(Sum("variants__quantity"), 0),
-                reserved_stock_total=Coalesce(Sum("variants__reserved_quantity"), 0),
-                available_stock_total=Coalesce(
-                    Sum(F("variants__quantity") - F("variants__reserved_quantity")),
-                    0,
-                    output_field=IntegerField(),
-                ),
-                min_price=Coalesce(Min("variants__price"), Value(Decimal("0.00"))),
-            )
+        queryset = base_queryset.prefetch_related(
+            Prefetch(
+                "images",
+                queryset=ProductImage.objects.order_by("-is_primary", "-created_at"),
+            ),
+            Prefetch("variants", queryset=ProductVariant.objects.order_by("pk")),
+        ).annotate(
+            variant_count=Count("variants", distinct=True),
+            stock_total=Coalesce(Sum("variants__quantity"), 0),
+            reserved_stock_total=Coalesce(Sum("variants__reserved_quantity"), 0),
+            available_stock_total=Coalesce(
+                Sum(F("variants__quantity") - F("variants__reserved_quantity")),
+                0,
+                output_field=IntegerField(),
+            ),
+            min_price=Coalesce(Min("variants__price"), Value(Decimal("0.00"))),
         )
 
         if selected_category.isdigit():
