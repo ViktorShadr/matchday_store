@@ -108,6 +108,7 @@
                                         <td>{{ product.variant_label }}</td>
                                         <td>
                                             <span class="sf-stock-badge sf-stock-badge--{{ product.stock_state }}">{{ product.stock_label }}</span>
+                                            <div class="small text-muted mt-1">{{ product.stock_detail_label }}</div>
                                         </td>
                                         <td>
                                             {% if product.is_on_sale %}
