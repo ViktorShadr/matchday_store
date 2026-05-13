@@ -82,8 +82,8 @@ class ProductCardPresenter:
         product.first_available_variant_id = first_available_variant.id if first_available_variant else None
 
         product.variant_count = len(variants)
-        product.requires_variant_selection = product.variant_count > 1
-        product.has_size_options = ProductCardPresenter._has_multiple_values(variants, "size")
+        product.requires_variant_selection = product.available_variant_count > 1
+        product.has_size_options = ProductCardPresenter._has_multiple_values(available_variants, "size")
         if product.in_stock and product.first_available_variant_id:
             if product.requires_variant_selection:
                 product.card_cta_action = "detail"

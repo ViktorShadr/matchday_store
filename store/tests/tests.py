@@ -18,6 +18,7 @@ from payments.models import Payment
 from store.application import CartContext, CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
 from store.models import Cart, CartItem, Category, Page, Product, ProductImage, ProductVariant
+from store.presenters.catalog_presenters import ProductCardPresenter
 from store.services import InsufficientStockError, ProductNotOnSaleError
 from store.services.cart_service import CartService
 from users.models import User
@@ -254,6 +255,65 @@ class ProductVariantModelTest(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["sku"], "TSHIRT-BLUE-M")
+
+
+class ProductCardPresenterTest(TestCase):
+    """Тесты подготовки карточки товара."""
+
+    def setUp(self):
+        self.category = Category.objects.create(name="Карточки товаров")
+
+    def test_single_available_variant_can_be_added_from_card(self):
+        """Если доступен один вариант, карточка сразу добавляет его в корзину."""
+        product = Product.objects.create(name="Футболка с одним доступным размером", category=self.category)
+        available_variant = ProductVariant.objects.create(
+            product=product,
+            size="M",
+            color="Синий",
+            price=Decimal("1999.00"),
+            quantity=3,
+        )
+        ProductVariant.objects.create(
+            product=product,
+            size="L",
+            color="Синий",
+            price=Decimal("1999.00"),
+            quantity=0,
+        )
+
+        enriched = ProductCardPresenter.enrich(product)
+
+        self.assertEqual(enriched.variant_count, 2)
+        self.assertEqual(enriched.available_variant_count, 1)
+        self.assertFalse(enriched.requires_variant_selection)
+        self.assertEqual(enriched.card_cta_action, "cart")
+        self.assertEqual(enriched.card_cta_label, "В корзину")
+        self.assertEqual(enriched.first_available_variant_id, available_variant.id)
+
+    def test_multiple_available_variants_open_detail_selection(self):
+        """Если доступны несколько вариантов, карточка ведет к выбору варианта."""
+        product = Product.objects.create(name="Футболка с размерами", category=self.category)
+        ProductVariant.objects.create(
+            product=product,
+            size="M",
+            color="Черный",
+            price=Decimal("1999.00"),
+            quantity=2,
+        )
+        ProductVariant.objects.create(
+            product=product,
+            size="L",
+            color="Черный",
+            price=Decimal("1999.00"),
+            quantity=2,
+        )
+
+        enriched = ProductCardPresenter.enrich(product)
+
+        self.assertEqual(enriched.available_variant_count, 2)
+        self.assertTrue(enriched.requires_variant_selection)
+        self.assertEqual(enriched.card_cta_action, "detail")
+        self.assertEqual(enriched.card_cta_label, "Выбрать размер")
 
 
 class MainViewTest(TestCase):
