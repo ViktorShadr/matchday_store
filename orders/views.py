@@ -7,7 +7,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import FormView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
-from analytics.metrika import build_checkout_event, build_purchase_event, is_metrika_enabled
+from analytics.metrika import build_checkout_event, build_purchase_event, is_metrika_enabled, queue_ecommerce_event
 from config.rate_limits import setting_rate
 from orders.application import CheckoutContext, CheckoutSessionService
 from orders.forms import CheckoutForm
@@ -133,6 +133,12 @@ class CheckoutView(CartContextMixin, FormView):
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 
+        if is_metrika_enabled():
+            order_items = list(order.items.select_related("product_variant__product__category").order_by("pk"))
+            metrika_event = build_purchase_event(order, order_items)
+            if metrika_event:
+                queue_ecommerce_event(self.request, metrika_event)
+
         self.checkout_session_service.mark_checkout_processed(self.request, submitted_token, order.pk)
         return redirect(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
 
@@ -162,8 +168,4 @@ class CheckoutSuccessView(CartContextMixin, TemplateView):
         context["order"] = order
         context["order_items"] = order_items
         context["pickup_location"] = CheckoutSessionService.build_pickup_location()
-        if is_metrika_enabled():
-            metrika_event = build_purchase_event(order, order_items)
-            if metrika_event:
-                context["metrika_page_events"] = [metrika_event]
         return context
