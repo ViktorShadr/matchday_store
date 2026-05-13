@@ -37,21 +37,24 @@ class WarehouseQueryService:
     ):
         selected_sort = cls.normalize_sort(selected_sort)
 
-        # Сначала фильтруем продукты по поисковому запросу
         base_queryset = Product.objects.select_related("category")
 
         if search_query:
-            search_filter = Q(name__icontains=search_query) | Q(variants__sku__icontains=search_query)
+            variant_filter = Q(sku__icontains=search_query)
             normalized_search_query = search_query.lower()
             if normalized_search_query.startswith("sku-"):
                 normalized_search_query = normalized_search_query[4:]
 
+            search_filter = Q(name__icontains=search_query)
             if normalized_search_query.isdigit():
                 numeric_query = int(normalized_search_query)
-                search_filter |= Q(pk=numeric_query) | Q(variants__pk=numeric_query)
-            base_queryset = base_queryset.filter(search_filter).distinct()
+                search_filter |= Q(pk=numeric_query)
+                variant_filter |= Q(pk=numeric_query)
 
-        # Затем добавляем аннотации на отфильтрованном queryset
+            matching_variant_product_ids = ProductVariant.objects.filter(variant_filter).values("product_id")
+            search_filter |= Q(pk__in=matching_variant_product_ids)
+            base_queryset = base_queryset.filter(search_filter)
+
         queryset = base_queryset.prefetch_related(
             Prefetch(
                 "images",

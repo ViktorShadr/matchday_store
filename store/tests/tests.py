@@ -793,6 +793,33 @@ class WarehouseStockManagementTest(TestCase):
         self.assertContains(response, self.product.name)
         self.assertContains(response, self.variant.sku)
 
+    def test_warehouse_sku_search_keeps_product_level_stock_aggregates(self):
+        self.variant.reserved_quantity = 2
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        ProductVariant.objects.create(
+            product=self.product,
+            sku="SCARF-RED-002",
+            size="L",
+            color="Красный",
+            price=Decimal("990.00"),
+            quantity=10,
+            reserved_quantity=1,
+        )
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:warehouse_dashboard"), {"q": self.variant.sku})
+
+        self.assertEqual(response.status_code, 200)
+        products = response.context["products"]
+        self.assertEqual(len(products), 1)
+        product = products[0]
+        self.assertEqual(product.variant_count, 2)
+        self.assertEqual(product.stock_total, 15)
+        self.assertEqual(product.reserved_stock_total, 3)
+        self.assertEqual(product.available_stock_total, 12)
+        self.assertEqual(product.min_price, Decimal("990.00"))
+        self.assertEqual(product.stock_state, "in")
+
     def test_product_manage_page_shows_variant_stock_breakdown_and_active_reserves(self):
         self.variant.reserved_quantity = 2
         self.variant.save(update_fields=["reserved_quantity", "updated_at"])
