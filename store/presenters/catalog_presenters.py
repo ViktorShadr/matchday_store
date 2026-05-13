@@ -53,11 +53,7 @@ class ProductCardPresenter:
 
     @staticmethod
     def _has_multiple_values(variants, field_name: str) -> bool:
-        values = {
-            str(value).strip()
-            for value in (getattr(variant, field_name, "") for variant in variants)
-            if value
-        }
+        values = {str(value).strip() for value in (getattr(variant, field_name, "") for variant in variants) if value}
         return len(values) > 1
 
     @staticmethod

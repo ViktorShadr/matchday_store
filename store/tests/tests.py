@@ -564,7 +564,7 @@ class ProductDetailsViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Нет в наличии")
         self.assertContains(response, "Временно недоступно")
-        self.assertNotContains(response, 'data-sf-product-buy-form')
+        self.assertNotContains(response, "data-sf-product-buy-form")
 
     def test_product_detail_single_variant_hides_exact_stock_when_plenty_available(self):
         """Один вариант с большим остатком показывает только общий статус наличия."""
