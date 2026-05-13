@@ -125,32 +125,67 @@
 
                 <div class="sf-product-actions">
                     {% if available_variants %}
-                        <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-buy-form">
+                        <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-buy-form" data-sf-product-buy-form>
                             {% csrf_token %}
                             {% if available_variants|length > 1 %}
                                 <div class="mb-3">
                                     <label class="form-label" for="variantSelect">Выберите вариант</label>
-                                    <select id="variantSelect" name="variant_id" class="form-select">
+                                    <select id="variantSelect" name="variant_id" class="form-select" data-sf-variant-select>
                                         {% for variant in available_variants %}
-                                            <option value="{{ variant.id }}">
-                                                {{ variant.size|default:'Без размера' }} / {{ variant.color|default:'Без цвета' }} - {{ variant.price|floatformat:"-2" }} ₽{% if variant.sku %} · {{ variant.sku }}{% endif %} · {{ variant.available_quantity }} шт.
+                                            <option
+                                                value="{{ variant.id }}"
+                                                data-available-quantity="{{ variant.available_quantity }}"
+                                                {% if variant.available_quantity <= 0 %}disabled{% endif %}
+                                            >
+                                                {{ variant.size|default:'Без размера' }} / {{ variant.color|default:'Без цвета' }}{% if min_price != max_price %} — {{ variant.price|floatformat:"-2" }} ₽{% endif %}
                                             </option>
                                         {% endfor %}
                                     </select>
+                                    {% with quantity=available_variants.0.available_quantity %}
+                                        <div class="mt-2" data-sf-variant-stock-wrap aria-live="polite"{% if quantity > 5 %} hidden{% endif %}>
+                                            <span
+                                                class="sf-stock-badge {% if quantity <= 0 %}sf-stock-badge--out{% else %}sf-stock-badge--low{% endif %}"
+                                                data-sf-variant-stock-badge
+                                            >
+                                                {% if quantity <= 0 %}
+                                                    Нет в наличии
+                                                {% elif quantity == 1 %}
+                                                    Последний товар
+                                                {% elif quantity <= 5 %}
+                                                    Осталось мало
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                    {% endwith %}
                                 </div>
                             {% else %}
                                 <input type="hidden" name="variant_id" value="{{ available_variants.0.id }}">
                                 <div class="small text-muted mb-2">
-                                    Размер: {{ available_variants.0.size|default:'Без размера' }}
-                                    Цвет: {{ available_variants.0.color|default:'Без цвета' }}
-                                    {% if available_variants.0.sku %}
-                                        · SKU: {{ available_variants.0.sku }}
-                                    {% endif %}
-                                    · В наличии: {{ available_variants.0.available_quantity }} шт.
+                                    Размер: {{ available_variants.0.size|default:'Без размера' }} · Цвет: {{ available_variants.0.color|default:'Без цвета' }}
                                 </div>
+                                {% with quantity=available_variants.0.available_quantity %}
+                                    {% if quantity <= 0 %}
+                                        <div class="mb-3" aria-live="polite">
+                                            <span class="sf-stock-badge sf-stock-badge--out">Нет в наличии</span>
+                                        </div>
+                                    {% elif quantity == 1 %}
+                                        <div class="mb-3" aria-live="polite">
+                                            <span class="sf-stock-badge sf-stock-badge--low">Последний товар</span>
+                                        </div>
+                                    {% elif quantity <= 5 %}
+                                        <div class="mb-3" aria-live="polite">
+                                            <span class="sf-stock-badge sf-stock-badge--low">Осталось мало</span>
+                                        </div>
+                                    {% endif %}
+                                {% endwith %}
                             {% endif %}
                             <input type="hidden" name="quantity" value="1">
-                            <button type="submit" class="btn btn-primary btn-lg sf-product-main-cta">
+                            <button
+                                type="submit"
+                                class="btn btn-primary btn-lg sf-product-main-cta"
+                                data-sf-add-to-cart-submit
+                                {% if available_variants.0.available_quantity <= 0 %}disabled{% endif %}
+                            >
                                 <span class="sf-product-main-cta-icon" aria-hidden="true">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <circle cx="9" cy="20" r="1.4"></circle>
