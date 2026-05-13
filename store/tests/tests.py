@@ -563,6 +563,70 @@ class ProductDetailsViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Нет в наличии")
+        self.assertContains(response, "Временно недоступно")
+        self.assertNotContains(response, 'data-sf-product-buy-form')
+
+    def test_product_detail_single_variant_hides_exact_stock_when_plenty_available(self):
+        """Один вариант с большим остатком показывает только общий статус наличия."""
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "В наличии")
+        self.assertContains(response, "Размер: L · Цвет: Красный")
+        self.assertNotContains(response, "Осталось мало")
+        self.assertNotContains(response, "Последний товар")
+        self.assertNotContains(response, "В наличии:")
+
+    def test_product_detail_single_variant_shows_low_stock_badge(self):
+        """Один вариант с остатком 2-5 показывает мягкое предупреждение без точного количества."""
+        self.variant.quantity = 3
+        self.variant.save(update_fields=["quantity"])
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Осталось мало")
+        self.assertNotContains(response, "3 шт.")
+
+    def test_product_detail_single_variant_shows_last_item_badge(self):
+        """Один вариант с остатком 1 показывает отдельный badge."""
+        self.variant.quantity = 1
+        self.variant.save(update_fields=["quantity"])
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Последний товар")
+        self.assertNotContains(response, "1 шт.")
+
+    def test_product_detail_multiple_variants_uses_clean_option_labels_and_stock_data(self):
+        """Select вариантов не показывает SKU и точные остатки, но хранит остаток для JS."""
+        self.variant.quantity = 3
+        self.variant.sku = "DETAIL-L-001"
+        self.variant.save(update_fields=["quantity", "sku", "updated_at"])
+        ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Синий",
+            price=Decimal("3499.00"),
+            quantity=1,
+            image=self.image,
+            sku="DETAIL-M-002",
+        )
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "L / Красный")
+        self.assertContains(response, "M / Синий")
+        self.assertContains(response, "3499 ₽")
+        self.assertContains(response, 'data-available-quantity="3"')
+        self.assertContains(response, 'data-available-quantity="1"')
+        self.assertContains(response, "Осталось мало")
+        self.assertNotContains(response, "DETAIL-L-001")
+        self.assertNotContains(response, "DETAIL-M-002")
+        self.assertNotContains(response, "3 шт.")
+        self.assertNotContains(response, "1 шт.")
 
     def test_product_detail_uses_primary_image_as_main(self):
         """Детальная страница должна показывать основное изображение в главном блоке."""
@@ -596,8 +660,8 @@ class ProductDetailsViewTest(TestCase):
         self.assertContains(response, "data-sf-product-detail-main")
         self.assertContains(response, "data-sf-product-detail-thumbs")
 
-    def test_product_detail_shows_commercial_fields_and_variant_sku(self):
-        """Карточка товара должна показывать коммерческие атрибуты и реальный SKU."""
+    def test_product_detail_shows_commercial_fields_and_hides_public_variant_sku(self):
+        """Карточка товара показывает коммерческие атрибуты, но не публичный SKU варианта."""
         self.product.short_description = "Короткое описание для карточки"
         self.product.old_price = Decimal("3499.00")
         self.product.material = "Хлопок 100%"
@@ -621,7 +685,7 @@ class ProductDetailsViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Короткое описание для карточки")
         self.assertContains(response, "3499,00 ₽")
-        self.assertContains(response, "DETAIL-L-001")
+        self.assertNotContains(response, "DETAIL-L-001")
         self.assertContains(response, "Хлопок 100%")
         self.assertContains(response, "Размерная сетка")
         self.assertContains(response, "Стирать при 30 градусах")

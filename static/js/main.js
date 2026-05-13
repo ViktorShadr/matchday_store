@@ -253,6 +253,90 @@
     }
 })();
 
+// Product variant stock message
+(function() {
+    const variantSelects = document.querySelectorAll('[data-sf-variant-select]');
+    if (!variantSelects.length) {
+        return;
+    }
+
+    const stockBadgeClasses = [
+        'sf-stock-badge--success',
+        'sf-stock-badge--muted',
+        'sf-stock-badge--in',
+        'sf-stock-badge--low',
+        'sf-stock-badge--out',
+    ];
+
+    function getVariantStockState(quantity) {
+        if (quantity <= 0) {
+            return {
+                text: 'Нет в наличии',
+                className: 'sf-stock-badge--out',
+                hidden: false,
+                disabled: true,
+            };
+        }
+
+        if (quantity === 1) {
+            return {
+                text: 'Последний товар',
+                className: 'sf-stock-badge--low',
+                hidden: false,
+                disabled: false,
+            };
+        }
+
+        if (quantity <= 5) {
+            return {
+                text: 'Осталось мало',
+                className: 'sf-stock-badge--low',
+                hidden: false,
+                disabled: false,
+            };
+        }
+
+        return {
+            text: '',
+            className: '',
+            hidden: true,
+            disabled: false,
+        };
+    }
+
+    function updateVariantStock(select) {
+        const form = select.closest('[data-sf-product-buy-form]') || select.form;
+        const selectedOption = select.selectedOptions && select.selectedOptions[0];
+        const quantity = Number(selectedOption?.getAttribute('data-available-quantity') || '0');
+        const stockState = getVariantStockState(quantity);
+        const stockWrap = form?.querySelector('[data-sf-variant-stock-wrap]');
+        const stockBadge = form?.querySelector('[data-sf-variant-stock-badge]');
+        const submitButton = form?.querySelector('[data-sf-add-to-cart-submit]');
+
+        if (stockWrap) {
+            stockWrap.hidden = stockState.hidden;
+        }
+
+        if (stockBadge) {
+            stockBadge.textContent = stockState.text;
+            stockBadge.classList.remove(...stockBadgeClasses);
+
+            if (stockState.className) {
+                stockBadge.classList.add(stockState.className);
+            }
+        }
+
+        if (submitButton) {
+            submitButton.disabled = stockState.disabled;
+        }
+    }
+
+    variantSelects.forEach((select) => {
+        updateVariantStock(select);
+        select.addEventListener('change', () => updateVariantStock(select));
+    });
+})();
+
 // Avatar upload validation
 (function() {
     const avatarInputs = document.querySelectorAll('input[data-avatar-upload="true"]');
