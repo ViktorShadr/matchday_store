@@ -107,6 +107,7 @@ poetry run python manage.py check
 - `CACHE_URL` (shared Redis cache для rate limiting между несколькими worker-процессами)
 - `RATELIMIT_*` (лимиты для login/registration/resend/checkout)
 - `CSP_ENFORCE` (`True` для production, `False` только для временной диагностики)
+- `METRIKA_ENABLED`, `METRIKA_COUNTER_ID` для Яндекс.Метрики в production
 - `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`
 
 Для логирования:
@@ -132,6 +133,53 @@ poetry run python manage.py check
 - `USE_X_FORWARDED_PROTO=True`, если TLS завершается на внешнем reverse proxy
 
 В production каждый ответ включает `X-Request-ID`; тот же идентификатор прокидывается в Celery-задачи и попадает в логи.
+
+## Яндекс.Метрика
+
+Интеграция изолирована в `analytics`: настройки читаются из env, base template вызывает один template tag, а ecommerce payload передается через безопасный JSON (`json_script`) и статический loader `static/js/metrika.js`.
+
+Метрика загружается только если одновременно выполнены условия:
+
+- `DEBUG=False`
+- `METRIKA_ENABLED=True`
+- `METRIKA_COUNTER_ID` заполнен числовым ID счетчика
+
+Где менять счетчик:
+
+- production `.env`: `METRIKA_COUNTER_ID=12345678`
+- не менять ID в шаблонах и JS вручную
+
+Как отключить:
+
+- поставить `METRIKA_ENABLED=False`
+- или оставить `DEBUG=True` в local/dev, тогда счетчик не загрузится даже при заполненном ID
+
+Что отправляется в ecommerce `dataLayer`:
+
+- просмотр товара: `detail`
+- добавление в корзину после успешного server-side POST: `add`
+- открытие checkout: `checkout` / `begin_checkout`
+- успешный заказ: `purchase` с `order.number`, `total_amount`, SKU, category, quantity и line totals
+
+PII покупателя (`email`, `phone`, ФИО) в ecommerce events не передается.
+
+Проверка:
+
+1. Включить Ecommerce в настройках счетчика Яндекс.Метрики, data container: `dataLayer`.
+2. На production открыть страницу с параметром `?_ym_debug=2`.
+3. Проверить в debug panel события `detail`, `add`, `checkout`, `purchase`.
+4. В DevTools убедиться, что есть один запрос `https://mc.yandex.ru/metrika/tag.js` и нет дублей `ym(..., "init", ...)`.
+
+Consent compatibility:
+
+- сейчас `METRIKA_REQUIRE_CONSENT=False`, счетчик грузится сразу после server-side gating;
+- для будущего consent banner можно поставить `METRIKA_REQUIRE_CONSENT=True`, тогда loader дождется `localStorage.cookie_consent=accepted` или события `matchday:cookie-consent-changed`.
+
+CSP:
+
+- при активной Метрике Django settings добавляют домены Яндекса в `script-src`, `img-src`, `connect-src`, `child-src`, `frame-src`, `frame-ancestors`;
+- WebVisor/click maps требуют возможности iframe-просмотра страниц из интерфейса Яндекса, поэтому в режиме активной Метрики проект не добавляет `X-Frame-Options: DENY` и полагается на `frame-ancestors` CSP;
+- при отключенной Метрике прежний `X-Frame-Options: DENY` остается.
 
 ## Backup и restore check
 

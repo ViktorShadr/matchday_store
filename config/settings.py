@@ -31,6 +31,13 @@ def env_list(name: str) -> list[str]:
 
 DEBUG = env_bool("DEBUG", False)
 
+METRIKA_ENABLED = env_bool("METRIKA_ENABLED", False)
+METRIKA_COUNTER_ID = os.getenv("METRIKA_COUNTER_ID", "").strip()
+if METRIKA_COUNTER_ID and not METRIKA_COUNTER_ID.isdigit():
+    raise ValueError("METRIKA_COUNTER_ID must contain only digits")
+METRIKA_REQUIRE_CONSENT = env_bool("METRIKA_REQUIRE_CONSENT", False)
+METRIKA_ACTIVE = not DEBUG and METRIKA_ENABLED and bool(METRIKA_COUNTER_ID)
+
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "").split(",") if host.strip()]
 
 if DEBUG and not ALLOWED_HOSTS:
@@ -47,6 +54,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "analytics.apps.AnalyticsConfig",
     "csp",
     "djcelery_email",
     "orders.apps.OrdersConfig",
@@ -64,8 +72,10 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+if not METRIKA_ACTIVE:
+    MIDDLEWARE.append("django.middleware.clickjacking.XFrameOptionsMiddleware")
 
 ROOT_URLCONF = "config.urls"
 
@@ -79,6 +89,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "analytics.context_processors.yandex_metrika",
                 "store.context_processors.navigation_permissions",
             ],
         },
@@ -252,6 +263,59 @@ _CSP_DIRECTIVES = {
     "connect-src": [SELF],
     "object-src": [NONE],
 }
+
+YANDEX_METRIKA_HTTPS_SOURCES = [
+    "https://mc.yandex.ru",
+    "https://mc.yandex.az",
+    "https://mc.yandex.by",
+    "https://mc.yandex.co.il",
+    "https://mc.yandex.com",
+    "https://mc.yandex.com.am",
+    "https://mc.yandex.com.ge",
+    "https://mc.yandex.com.tr",
+    "https://mc.yandex.ee",
+    "https://mc.yandex.fr",
+    "https://mc.yandex.kg",
+    "https://mc.yandex.kz",
+    "https://mc.yandex.lt",
+    "https://mc.yandex.lv",
+    "https://mc.yandex.md",
+    "https://mc.yandex.tj",
+    "https://mc.yandex.tm",
+    "https://mc.yandex.uz",
+    "https://mc.webvisor.com",
+    "https://mc.webvisor.org",
+]
+YANDEX_METRIKA_WSS_SOURCES = [
+    "wss://mc.yandex.ru",
+    "wss://mc.yandex.az",
+    "wss://mc.yandex.by",
+    "wss://mc.yandex.co.il",
+    "wss://mc.yandex.com",
+    "wss://mc.yandex.com.am",
+    "wss://mc.yandex.com.ge",
+    "wss://mc.yandex.com.tr",
+    "wss://mc.yandex.ee",
+    "wss://mc.yandex.fr",
+    "wss://mc.yandex.kg",
+    "wss://mc.yandex.kz",
+    "wss://mc.yandex.lt",
+    "wss://mc.yandex.lv",
+    "wss://mc.yandex.md",
+    "wss://mc.yandex.tj",
+    "wss://mc.yandex.tm",
+    "wss://mc.yandex.uz",
+    "wss://mc.webvisor.com",
+    "wss://mc.webvisor.org",
+]
+
+if METRIKA_ACTIVE:
+    _CSP_DIRECTIVES["script-src"] += ["https://mc.yandex.ru", "https://yastatic.net"]
+    _CSP_DIRECTIVES["img-src"] += YANDEX_METRIKA_HTTPS_SOURCES
+    _CSP_DIRECTIVES["connect-src"] += YANDEX_METRIKA_HTTPS_SOURCES + YANDEX_METRIKA_WSS_SOURCES
+    _CSP_DIRECTIVES["child-src"] = [SELF, "blob:"] + YANDEX_METRIKA_HTTPS_SOURCES
+    _CSP_DIRECTIVES["frame-src"] = [SELF, "blob:"] + YANDEX_METRIKA_HTTPS_SOURCES
+    _CSP_DIRECTIVES["frame-ancestors"] = [SELF, "blob:"] + YANDEX_METRIKA_HTTPS_SOURCES
 
 _CSP_POLICY = {"DIRECTIVES": _CSP_DIRECTIVES}
 if env_bool("CSP_ENFORCE", not DEBUG):

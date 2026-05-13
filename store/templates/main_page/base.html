@@ -1,4 +1,4 @@
-{% load static %}
+{% load static metrika_tags %}
 <!doctype html>
 <html lang="ru">
 <head>
@@ -87,5 +87,6 @@
 
     {% include 'main_page/_scripts.html' %}
     {% block extra_scripts %}{% endblock %}
+    {% yandex_metrika %}
 </body>
 </html>
