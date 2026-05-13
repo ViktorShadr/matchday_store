@@ -97,7 +97,15 @@
                                 <td class="fw-semibold">#{{ order.number|default:order.pk }}</td>
                                 <td>
                                     <div class="fw-semibold">{{ order.recipient_name|default:"—" }}</div>
-                                    <div class="small text-muted">{{ order.email|default:order.user.email }}</div>
+                                    <div class="small text-muted">
+                                        {% if order.email %}
+                                            {{ order.email }}
+                                        {% elif order.user %}
+                                            {{ order.user.email }}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </div>
                                 </td>
                                 <td>
                                     {% if order.phone %}

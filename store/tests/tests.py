@@ -1066,6 +1066,41 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertContains(response, "Позвонить перед выдачей")
         self.assertContains(response, "Забрать до")
 
+    def test_guest_order_without_user_renders_dashboard_pages(self):
+        guest_order = Order.objects.create(
+            number="ORD-GUEST-0001",
+            user=None,
+            recipient_name="",
+            email="guest@example.com",
+            phone="+79004445566",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            subtotal_amount=Decimal("1500.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("1500.00"),
+        )
+        OrderStatusTransition.log_if_changed(
+            order=guest_order,
+            transition_type=OrderStatusTransition.TransitionType.DASHBOARD_STATUS,
+            from_value="draft",
+            to_value="new",
+            changed_by=None,
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        list_response = self.client.get(reverse("store:dashboard_orders"))
+        detail_response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": guest_order.pk}))
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "guest@example.com")
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "guest@example.com")
+        self.assertContains(detail_response, "mailto:guest@example.com")
+        self.assertContains(detail_response, "Система")
+
     def test_order_detail_allows_staff_note_update(self):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
 
