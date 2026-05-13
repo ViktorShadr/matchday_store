@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.models import Prefetch
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -6,10 +7,11 @@ from django.utils.decorators import method_decorator
 from django.views.generic import FormView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
+from analytics.metrika import build_checkout_event, build_purchase_event, is_metrika_enabled, queue_ecommerce_event
 from config.rate_limits import setting_rate
 from orders.application import CheckoutContext, CheckoutSessionService
 from orders.forms import CheckoutForm
-from orders.models import Order
+from orders.models import Order, OrderItem
 from orders.services import CheckoutError, CheckoutService
 from store.application import CartContextResolver
 from store.mixins.cart_mixins import CartContextMixin
@@ -91,6 +93,13 @@ class CheckoutView(CartContextMixin, FormView):
         context.update(self.cart_summary)
         context["checkout_token"] = self.checkout_session_service.get_or_create_checkout_token(self.request)
         context["pickup_location"] = self.checkout_session_service.build_pickup_location()
+        if is_metrika_enabled():
+            metrika_event = build_checkout_event(
+                self.cart_summary.get("items", []),
+                total_price=self.cart_summary.get("total_price"),
+            )
+            if metrika_event:
+                context["metrika_page_events"] = [metrika_event]
         return context
 
     def form_valid(self, form):
@@ -124,6 +133,12 @@ class CheckoutView(CartContextMixin, FormView):
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 
+        if is_metrika_enabled():
+            order_items = list(order.items.select_related("product_variant__product__category").order_by("pk"))
+            metrika_event = build_purchase_event(order, order_items)
+            if metrika_event:
+                queue_ecommerce_event(self.request, metrika_event)
+
         self.checkout_session_service.mark_checkout_processed(self.request, submitted_token, order.pk)
         return redirect(reverse("orders:checkout_success", kwargs={"pk": order.pk}))
 
@@ -137,14 +152,20 @@ class CheckoutSuccessView(CartContextMixin, TemplateView):
         """Вернуть оформленный заказ текущего пользователя."""
         context = super().get_context_data(**kwargs)
         try:
-            order = Order.objects.prefetch_related("items").get(pk=self.kwargs["pk"])
+            order = Order.objects.prefetch_related(
+                Prefetch(
+                    "items",
+                    queryset=OrderItem.objects.select_related("product_variant__product__category").order_by("pk"),
+                )
+            ).get(pk=self.kwargs["pk"])
         except Order.DoesNotExist as exc:
             raise Http404 from exc
 
         if not CheckoutSessionService().can_access_order(self.request, order):
             raise Http404
 
+        order_items = list(order.items.all())
         context["order"] = order
-        context["order_items"] = order.items.order_by("pk")
+        context["order_items"] = order_items
         context["pickup_location"] = CheckoutSessionService.build_pickup_location()
         return context

@@ -9,6 +9,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.decorators.http import require_http_methods
 
+from analytics.metrika import build_add_to_cart_event, is_metrika_enabled, queue_ecommerce_event
 from store.application import CartContextResolver
 from store.services.cart_exceptions import (
     CartException,
@@ -135,11 +136,19 @@ class AddToCartView(View):
             cart_item = cart_service.add_item(cart_context, variant_id, quantity)
             cart = cart_context.cart
             success_message = f'Товар "{cart_item.product_variant.product.name}" добавлен в корзину'
+            payload = {"cart_total": cart.total_items}
+            if is_metrika_enabled():
+                metrika_event = build_add_to_cart_event(cart_item, quantity)
+                if metrika_event:
+                    if wants_json:
+                        payload["metrika_event"] = metrika_event
+                    else:
+                        queue_ecommerce_event(request, metrika_event)
             return build_success_response(
                 request,
                 wants_json,
                 success_message,
-                {"cart_total": cart.total_items},
+                payload,
             )
 
         except (ProductVariantNotFoundError, ProductNotOnSaleError, InvalidQuantityError, InsufficientStockError) as e:

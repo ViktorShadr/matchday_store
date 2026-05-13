@@ -1,6 +1,7 @@
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView, TemplateView
 
+from analytics.metrika import build_product_detail_event, is_metrika_enabled
 from store.mixins import CatalogQuerysetMixin, CategoriesContextMixin
 from store.mixins.cart_mixins import CartContextMixin
 from store.models import Category, InfoCard, Product
@@ -234,5 +235,10 @@ class ProductDetailsView(CartContextMixin, CatalogQuerysetMixin, DetailView):
         total_stock = sum(variant_quantities)
         context["total_stock"] = total_stock
         context["low_stock"] = 0 < total_stock <= 5
+
+        if is_metrika_enabled():
+            metrika_event = build_product_detail_event(product)
+            if metrika_event:
+                context["metrika_page_events"] = [metrika_event]
 
         return context

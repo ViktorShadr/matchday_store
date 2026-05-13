@@ -21,6 +21,9 @@
     if (acceptBtn) {
         acceptBtn.addEventListener('click', function() {
             localStorage.setItem(COOKIE_CONSENT_KEY, 'accepted');
+            window.dispatchEvent(new CustomEvent('matchday:cookie-consent-changed', {
+                detail: { value: 'accepted' },
+            }));
             banner.classList.add('hidden');
         });
     }
@@ -28,6 +31,9 @@
     if (declineBtn) {
         declineBtn.addEventListener('click', function() {
             localStorage.setItem(COOKIE_CONSENT_KEY, 'declined');
+            window.dispatchEvent(new CustomEvent('matchday:cookie-consent-changed', {
+                detail: { value: 'declined' },
+            }));
             banner.classList.add('hidden');
         });
     }

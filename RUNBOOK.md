@@ -16,6 +16,7 @@
 - настроены `RATELIMIT_*` и корректный `RATELIMIT_IP_META_KEY` для reverse proxy
 - включен enforce-режим CSP (`CSP_ENFORCE=True`)
 - задан `SENTRY_DSN` и окружение `SENTRY_ENVIRONMENT`
+- для Яндекс.Метрики при необходимости заданы `METRIKA_ENABLED=True` и `METRIKA_COUNTER_ID=<id счетчика>`
 - внешний reverse proxy/ingress терминирует TLS
 - есть регулярный backup PostgreSQL и проверка восстановления
 - определены ответственные за релиз и rollback
@@ -53,6 +54,15 @@ docker compose ps
 curl -fsS http://127.0.0.1:8000/healthz/
 ```
 
+6. Если включена Яндекс.Метрика:
+
+```bash
+docker compose exec web python manage.py check
+curl -fsSI http://127.0.0.1:8000/ | grep -i content-security-policy
+```
+
+Проверить в браузере production URL с `?_ym_debug=2`: должен загрузиться один counter, Ecommerce tab должен видеть `detail`, `add`, `checkout` и `purchase` на соответствующих шагах.
+
 ## 2.1. CD Image Publishing
 
 Workflow `.github/workflows/cd.yml` публикует production-образ в GitHub Container Registry:
@@ -71,6 +81,16 @@ Workflow `.github/workflows/cd.yml` публикует production-образ в 
 4. Проверка заказа в личном кабинете.
 5. Смена статусов заказа в staff dashboard.
 6. Проверка, что email-уведомления отправляются.
+7. Если `METRIKA_ENABLED=True`: проверить один запрос `https://mc.yandex.ru/metrika/tag.js`, отсутствие Метрики на `DEBUG=True` окружениях и отсутствие дублей counter init.
+
+## 3.1. Яндекс.Метрика: operational notes
+
+- Counter ID меняется в `.env`: `METRIKA_COUNTER_ID`.
+- Быстрое отключение без деплоя кода: `METRIKA_ENABLED=False` и restart `web`.
+- Ecommerce в интерфейсе Яндекс.Метрики должен быть включен, data container: `dataLayer`.
+- CSP расширяется приложением автоматически только при активной Метрике.
+- WebVisor/click maps несовместимы с `X-Frame-Options: DENY`; в активном режиме Метрики Django не добавляет этот header и ограничивает допустимых ancestors через CSP `frame-ancestors`.
+- Для будущего consent mode можно поставить `METRIKA_REQUIRE_CONSENT=True`; тогда loader ждет `cookie_consent=accepted`.
 
 ## 4. Rollback
 
