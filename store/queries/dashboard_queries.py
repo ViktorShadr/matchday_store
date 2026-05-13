@@ -1,10 +1,11 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db.models import Count, F, IntegerField, Min, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
+from django.utils.dateparse import parse_date
 
 from orders.models import Order, OrderItem
-from store.models import Category, Product, ProductImage
+from store.models import Category, Product, ProductImage, ProductVariant
 
 
 class WarehouseQueryService:
@@ -35,37 +36,42 @@ class WarehouseQueryService:
         selected_sort: str = "updated_desc",
     ):
         selected_sort = cls.normalize_sort(selected_sort)
-        queryset = (
-            Product.objects.select_related("category")
-            .prefetch_related(
-                Prefetch(
-                    "images",
-                    queryset=ProductImage.objects.order_by("-is_primary", "-created_at"),
-                )
-            )
-            .annotate(
-                variant_count=Count("variants", distinct=True),
-                stock_total=Coalesce(Sum("variants__quantity"), 0),
-                reserved_stock_total=Coalesce(Sum("variants__reserved_quantity"), 0),
-                available_stock_total=Coalesce(
-                    Sum(F("variants__quantity") - F("variants__reserved_quantity")),
-                    0,
-                    output_field=IntegerField(),
-                ),
-                min_price=Coalesce(Min("variants__price"), Value(Decimal("0.00"))),
-            )
-        )
+
+        base_queryset = Product.objects.select_related("category")
 
         if search_query:
-            search_filter = Q(name__icontains=search_query)
+            variant_filter = Q(sku__icontains=search_query)
             normalized_search_query = search_query.lower()
             if normalized_search_query.startswith("sku-"):
                 normalized_search_query = normalized_search_query[4:]
 
+            search_filter = Q(name__icontains=search_query)
             if normalized_search_query.isdigit():
                 numeric_query = int(normalized_search_query)
-                search_filter |= Q(pk=numeric_query) | Q(variants__pk=numeric_query)
-            queryset = queryset.filter(search_filter).distinct()
+                search_filter |= Q(pk=numeric_query)
+                variant_filter |= Q(pk=numeric_query)
+
+            matching_variant_product_ids = ProductVariant.objects.filter(variant_filter).values("product_id")
+            search_filter |= Q(pk__in=matching_variant_product_ids)
+            base_queryset = base_queryset.filter(search_filter)
+
+        queryset = base_queryset.prefetch_related(
+            Prefetch(
+                "images",
+                queryset=ProductImage.objects.order_by("-is_primary", "-created_at"),
+            ),
+            Prefetch("variants", queryset=ProductVariant.objects.order_by("pk")),
+        ).annotate(
+            variant_count=Count("variants", distinct=True),
+            stock_total=Coalesce(Sum("variants__quantity"), 0),
+            reserved_stock_total=Coalesce(Sum("variants__reserved_quantity"), 0),
+            available_stock_total=Coalesce(
+                Sum(F("variants__quantity") - F("variants__reserved_quantity")),
+                0,
+                output_field=IntegerField(),
+            ),
+            min_price=Coalesce(Min("variants__price"), Value(Decimal("0.00"))),
+        )
 
         if selected_category.isdigit():
             queryset = queryset.filter(category_id=int(selected_category))
@@ -121,12 +127,28 @@ class DashboardOrderQueryService:
             return payment_status_filter
         return ""
 
+    @staticmethod
+    def normalize_amount_filter(value: str):
+        if not value:
+            return None
+        try:
+            amount = Decimal(str(value).replace(",", "."))
+        except (InvalidOperation, ValueError):
+            return None
+        if amount < 0:
+            return None
+        return amount
+
     @classmethod
     def build_orders_queryset(
         cls,
         status_filter: str = "all",
         search_query: str = "",
         payment_status_filter: str = "",
+        created_from: str = "",
+        created_to: str = "",
+        amount_min: str = "",
+        amount_max: str = "",
     ):
         queryset = Order.objects.select_related("user").annotate(items_count=Count("items")).order_by("-created_at")
         if search_query:
@@ -142,6 +164,18 @@ class DashboardOrderQueryService:
             queryset = queryset.filter(search_filter)
         if payment_status_filter:
             queryset = queryset.filter(payment_status=payment_status_filter)
+        created_from_date = parse_date(created_from) if created_from else None
+        created_to_date = parse_date(created_to) if created_to else None
+        if created_from_date:
+            queryset = queryset.filter(created_at__date__gte=created_from_date)
+        if created_to_date:
+            queryset = queryset.filter(created_at__date__lte=created_to_date)
+        normalized_amount_min = cls.normalize_amount_filter(amount_min)
+        normalized_amount_max = cls.normalize_amount_filter(amount_max)
+        if normalized_amount_min is not None:
+            queryset = queryset.filter(total_amount__gte=normalized_amount_min)
+        if normalized_amount_max is not None:
+            queryset = queryset.filter(total_amount__lte=normalized_amount_max)
         return cls.apply_status_filter(queryset, status_filter)
 
 

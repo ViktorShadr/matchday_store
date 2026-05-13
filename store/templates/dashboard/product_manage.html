@@ -36,10 +36,39 @@
                                 {{ product_form.category }}
                                 {{ product_form.category.errors }}
                             </div>
-                            <div class="mb-0">
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ product_form.short_description.id_for_label }}">Короткое описание</label>
+                                {{ product_form.short_description }}
+                                {{ product_form.short_description.errors }}
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ product_form.old_price.id_for_label }}">Старая цена</label>
+                                    {{ product_form.old_price }}
+                                    {{ product_form.old_price.errors }}
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ product_form.material.id_for_label }}">Материал</label>
+                                    {{ product_form.material }}
+                                    {{ product_form.material.errors }}
+                                </div>
+                            </div>
+                            <div class="mb-3">
                                 <label class="form-label" for="{{ product_form.description.id_for_label }}">Описание</label>
                                 {{ product_form.description }}
                                 {{ product_form.description.errors }}
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-12 col-lg-6">
+                                    <label class="form-label" for="{{ product_form.size_guide.id_for_label }}">Размерная сетка</label>
+                                    {{ product_form.size_guide }}
+                                    {{ product_form.size_guide.errors }}
+                                </div>
+                                <div class="col-12 col-lg-6">
+                                    <label class="form-label" for="{{ product_form.care_instructions.id_for_label }}">Уход</label>
+                                    {{ product_form.care_instructions }}
+                                    {{ product_form.care_instructions.errors }}
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -55,7 +84,10 @@
                                 <div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
                                     <div>
                                         <div class="fw-semibold">{{ variant.size|default:'—' }} / {{ variant.color|default:'—' }}</div>
-                                        <div class="small text-muted">{{ variant.price|floatformat:"-2" }} ₽</div>
+                                        <div class="small text-muted">
+                                            {{ variant.price|floatformat:"-2" }} ₽
+                                            {% if variant.sku %}· {{ variant.sku }}{% endif %}
+                                        </div>
                                     </div>
                                     <div class="d-flex gap-2">
                                         <a class="btn btn-outline-primary btn-sm" href="{% url 'store:warehouse_variant_edit' variant.pk %}">Изменить</a>

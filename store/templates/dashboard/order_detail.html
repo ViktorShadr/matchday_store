@@ -9,7 +9,17 @@
                 <div>
                     <h1 class="sf-section-title">Заказ #{{ order.number|default:order.pk }}</h1>
                     <p class="sf-section-subtitle">
-                        Клиент: {{ order.recipient_name|default:order.email|default:order.user.email }}<br>
+                        Клиент:
+                        {% if order.recipient_name %}
+                            {{ order.recipient_name }}
+                        {% elif order.email %}
+                            {{ order.email }}
+                        {% elif order.user %}
+                            {{ order.user.email }}
+                        {% else %}
+                            —
+                        {% endif %}
+                        <br>
                         Дата: {{ order.created_at|date:"d.m.Y H:i" }}
                     </p>
                 </div>
@@ -31,6 +41,9 @@
                                             {{ item.quantity }} шт.
                                             {% if item.size_snapshot or item.color_snapshot %}
                                                 · {{ item.size_snapshot|default:'—' }} / {{ item.color_snapshot|default:'—' }}
+                                            {% endif %}
+                                            {% if item.sku_snapshot %}
+                                                · SKU: {{ item.sku_snapshot }}
                                             {% endif %}
                                         </div>
                                     </div>
@@ -61,13 +74,25 @@
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span class="text-muted">Получатель</span>
-                                <strong class="text-end">{{ order.recipient_name|default:order.email }}</strong>
+                                <strong class="text-end">
+                                    {% if order.recipient_name %}
+                                        {{ order.recipient_name }}
+                                    {% elif order.email %}
+                                        {{ order.email }}
+                                    {% elif order.user %}
+                                        {{ order.user.email }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </strong>
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span class="text-muted">Email</span>
                                 <strong class="text-end">
                                     {% if order.email %}
                                         <a href="mailto:{{ order.email }}">{{ order.email }}</a>
+                                    {% elif order.user %}
+                                        <a href="mailto:{{ order.user.email }}">{{ order.user.email }}</a>
                                     {% else %}
                                         —
                                     {% endif %}
@@ -116,6 +141,22 @@
                             <div>{{ order.customer_comment }}</div>
                         </div>
                     {% endif %}
+
+                    <div class="sf-surface p-4 mb-4">
+                        <h2 class="h4 mb-3">Внутренняя заметка</h2>
+                        <form method="post" action="{% url 'store:dashboard_order_staff_note_update' order.pk %}">
+                            {% csrf_token %}
+                            <label class="visually-hidden" for="staffNote">Внутренняя заметка</label>
+                            <textarea
+                                id="staffNote"
+                                name="staff_note"
+                                class="form-control"
+                                rows="4"
+                                placeholder="Информация для сотрудников, не видна покупателю"
+                            >{{ order.staff_note }}</textarea>
+                            <button type="submit" class="btn btn-outline-primary w-100 mt-3">Сохранить заметку</button>
+                        </form>
+                    </div>
 
                     <div class="sf-surface p-4 mb-4">
                         <h2 class="h4 mb-3">Следующий шаг</h2>
@@ -175,7 +216,13 @@
                                             <td>{{ transition.created_at|date:"d.m.Y H:i" }}</td>
                                             <td>{{ transition.get_transition_type_display }}</td>
                                             <td><code>{{ transition.from_value }}</code> &rarr; <code>{{ transition.to_value }}</code></td>
-                                            <td>{{ transition.changed_by.email|default:"Система" }}</td>
+                                            <td>
+                                                {% if transition.changed_by %}
+                                                    {{ transition.changed_by.email|default:"Система" }}
+                                                {% else %}
+                                                    Система
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% empty %}
                                         <tr>

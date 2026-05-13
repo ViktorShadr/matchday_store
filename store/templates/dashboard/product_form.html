@@ -29,9 +29,38 @@
                                 {{ form.category.errors }}
                             </div>
                             <div class="mb-3">
+                                <label class="form-label" for="{{ form.short_description.id_for_label }}">Короткое описание</label>
+                                {{ form.short_description }}
+                                {{ form.short_description.errors }}
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ form.old_price.id_for_label }}">Старая цена</label>
+                                    {{ form.old_price }}
+                                    {{ form.old_price.errors }}
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label" for="{{ form.material.id_for_label }}">Материал</label>
+                                    {{ form.material }}
+                                    {{ form.material.errors }}
+                                </div>
+                            </div>
+                            <div class="mb-3">
                                 <label class="form-label" for="{{ form.description.id_for_label }}">Описание</label>
                                 {{ form.description }}
                                 {{ form.description.errors }}
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-12 col-lg-6">
+                                    <label class="form-label" for="{{ form.size_guide.id_for_label }}">Размерная сетка</label>
+                                    {{ form.size_guide }}
+                                    {{ form.size_guide.errors }}
+                                </div>
+                                <div class="col-12 col-lg-6">
+                                    <label class="form-label" for="{{ form.care_instructions.id_for_label }}">Уход</label>
+                                    {{ form.care_instructions }}
+                                    {{ form.care_instructions.errors }}
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
                             <p class="small text-muted mt-3 mb-0">

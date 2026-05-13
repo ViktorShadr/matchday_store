@@ -350,6 +350,8 @@ class CheckoutFlowTest(TestCase):
 
     def test_checkout_creates_order_reserves_stock_and_clears_cart(self):
         """Оформление заказа должно создать order, payment и очистить корзину."""
+        self.variant.sku = "SCARF-ONE-SIZE-BLUE"
+        self.variant.save(update_fields=["sku", "updated_at"])
         self.client.login(email="buyer@example.com", password="testpass123")
 
         response = self.client.post(
@@ -381,6 +383,7 @@ class CheckoutFlowTest(TestCase):
 
         order_item = OrderItem.objects.get(order=order)
         self.assertEqual(order_item.product_name_snapshot, "Шарф ФК Шинник")
+        self.assertEqual(order_item.sku_snapshot, "SCARF-ONE-SIZE-BLUE")
         self.assertEqual(order_item.quantity, 2)
         self.assertEqual(order_item.line_total, Decimal("3980.00"))
 
@@ -822,6 +825,37 @@ class CheckoutFlowTest(TestCase):
         self.assertContains(success_response, "3 рабочих дня")
         self.assertContains(success_response, "Шарф ФК Шинник")
         self.assertContains(success_response, "Ожидает оплаты")
+
+    @override_settings(METRIKA_ACTIVE=True, METRIKA_COUNTER_ID="123456", METRIKA_REQUIRE_CONSENT=False)
+    def test_checkout_success_purchase_metrika_event_is_one_time(self):
+        self.client.login(email="buyer@example.com", password="testpass123")
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user=self.user)
+        success_url = reverse("orders:checkout_success", kwargs={"pk": order.pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], success_url)
+
+        first_success_response = self.client.get(success_url)
+        self.assertEqual(first_success_response.status_code, 200)
+        pending_events = first_success_response.context["metrika_pending_events"]
+        self.assertEqual(len(pending_events), 1)
+        self.assertEqual(pending_events[0]["event"], "purchase")
+        self.assertEqual(pending_events[0]["ecommerce"]["purchase"]["actionField"]["id"], order.number)
+        self.assertNotIn("metrika_page_events", first_success_response.context)
+
+        second_success_response = self.client.get(success_url)
+        self.assertEqual(second_success_response.status_code, 200)
+        self.assertEqual(second_success_response.context["metrika_pending_events"], [])
+        self.assertNotIn("metrika_page_events", second_success_response.context)
 
     def test_checkout_service_does_not_conflict_between_users_with_same_token(self):
         """Одинаковый checkout_token у разных пользователей не должен конфликтовать."""

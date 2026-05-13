@@ -55,7 +55,18 @@ class Product(models.Model):
     """
 
     name = models.CharField(max_length=255)
+    short_description = models.CharField(max_length=255, blank=True)
     description = models.TextField(blank=True)
+    old_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    material = models.CharField(max_length=255, blank=True)
+    care_instructions = models.TextField(blank=True)
+    size_guide = models.TextField(blank=True)
     category = models.ForeignKey(
         "Category",
         on_delete=models.CASCADE,
@@ -106,6 +117,7 @@ class ProductVariant(models.Model):
         on_delete=models.CASCADE,
         related_name="variants",
     )
+    sku = models.CharField(max_length=100, blank=True, db_index=True)
     size = models.CharField(max_length=10, blank=True, null=True)
     color = models.CharField(max_length=50, blank=True, null=True)
     price = models.DecimalField(
@@ -143,6 +155,11 @@ class ProductVariant(models.Model):
             models.UniqueConstraint(
                 fields=["product", "size", "color"],
                 name="unique_product_variant_size_color",
+            ),
+            models.UniqueConstraint(
+                fields=["sku"],
+                condition=~models.Q(sku=""),
+                name="unique_nonblank_product_variant_sku",
             ),
             models.CheckConstraint(
                 condition=models.Q(reserved_quantity__lte=models.F("quantity")),

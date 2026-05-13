@@ -93,7 +93,12 @@ class ProductDetailsPresenter:
             "id": product.pk,
             "name": product.name,
             "category": product.category.name if product.category else "Без категории",
+            "short_description": product.short_description,
             "description": product.description or "Описание пока не добавлено.",
+            "old_price": product.old_price,
+            "material": product.material,
+            "care_instructions": product.care_instructions,
+            "size_guide": product.size_guide,
             "price": getattr(product, "display_price", None),
             "image": getattr(product, "display_image", None),
             "images": images,
@@ -106,6 +111,7 @@ class ProductDetailsPresenter:
     def present_variant(variant) -> dict[str, Any]:
         return {
             "id": variant.id,
+            "sku": variant.sku,
             "size": variant.size,
             "color": variant.color,
             "price": variant.price,

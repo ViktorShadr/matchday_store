@@ -20,6 +20,11 @@
                             {% csrf_token %}
                             {{ form.non_field_errors }}
                             <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label" for="{{ form.sku.id_for_label }}">SKU / артикул</label>
+                                    {{ form.sku }}
+                                    {{ form.sku.errors }}
+                                </div>
                                 <div class="col-12 col-md-6">
                                     <label class="form-label" for="{{ form.size.id_for_label }}">Размер</label>
                                     {{ form.size }}

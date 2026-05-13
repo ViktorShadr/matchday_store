@@ -1,0 +1,12 @@
+{% load static %}
+
+{% if yandex_metrika.enabled %}
+    {{ yandex_metrika|json_script:"matchday-metrika-config" }}
+    {{ metrika_ecommerce_events|json_script:"matchday-metrika-events" }}
+    <script src="{% static 'js/metrika.js' %}?v=1" defer></script>
+    <noscript>
+        <div>
+            <img src="https://mc.yandex.ru/watch/{{ yandex_metrika.counter_id }}" style="position:absolute; left:-9999px;" alt="">
+        </div>
+    </noscript>
+{% endif %}
