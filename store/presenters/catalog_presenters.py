@@ -52,6 +52,15 @@ class ProductCardPresenter:
     """Подготовка продукта к списковому отображению."""
 
     @staticmethod
+    def _has_multiple_values(variants, field_name: str) -> bool:
+        values = {
+            str(value).strip()
+            for value in (getattr(variant, field_name, "") for variant in variants)
+            if value
+        }
+        return len(values) > 1
+
+    @staticmethod
     def enrich(product):
         images = sorted(list(product.images.all()), key=lambda image: (not image.is_primary, -image.id))
         variants = list(product.variants.all())
@@ -75,6 +84,20 @@ class ProductCardPresenter:
         product.available_variant_count = len(available_variants)
         first_available_variant = available_variants[0] if available_variants else None
         product.first_available_variant_id = first_available_variant.id if first_available_variant else None
+
+        product.variant_count = len(variants)
+        product.requires_variant_selection = product.variant_count > 1
+        product.has_size_options = ProductCardPresenter._has_multiple_values(variants, "size")
+        if product.in_stock and product.first_available_variant_id:
+            if product.requires_variant_selection:
+                product.card_cta_action = "detail"
+                product.card_cta_label = "Выбрать размер" if product.has_size_options else "Выбрать вариант"
+            else:
+                product.card_cta_action = "cart"
+                product.card_cta_label = "В корзину"
+        else:
+            product.card_cta_action = "disabled"
+            product.card_cta_label = "Недоступно"
         return product
 
     @classmethod
