@@ -1,4 +1,4 @@
-from smtplib import SMTPException
+from smtplib import SMTPDataError, SMTPException
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -49,6 +49,21 @@ class UserEmailDeliveryFailureTest(SimpleTestCase):
     def test_welcome_sync_raises_domain_error_on_smtp_failure(self, mock_send_mail):
         with self.assertRaises(NotificationDeliveryError):
             send_welcome_email_sync("buyer@example.com", raise_on_error=True)
+        mock_send_mail.assert_called_once()
+
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@matchday-store.com", SITE_URL="https://shop.example.com")
+    @patch(
+        "users.tasks.send_mail",
+        side_effect=SMTPDataError(
+            553,
+            b'5.1.10 No valid recipients: On the "free_tier" tariff it is allowed to send letters only to the '
+            b'"checked" domains or "checked" emails.',
+        ),
+    )
+    def test_confirmation_task_returns_false_on_permanent_smtp_rejection(self, mock_send_mail):
+        result = send_confirmation_email.run("buyer@example.com", "token-123")
+
+        self.assertFalse(result)
         mock_send_mail.assert_called_once()
 
     @override_settings(DEFAULT_FROM_EMAIL="noreply@matchday-store.com", SITE_URL="https://shop.example.com")

@@ -9,6 +9,7 @@ from config.email_delivery import (
     EMAIL_TASK_AUTORETRY_KWARGS,
     NotificationDeliveryError,
     build_email_delivery_log_extra,
+    is_permanent_email_delivery_error,
 )
 from orders.models import Order
 from store.site_contacts import format_business_days_label
@@ -223,16 +224,17 @@ def send_order_notification_sync(
         )
         return True
     except Exception as exc:
+        is_permanent_error = is_permanent_email_delivery_error(exc)
         _log_notification_error(
             order_id,
             event_key,
-            "send_mail_failed",
+            "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
             with_traceback=True,
             error_type=exc.__class__.__name__,
             task=task,
             retries=retries,
         )
-        if raise_on_error:
+        if raise_on_error and not is_permanent_error:
             raise NotificationDeliveryError("Не удалось отправить email-уведомление по заказу") from exc
         return False
 
@@ -305,16 +307,17 @@ def send_staff_new_order_notification_sync(
         )
         return True
     except Exception as exc:
+        is_permanent_error = is_permanent_email_delivery_error(exc)
         _log_notification_error(
             order_id,
             STAFF_NEW_ORDER_EVENT_KEY,
-            "send_mail_failed",
+            "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
             with_traceback=True,
             error_type=exc.__class__.__name__,
             task=task,
             retries=retries,
         )
-        if raise_on_error:
+        if raise_on_error and not is_permanent_error:
             raise NotificationDeliveryError("Не удалось отправить staff email-уведомление по заказу") from exc
         return False
 

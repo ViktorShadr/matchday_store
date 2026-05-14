@@ -8,6 +8,7 @@ from config.email_delivery import (
     EMAIL_TASK_AUTORETRY_KWARGS,
     NotificationDeliveryError,
     build_email_delivery_log_extra,
+    is_permanent_email_delivery_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,8 +78,15 @@ def send_welcome_email_sync(
         )
         return True
     except Exception as exc:
-        _log_email_delivery_failure("welcome", "send_mail_failed", exc, task=task, retries=retries)
-        if raise_on_error:
+        is_permanent_error = is_permanent_email_delivery_error(exc)
+        _log_email_delivery_failure(
+            "welcome",
+            "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
+            exc,
+            task=task,
+            retries=retries,
+        )
+        if raise_on_error and not is_permanent_error:
             raise NotificationDeliveryError("Не удалось отправить приветственное письмо") from exc
         return False
 
@@ -143,8 +151,15 @@ def send_confirmation_email_sync(
         )
         return True
     except Exception as exc:
-        _log_email_delivery_failure("confirmation", "send_mail_failed", exc, task=task, retries=retries)
-        if raise_on_error:
+        is_permanent_error = is_permanent_email_delivery_error(exc)
+        _log_email_delivery_failure(
+            "confirmation",
+            "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
+            exc,
+            task=task,
+            retries=retries,
+        )
+        if raise_on_error and not is_permanent_error:
             raise NotificationDeliveryError("Не удалось отправить письмо с подтверждением email") from exc
         return False
 

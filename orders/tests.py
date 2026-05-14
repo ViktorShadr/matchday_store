@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from decimal import Decimal
 from io import StringIO
+from smtplib import SMTPDataError
 from threading import Event
 from time import sleep
 from unittest.mock import patch
@@ -2201,6 +2202,24 @@ class OrderStaffNotificationTaskTest(TestCase):
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com"],
+    )
+    @patch(
+        "orders.tasks.send_mail",
+        side_effect=SMTPDataError(
+            553,
+            b'5.1.10 No valid recipients: On the "free_tier" tariff it is allowed to send letters only to the '
+            b'"checked" domains or "checked" emails.',
+        ),
+    )
+    def test_send_staff_new_order_notification_sync_returns_false_on_permanent_smtp_rejection(self, mock_send_mail):
+        result = send_staff_new_order_notification_sync(self.order.id)
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
         SITE_URL="http://localhost:8000",
     )
     @patch("orders.tasks.logger.exception")
@@ -2219,6 +2238,24 @@ class OrderStaffNotificationTaskTest(TestCase):
         self.assertEqual(log_extra["order_id"], self.order.id)
         self.assertEqual(log_extra["event_key"], "created")
         self.assertEqual(log_extra["reason"], "send_mail_failed")
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch(
+        "orders.tasks.send_mail",
+        side_effect=SMTPDataError(
+            553,
+            b'5.1.10 No valid recipients: On the "free_tier" tariff it is allowed to send letters only to the '
+            b'"checked" domains or "checked" emails.',
+        ),
+    )
+    def test_send_order_notification_sync_returns_false_on_permanent_smtp_rejection(self, mock_send_mail):
+        result = send_order_notification_sync(self.order.id, "created", raise_on_error=True)
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
 
 
 class OrderNotificationTaskRetryConfigurationTest(SimpleTestCase):

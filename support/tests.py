@@ -1,3 +1,4 @@
+from smtplib import SMTPDataError
 from unittest.mock import patch
 
 from django.core.cache import cache
@@ -242,6 +243,36 @@ class SupportRequestNotificationTaskTest(TestCase):
         self.assertIsNone(support_request.email_error)
         mock_send_mail.assert_called_once()
         mock_retry_count.assert_called_once()
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SUPPORT_NOTIFICATION_EMAILS=["staff@matchday-store.com"],
+        SITE_URL="https://shop.example.com",
+    )
+    @patch(
+        "support.tasks.send_mail",
+        side_effect=SMTPDataError(
+            553,
+            b'5.1.10 No valid recipients: On the "free_tier" tariff it is allowed to send letters only to the '
+            b'"checked" domains or "checked" emails.',
+        ),
+    )
+    def test_notification_task_marks_error_without_retry_on_permanent_smtp_rejection(self, mock_send_mail):
+        support_request = SupportRequest.objects.create(
+            name="Иван Иванов",
+            email="ivan@example.com",
+            phone="",
+            subject="Вопрос по заказу",
+            message="Подскажите статус заказа.",
+        )
+
+        result = send_support_request_notification.run(support_request.pk)
+
+        self.assertFalse(result)
+        support_request.refresh_from_db()
+        self.assertFalse(support_request.email_sent)
+        self.assertIn("No valid recipients", support_request.email_error)
+        mock_send_mail.assert_called_once()
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",

@@ -1,3 +1,4 @@
+from smtplib import SMTPRecipientsRefused, SMTPResponseException
 from typing import Any, Final
 
 
@@ -18,6 +19,18 @@ EMAIL_TASK_AUTORETRY_KWARGS: Final = {
     "retry_jitter": True,
     "retry_kwargs": {"max_retries": EMAIL_TASK_MAX_RETRIES},
 }
+
+
+def is_permanent_email_delivery_error(exc: Exception) -> bool:
+    """Return True when SMTP rejected the message for a non-retryable reason."""
+    if isinstance(exc, SMTPRecipientsRefused):
+        return True
+
+    if isinstance(exc, SMTPResponseException):
+        smtp_code = getattr(exc, "smtp_code", None)
+        return isinstance(smtp_code, int) and smtp_code >= 500
+
+    return False
 
 
 def get_email_task_retry_count(task) -> int:

@@ -12,6 +12,7 @@ from config.email_delivery import (
     NotificationDeliveryError,
     build_email_delivery_log_extra,
     get_email_task_retry_count,
+    is_permanent_email_delivery_error,
 )
 from support.models import SupportRequest
 
@@ -144,6 +145,7 @@ def send_support_request_notification_sync(
         )
     except Exception as exc:
         error_type = exc.__class__.__name__
+        is_permanent_error = is_permanent_email_delivery_error(exc)
         logger.exception(
             "Ошибка отправки уведомления поддержки",
             extra=build_email_delivery_log_extra(
@@ -152,8 +154,13 @@ def send_support_request_notification_sync(
                 support_request_id=support_request_id,
                 email_type="support",
                 error_type=error_type,
+                reason="smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
             ),
         )
+        if is_permanent_error:
+            _set_support_request_delivery_failure(support_request_id, str(exc))
+            return False
+
         if raise_on_error and not _is_final_retry(retries):
             raise NotificationDeliveryError("Не удалось отправить уведомление поддержки") from exc
 
