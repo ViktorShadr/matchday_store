@@ -6,7 +6,13 @@ from django.core.mail import send_mail
 from django.urls import reverse
 from django.utils import timezone
 
-from config.email_delivery import EMAIL_TASK_AUTORETRY_KWARGS, EMAIL_TASK_MAX_RETRIES, NotificationDeliveryError
+from config.email_delivery import (
+    EMAIL_TASK_AUTORETRY_KWARGS,
+    EMAIL_TASK_MAX_RETRIES,
+    NotificationDeliveryError,
+    build_email_delivery_log_extra,
+    get_email_task_retry_count,
+)
 from support.models import SupportRequest
 
 logger = logging.getLogger(__name__)
@@ -74,7 +80,7 @@ def _is_final_retry(retries: int) -> bool:
 
 
 def _get_current_retry_count(task) -> int:
-    return int(getattr(task.request, "retries", 0))
+    return get_email_task_retry_count(task)
 
 
 def send_support_request_notification_sync(
@@ -82,22 +88,48 @@ def send_support_request_notification_sync(
     *,
     raise_on_error: bool = False,
     retries: int = EMAIL_TASK_MAX_RETRIES,
+    task=None,
 ) -> bool:
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
         _set_support_request_delivery_failure(support_request_id, "DEFAULT_FROM_EMAIL не настроен.")
-        logger.error("Не настроен DEFAULT_FROM_EMAIL для уведомления поддержки")
+        logger.error(
+            "Не настроен DEFAULT_FROM_EMAIL для уведомления поддержки",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                support_request_id=support_request_id,
+                email_type="support",
+            ),
+        )
         return False
 
     recipients = _get_support_notification_recipients()
     if not recipients:
         _set_support_request_delivery_failure(support_request_id, "Не настроены получатели уведомлений поддержки.")
-        logger.error("Не настроены получатели уведомлений поддержки")
+        logger.error(
+            "Не настроены получатели уведомлений поддержки",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                support_request_id=support_request_id,
+                email_type="support",
+            ),
+        )
         return False
 
     try:
         support_request = SupportRequest.objects.get(pk=support_request_id)
     except SupportRequest.DoesNotExist:
-        logger.warning("Обращение в поддержку %s не найдено, уведомление не отправлено", support_request_id)
+        logger.warning(
+            "Обращение в поддержку %s не найдено, уведомление не отправлено",
+            support_request_id,
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                support_request_id=support_request_id,
+                email_type="support",
+            ),
+        )
         return False
 
     subject, message = _build_support_notification_content(support_request)
@@ -114,11 +146,13 @@ def send_support_request_notification_sync(
         error_type = exc.__class__.__name__
         logger.exception(
             "Ошибка отправки уведомления поддержки",
-            extra={
-                "support_request_id": support_request_id,
-                "error_type": error_type,
-                "retries": retries,
-            },
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                support_request_id=support_request_id,
+                email_type="support",
+                error_type=error_type,
+            ),
         )
         if raise_on_error and not _is_final_retry(retries):
             raise NotificationDeliveryError("Не удалось отправить уведомление поддержки") from exc
@@ -126,12 +160,26 @@ def send_support_request_notification_sync(
         _set_support_request_delivery_failure(support_request_id, str(exc))
         logger.error(
             "Уведомление поддержки не доставлено после исчерпания retry",
-            extra={"support_request_id": support_request_id, "error_type": error_type, "retries": retries},
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                support_request_id=support_request_id,
+                email_type="support",
+                error_type=error_type,
+            ),
         )
         return False
 
     _set_support_request_delivery_success(support_request_id)
-    logger.info("Уведомление поддержки отправлено", extra={"support_request_id": support_request_id})
+    logger.info(
+        "Уведомление поддержки отправлено",
+        extra=build_email_delivery_log_extra(
+            task=task,
+            retries=retries,
+            support_request_id=support_request_id,
+            email_type="support",
+        ),
+    )
     return True
 
 
@@ -141,4 +189,5 @@ def send_support_request_notification(self, support_request_id: int) -> bool:
         support_request_id,
         raise_on_error=True,
         retries=_get_current_retry_count(self),
+        task=self,
     )

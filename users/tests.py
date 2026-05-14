@@ -223,17 +223,13 @@ class UserViewsTest(TestCase):
         mock_confirmation_email.delay.assert_called_once_with("newuser@example.com", ANY)
         mock_welcome_email.delay.assert_not_called()
 
-    def test_registration_view_uses_sync_fallback_when_celery_unavailable(self):
+    def test_registration_view_does_not_send_sync_when_celery_unavailable(self):
         form_data = {"email": "fallback@example.com", "password1": "complexpass123", "password2": "complexpass123"}
 
         with patch("users.application.email_confirmation_service.send_confirmation_email") as mock_confirmation_email:
-            with patch(
-                "users.application.email_confirmation_service.send_confirmation_email_sync",
-                return_value=True,
-            ) as mock_confirmation_email_sync:
-                mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
-                with self.captureOnCommitCallbacks(execute=True):
-                    response = self.client.post(reverse("users:registration"), data=form_data)
+            mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(reverse("users:registration"), data=form_data)
 
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, reverse("users:login"))
@@ -241,9 +237,8 @@ class UserViewsTest(TestCase):
         self.assertTrue(new_user.is_active)
         self.assertIsNotNone(new_user.email_token)
         self.assertIsNotNone(new_user.email_token_created_at)
-        self.assertIsNotNone(new_user.confirmation_email_last_sent_at)
+        self.assertIsNone(new_user.confirmation_email_last_sent_at)
         mock_confirmation_email.delay.assert_called_once_with("fallback@example.com", ANY)
-        mock_confirmation_email_sync.assert_called_once_with("fallback@example.com", ANY)
 
     @patch("users.application.email_confirmation_service.send_confirmation_email")
     def test_resend_confirmation_email_success_from_profile(self, mock_confirmation_email):
@@ -287,12 +282,8 @@ class UserViewsTest(TestCase):
         self.client.login(email="user@example.com", password="userpass123")
 
         with patch("users.application.email_confirmation_service.send_confirmation_email") as mock_confirmation_email:
-            with patch(
-                "users.application.email_confirmation_service.send_confirmation_email_sync",
-                return_value=False,
-            ) as mock_confirmation_email_sync:
-                mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
-                response = self.client.post(reverse("users:resend_confirmation"), follow=True)
+            mock_confirmation_email.delay.side_effect = RuntimeError("broker down")
+            response = self.client.post(reverse("users:resend_confirmation"), follow=True)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Не удалось отправить письмо подтверждения. Попробуйте позже.")
@@ -301,7 +292,6 @@ class UserViewsTest(TestCase):
         self.assertIsNotNone(self.user.email_token_created_at)
         self.assertIsNone(self.user.confirmation_email_last_sent_at)
         mock_confirmation_email.delay.assert_called_once()
-        mock_confirmation_email_sync.assert_called_once()
 
     def test_registration_view_failure(self):
         """Проверяет сценарий 'registration view failure'."""

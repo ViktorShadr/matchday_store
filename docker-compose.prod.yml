@@ -102,7 +102,41 @@ services:
     env_file:
       - .env
     user: "10001:10001"
-    command: ["celery", "-A", "config", "worker", "-l", "info"]
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "default"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media_data:/app/media
+
+  email-worker:
+    image: ghcr.io/viktorshadr/matchday_store:latest
+    restart: unless-stopped
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "7"
+    env_file:
+      - .env
+    user: "10001:10001"
+    command:
+      [
+        "celery",
+        "-A",
+        "config",
+        "worker",
+        "-l",
+        "info",
+        "-Q",
+        "email",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+      ]
     depends_on:
       db:
         condition: service_healthy

@@ -15,16 +15,10 @@ from support.tasks import send_support_request_notification
 from users.models import User
 
 SUPPORT_NOTIFICATION_DELAY_PATH = (
-    "support.application.support_notification_service."
-    "send_support_request_notification.delay"
+    "support.application.support_notification_service." "send_support_request_notification.delay"
 )
 SUPPORT_NOTIFICATION_TASK_PATH = (
-    "support.application.support_notification_service."
-    "send_support_request_notification"
-)
-SUPPORT_NOTIFICATION_SYNC_PATH = (
-    "support.application.support_notification_service."
-    "send_support_request_notification_sync"
+    "support.application.support_notification_service." "send_support_request_notification"
 )
 
 
@@ -136,22 +130,22 @@ class SupportRequestViewTest(TestCase):
         SUPPORT_NOTIFICATION_EMAILS=["staff@matchday-store.com"],
         SITE_URL="https://shop.example.com",
     )
-    @patch("support.tasks.send_mail", return_value=1)
+    @patch("support.tasks.send_mail")
     @patch(
         SUPPORT_NOTIFICATION_DELAY_PATH,
         side_effect=RuntimeError("broker down"),
     )
-    def test_notification_dispatch_failure_uses_sync_fallback(self, mock_notification_delay, mock_send_mail):
+    def test_notification_dispatch_failure_does_not_send_sync(self, mock_notification_delay, mock_send_mail):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(self.url, data=self.valid_data)
 
         self.assertRedirects(response, reverse("support:success"))
         support_request = SupportRequest.objects.get()
         mock_notification_delay.assert_called_once_with(support_request.pk)
-        mock_send_mail.assert_called_once()
+        mock_send_mail.assert_not_called()
         support_request.refresh_from_db()
-        self.assertTrue(support_request.email_sent)
-        self.assertIsNone(support_request.email_error)
+        self.assertFalse(support_request.email_sent)
+        self.assertIn("email-задачу", support_request.email_error)
 
 
 class SupportRequestNotificationTaskTest(TestCase):
@@ -275,20 +269,27 @@ class SupportRequestNotificationTaskTest(TestCase):
         mock_retry_count.assert_called_once()
 
 
-class SupportNotificationServiceFallbackTest(SimpleTestCase):
-    @patch(SUPPORT_NOTIFICATION_SYNC_PATH, return_value=True)
+class SupportNotificationServiceQueueDispatchTest(TestCase):
     @patch(SUPPORT_NOTIFICATION_TASK_PATH)
-    def test_send_with_fallback_uses_sync_when_celery_dispatch_fails(
+    def test_enqueue_returns_false_when_celery_dispatch_fails(
         self,
         mock_async_task,
-        mock_sync_sender,
     ):
         from support.application import SupportNotificationService
 
+        support_request = SupportRequest.objects.create(
+            name="Иван Иванов",
+            email="ivan@example.com",
+            phone="",
+            subject="Вопрос по заказу",
+            message="Подскажите статус заказа.",
+        )
         mock_async_task.delay.side_effect = RuntimeError("broker down")
 
-        result = SupportNotificationService.send_with_fallback(support_request_id=42)
+        result = SupportNotificationService.enqueue(support_request_id=support_request.pk)
 
-        self.assertTrue(result)
-        mock_async_task.delay.assert_called_once_with(42)
-        mock_sync_sender.assert_called_once_with(42)
+        self.assertFalse(result)
+        mock_async_task.delay.assert_called_once_with(support_request.pk)
+        support_request.refresh_from_db()
+        self.assertFalse(support_request.email_sent)
+        self.assertIn("email-задачу", support_request.email_error)

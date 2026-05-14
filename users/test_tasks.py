@@ -59,21 +59,18 @@ class UserEmailDeliveryFailureTest(SimpleTestCase):
         mock_send_mail.assert_called_once()
 
 
-class EmailConfirmationFallbackTest(SimpleTestCase):
-    @patch("users.application.email_confirmation_service.send_confirmation_email_sync", return_value=True)
+class EmailConfirmationQueueDispatchTest(SimpleTestCase):
     @patch("users.application.email_confirmation_service.send_confirmation_email")
-    def test_dispatch_fallback_uses_sync_sender_when_queue_is_unavailable(
+    def test_dispatch_failure_does_not_send_sync_when_queue_is_unavailable(
         self,
         mock_async_sender,
-        mock_sync_sender,
     ):
         mock_async_sender.delay.side_effect = RuntimeError("broker down")
 
-        result = EmailConfirmationService.send_confirmation_email_with_fallback(
+        result = EmailConfirmationService.enqueue_confirmation_email(
             user_email="buyer@example.com",
             confirmation_token="token-123",
         )
 
-        self.assertTrue(result)
+        self.assertFalse(result)
         mock_async_sender.delay.assert_called_once_with("buyer@example.com", "token-123")
-        mock_sync_sender.assert_called_once_with("buyer@example.com", "token-123")

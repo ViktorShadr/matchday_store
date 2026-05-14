@@ -2236,20 +2236,17 @@ class OrderNotificationTaskRetryConfigurationTest(SimpleTestCase):
         self._assert_retry_settings(send_staff_new_order_notification)
 
 
-class OrderNotificationServiceFallbackTest(SimpleTestCase):
-    @patch("orders.application.order_notification_service.send_order_notification_sync", return_value=True)
+class OrderNotificationServiceQueueDispatchTest(SimpleTestCase):
     @patch("orders.application.order_notification_service.send_order_notification")
-    def test_send_with_fallback_uses_sync_when_celery_dispatch_fails(
+    def test_enqueue_returns_false_when_celery_dispatch_fails(
         self,
         mock_async_task,
-        mock_sync_sender,
     ):
         from orders.application.order_notification_service import OrderNotificationService
 
         mock_async_task.delay.side_effect = RuntimeError("broker down")
 
-        result = OrderNotificationService.send_with_fallback(order_id=42, event_key="created")
+        result = OrderNotificationService.enqueue(order_id=42, event_key="created")
 
-        self.assertTrue(result)
+        self.assertFalse(result)
         mock_async_task.delay.assert_called_once_with(42, "created")
-        mock_sync_sender.assert_called_once_with(42, "created")
