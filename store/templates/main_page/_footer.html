@@ -47,7 +47,7 @@
                 <div class="col-12 col-sm-6 col-lg-2 sf-footer-desktop-section">
                     <h6 class="sf-footer-heading">Помощь</h6>
                     <ul class="sf-footer-links">
-                        <li><a href="mailto:{{ store_contacts.support_email }}">Написать в поддержку</a></li>
+                        <li><a href="{% url 'support:request' %}">Написать в поддержку</a></li>
                         {% if legal_page_urls.return_policy %}
                             <li><a href="{{ legal_page_urls.return_policy }}">Условия возврата</a></li>
                         {% endif %}
@@ -120,7 +120,7 @@
                     </h6>
                     <div id="sf-footer-mobile-help" class="sf-footer-mobile-panel" data-footer-accordion-panel>
                         <ul class="sf-footer-links">
-                            <li><a href="mailto:{{ store_contacts.support_email }}">Написать в поддержку</a></li>
+                            <li><a href="{% url 'support:request' %}">Написать в поддержку</a></li>
                             {% if legal_page_urls.return_policy %}
                                 <li><a href="{{ legal_page_urls.return_policy }}">Условия возврата</a></li>
                             {% endif %}
