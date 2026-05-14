@@ -1,0 +1,32 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Обращение отправлено — ФК «Шинник»{% endblock %}
+{% block meta_description %}Обращение в поддержку магазина ФК «Шинник» отправлено.{% endblock %}
+
+{% block content %}
+<section class="sf-checkout-page">
+    <div class="container">
+        <div class="sf-checkout-hero">
+            <div>
+                <div class="sf-home-eyebrow">Поддержка</div>
+                <h1 class="sf-checkout-title">Обращение отправлено</h1>
+                <p class="sf-checkout-lead">
+                    Мы сохранили сообщение и передали его сотрудникам магазина. Ответ придет на email из формы.
+                </p>
+            </div>
+        </div>
+
+        <div class="sf-checkout-form-card">
+            <h2 class="sf-checkout-section-title">Что дальше</h2>
+            <p class="sf-checkout-lead mb-4">
+                Если нужно добавить детали, отправьте новое обращение или напишите на
+                <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+            </p>
+            <div class="sf-checkout-actions mt-0">
+                <a href="{{ catalog_url }}" class="btn btn-primary">Перейти в каталог</a>
+                <a href="{% url 'support:request' %}" class="btn btn-secondary">Новое обращение</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -23,6 +23,7 @@ from django.test import (
 from django.urls import reverse
 from django.utils import timezone
 
+from config.email_delivery import NotificationDeliveryError
 from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService, OrderStatusPolicy
 from orders.forms import CheckoutForm
 from orders.models import Order, OrderItem, OrderStatusTransition
@@ -37,7 +38,6 @@ from orders.services import (
     OrderIssueService,
 )
 from orders.tasks import (
-    NotificationDeliveryError,
     auto_cancel_expired_pickup_orders,
     send_order_notification,
     send_order_notification_sync,
@@ -2227,10 +2227,29 @@ class OrderNotificationTaskRetryConfigurationTest(SimpleTestCase):
         self.assertTrue(task.retry_backoff)
         self.assertEqual(task.retry_backoff_max, 300)
         self.assertTrue(task.retry_jitter)
-        self.assertEqual(task.retry_kwargs, {"max_retries": 5})
+        self.assertEqual(task.retry_kwargs.get("max_retries"), 5)
 
     def test_send_order_notification_has_retry_backoff(self):
         self._assert_retry_settings(send_order_notification)
 
     def test_send_staff_new_order_notification_has_retry_backoff(self):
         self._assert_retry_settings(send_staff_new_order_notification)
+
+
+class OrderNotificationServiceFallbackTest(SimpleTestCase):
+    @patch("orders.application.order_notification_service.send_order_notification_sync", return_value=True)
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_send_with_fallback_uses_sync_when_celery_dispatch_fails(
+        self,
+        mock_async_task,
+        mock_sync_sender,
+    ):
+        from orders.application.order_notification_service import OrderNotificationService
+
+        mock_async_task.delay.side_effect = RuntimeError("broker down")
+
+        result = OrderNotificationService.send_with_fallback(order_id=42, event_key="created")
+
+        self.assertTrue(result)
+        mock_async_task.delay.assert_called_once_with(42, "created")
+        mock_sync_sender.assert_called_once_with(42, "created")

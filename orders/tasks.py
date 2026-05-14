@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.urls import reverse
 
+from config.email_delivery import EMAIL_TASK_AUTORETRY_KWARGS, NotificationDeliveryError
 from orders.models import Order
 from store.site_contacts import format_business_days_label
 
@@ -12,16 +13,21 @@ logger = logging.getLogger(__name__)
 STAFF_NEW_ORDER_EVENT_KEY = "staff_created"
 
 
-class NotificationDeliveryError(Exception):
-    """Ошибка отправки уведомления, которую Celery может безопасно ретраить."""
-
-
-def _log_notification_error(order_id: int, event_key: str, reason: str, *, with_traceback: bool = False) -> None:
+def _log_notification_error(
+    order_id: int,
+    event_key: str,
+    reason: str,
+    *,
+    with_traceback: bool = False,
+    error_type: str | None = None,
+) -> None:
     extra = {
         "order_id": order_id,
         "event_key": event_key,
         "reason": reason,
     }
+    if error_type:
+        extra["error_type"] = error_type
     if with_traceback:
         logger.exception("Ошибка отправки уведомления", extra=extra)
         return
@@ -183,7 +189,13 @@ def send_order_notification_sync(order_id: int, event_key: str, *, raise_on_erro
         logger.info("Уведомление %s отправлено для заказа %s", event_key, order_id)
         return True
     except Exception as exc:
-        _log_notification_error(order_id, event_key, "send_mail_failed", with_traceback=True)
+        _log_notification_error(
+            order_id,
+            event_key,
+            "send_mail_failed",
+            with_traceback=True,
+            error_type=exc.__class__.__name__,
+        )
         if raise_on_error:
             raise NotificationDeliveryError("Не удалось отправить email-уведомление по заказу") from exc
         return False
@@ -218,31 +230,25 @@ def send_staff_new_order_notification_sync(order_id: int, *, raise_on_error: boo
         logger.info("Staff-уведомление о новом заказе %s отправлено", order_id)
         return True
     except Exception as exc:
-        _log_notification_error(order_id, STAFF_NEW_ORDER_EVENT_KEY, "send_mail_failed", with_traceback=True)
+        _log_notification_error(
+            order_id,
+            STAFF_NEW_ORDER_EVENT_KEY,
+            "send_mail_failed",
+            with_traceback=True,
+            error_type=exc.__class__.__name__,
+        )
         if raise_on_error:
             raise NotificationDeliveryError("Не удалось отправить staff email-уведомление по заказу") from exc
         return False
 
 
-@shared_task(
-    autoretry_for=(NotificationDeliveryError,),
-    retry_backoff=True,
-    retry_backoff_max=300,
-    retry_jitter=True,
-    retry_kwargs={"max_retries": 5},
-)
-def send_order_notification(order_id: int, event_key: str) -> bool:
+@shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
+def send_order_notification(self, order_id: int, event_key: str) -> bool:
     return send_order_notification_sync(order_id, event_key, raise_on_error=True)
 
 
-@shared_task(
-    autoretry_for=(NotificationDeliveryError,),
-    retry_backoff=True,
-    retry_backoff_max=300,
-    retry_jitter=True,
-    retry_kwargs={"max_retries": 5},
-)
-def send_staff_new_order_notification(order_id: int) -> bool:
+@shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
+def send_staff_new_order_notification(self, order_id: int) -> bool:
     return send_staff_new_order_notification_sync(order_id, raise_on_error=True)
 
 

@@ -1,0 +1,139 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Поддержка — ФК «Шинник»{% endblock %}
+{% block meta_description %}Форма обращения в поддержку официального магазина атрибутики ФК «Шинник».{% endblock %}
+
+{% block content %}
+<section class="sf-checkout-page">
+    <div class="container">
+        <div class="sf-checkout-hero">
+            <div>
+                <div class="sf-home-eyebrow">Помощь покупателям</div>
+                <h1 class="sf-checkout-title">Обращение в поддержку</h1>
+                <p class="sf-checkout-lead">
+                    Напишите нам по вопросу заказа, товара, оплаты или возврата. Ответ придет на указанный email.
+                </p>
+            </div>
+
+            <div class="sf-checkout-steps">
+                <div class="sf-checkout-step is-active">Сообщение</div>
+                <div class="sf-checkout-step">Обработка</div>
+                <div class="sf-checkout-step">Ответ</div>
+            </div>
+        </div>
+
+        <div class="sf-checkout-layout">
+            <div class="sf-checkout-form-card">
+                <h2 class="sf-checkout-section-title">Контактные данные</h2>
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger sf-alert mb-4">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="d-none" aria-hidden="true">
+                        {{ form.website }}
+                    </div>
+
+                    <div class="row g-4">
+                        {% for field in form %}
+                            {% if field.name != 'website' and field.name != 'personal_data_consent' %}
+                                <div class="col-12 {% if field.name in 'name,email,phone' %}col-md-6{% endif %}">
+                                    <div class="sf-form-group">
+                                        <label for="{{ field.id_for_label }}" class="form-label">
+                                            {{ field.label }}
+                                            {% if field.field.required %}
+                                                <span class="sf-required">*</span>
+                                            {% endif %}
+                                        </label>
+
+                                        {{ field }}
+
+                                        {% if field.help_text %}
+                                            <div class="sf-field-help">
+                                                {{ field.help_text }}
+                                            </div>
+                                        {% endif %}
+
+                                        {% if field.errors %}
+                                            <div class="sf-field-errors">
+                                                {% for error in field.errors %}
+                                                    <div>{{ error }}</div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-check mt-4">
+                        {{ form.personal_data_consent }}
+                        <label class="form-check-label" for="{{ form.personal_data_consent.id_for_label }}">
+                            {{ form.personal_data_consent.label }}
+                        </label>
+                        {% if form.personal_data_consent.errors %}
+                            <div class="sf-field-errors mt-2">
+                                {% for error in form.personal_data_consent.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="sf-checkout-actions">
+                        <a href="{% url 'store:base' %}" class="btn btn-secondary">
+                            На главную
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            Отправить обращение
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <aside class="sf-checkout-sidebar">
+                <div class="sf-checkout-summary-card">
+                    <h3 class="sf-checkout-summary-title">Что указать</h3>
+                    <div class="sf-checkout-items">
+                        <div class="sf-checkout-item">
+                            <div class="sf-checkout-item-main">
+                                <div class="sf-checkout-item-name">Номер заказа</div>
+                                <div class="sf-checkout-item-meta">Если вопрос связан с покупкой.</div>
+                            </div>
+                        </div>
+                        <div class="sf-checkout-item">
+                            <div class="sf-checkout-item-main">
+                                <div class="sf-checkout-item-name">Название товара</div>
+                                <div class="sf-checkout-item-meta">Размер, цвет или артикул помогут ответить быстрее.</div>
+                            </div>
+                        </div>
+                        <div class="sf-checkout-item">
+                            <div class="sf-checkout-item-main">
+                                <div class="sf-checkout-item-name">Контакт для ответа</div>
+                                <div class="sf-checkout-item-meta">Проверьте email перед отправкой.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sf-checkout-note-card">
+                    <h3 class="sf-checkout-note-title">Контакты магазина</h3>
+                    <ul class="sf-checkout-note-list">
+                        <li>Email: <a href="mailto:{{ store_contacts.support_email }}">{{ store_contacts.support_email }}</a></li>
+                        <li>Телефон: {{ store_contacts.pickup_location.phone }}</li>
+                        <li>{{ store_contacts.pickup_location.hours|linebreaksbr }}</li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+</section>
+{% endblock %}
