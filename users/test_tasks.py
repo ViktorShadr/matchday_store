@@ -9,7 +9,12 @@ from config.email_delivery import (
     NotificationDeliveryError,
 )
 from users.application import EmailConfirmationService
-from users.tasks import send_confirmation_email, send_confirmation_email_sync, send_welcome_email, send_welcome_email_sync
+from users.tasks import (
+    send_confirmation_email,
+    send_confirmation_email_sync,
+    send_welcome_email,
+    send_welcome_email_sync,
+)
 
 
 class UserEmailTaskRetryConfigurationTest(SimpleTestCase):
