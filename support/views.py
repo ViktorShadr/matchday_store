@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.contrib import messages
-from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
@@ -8,8 +7,8 @@ from django.views.generic import FormView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
 from config.rate_limits import setting_rate
+from support.application import SupportNotificationService
 from support.forms import SupportRequestForm
-from support.tasks import send_support_request_notification
 
 
 def _build_ratelimit_response(view, request):
@@ -49,7 +48,7 @@ class SupportRequestView(FormView):
             support_request.user = self.request.user
         support_request.save()
 
-        transaction.on_commit(lambda: send_support_request_notification.delay(support_request.pk))
+        SupportNotificationService.schedule(support_request.pk)
         messages.success(self.request, "Обращение принято. Мы ответим на указанный email.")
         return HttpResponseRedirect(self.get_success_url())
 

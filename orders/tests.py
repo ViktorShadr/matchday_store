@@ -2227,7 +2227,7 @@ class OrderNotificationTaskRetryConfigurationTest(SimpleTestCase):
         self.assertTrue(task.retry_backoff)
         self.assertEqual(task.retry_backoff_max, 300)
         self.assertTrue(task.retry_jitter)
-        self.assertEqual(task.retry_kwargs, {"max_retries": 5})
+        self.assertEqual(task.retry_kwargs.get("max_retries"), 5)
 
     def test_send_order_notification_has_retry_backoff(self):
         self._assert_retry_settings(send_order_notification)

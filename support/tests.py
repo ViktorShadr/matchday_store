@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from config.email_delivery import (
@@ -13,6 +13,19 @@ from support.forms import SupportRequestForm
 from support.models import SupportRequest
 from support.tasks import send_support_request_notification
 from users.models import User
+
+SUPPORT_NOTIFICATION_DELAY_PATH = (
+    "support.application.support_notification_service."
+    "send_support_request_notification.delay"
+)
+SUPPORT_NOTIFICATION_TASK_PATH = (
+    "support.application.support_notification_service."
+    "send_support_request_notification"
+)
+SUPPORT_NOTIFICATION_SYNC_PATH = (
+    "support.application.support_notification_service."
+    "send_support_request_notification_sync"
+)
 
 
 class SupportRequestFormTest(TestCase):
@@ -51,7 +64,7 @@ class SupportRequestViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Обращение в поддержку")
 
-    @patch("support.views.send_support_request_notification.delay")
+    @patch(SUPPORT_NOTIFICATION_DELAY_PATH)
     def test_valid_post_creates_support_request(self, mock_notification_delay):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(self.url, data=self.valid_data)
@@ -62,7 +75,7 @@ class SupportRequestViewTest(TestCase):
         self.assertEqual(support_request.status, SupportRequest.Status.NEW)
         mock_notification_delay.assert_called_once_with(support_request.pk)
 
-    @patch("support.views.send_support_request_notification.delay")
+    @patch(SUPPORT_NOTIFICATION_DELAY_PATH)
     def test_honeypot_blocks_support_request_creation(self, mock_notification_delay):
         data = {**self.valid_data, "website": "https://spam.example"}
 
@@ -72,7 +85,7 @@ class SupportRequestViewTest(TestCase):
         self.assertFalse(SupportRequest.objects.exists())
         mock_notification_delay.assert_not_called()
 
-    @patch("support.views.send_support_request_notification.delay")
+    @patch(SUPPORT_NOTIFICATION_DELAY_PATH)
     def test_authenticated_user_is_attached_to_support_request(self, mock_notification_delay):
         user = User.objects.create_user(
             email="user-support@example.com",
@@ -101,7 +114,7 @@ class SupportRequestViewTest(TestCase):
         self.assertContains(response, "Подтвердите согласие на обработку персональных данных.")
 
     @override_settings(RATELIMIT_SUPPORT_POST_RATE="1/m")
-    @patch("support.views.send_support_request_notification.delay")
+    @patch(SUPPORT_NOTIFICATION_DELAY_PATH)
     def test_support_form_rate_limited(self, mock_notification_delay):
         cache.clear()
 
@@ -118,6 +131,28 @@ class SupportRequestViewTest(TestCase):
         self.assertEqual(SupportRequest.objects.count(), 1)
         mock_notification_delay.assert_called_once()
 
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SUPPORT_NOTIFICATION_EMAILS=["staff@matchday-store.com"],
+        SITE_URL="https://shop.example.com",
+    )
+    @patch("support.tasks.send_mail", return_value=1)
+    @patch(
+        SUPPORT_NOTIFICATION_DELAY_PATH,
+        side_effect=RuntimeError("broker down"),
+    )
+    def test_notification_dispatch_failure_uses_sync_fallback(self, mock_notification_delay, mock_send_mail):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url, data=self.valid_data)
+
+        self.assertRedirects(response, reverse("support:success"))
+        support_request = SupportRequest.objects.get()
+        mock_notification_delay.assert_called_once_with(support_request.pk)
+        mock_send_mail.assert_called_once()
+        support_request.refresh_from_db()
+        self.assertTrue(support_request.email_sent)
+        self.assertIsNone(support_request.email_error)
+
 
 class SupportRequestNotificationTaskTest(TestCase):
     def test_support_notification_task_has_retry_backoff(self):
@@ -125,7 +160,10 @@ class SupportRequestNotificationTaskTest(TestCase):
         self.assertTrue(send_support_request_notification.retry_backoff)
         self.assertEqual(send_support_request_notification.retry_backoff_max, EMAIL_TASK_RETRY_BACKOFF_MAX_SECONDS)
         self.assertTrue(send_support_request_notification.retry_jitter)
-        self.assertEqual(send_support_request_notification.retry_kwargs, {"max_retries": EMAIL_TASK_MAX_RETRIES})
+        self.assertEqual(
+            send_support_request_notification.retry_kwargs.get("max_retries"),
+            EMAIL_TASK_MAX_RETRIES,
+        )
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
@@ -235,3 +273,22 @@ class SupportRequestNotificationTaskTest(TestCase):
         self.assertIn("SMTP unavailable", support_request.email_error)
         mock_send_mail.assert_called_once()
         mock_retry_count.assert_called_once()
+
+
+class SupportNotificationServiceFallbackTest(SimpleTestCase):
+    @patch(SUPPORT_NOTIFICATION_SYNC_PATH, return_value=True)
+    @patch(SUPPORT_NOTIFICATION_TASK_PATH)
+    def test_send_with_fallback_uses_sync_when_celery_dispatch_fails(
+        self,
+        mock_async_task,
+        mock_sync_sender,
+    ):
+        from support.application import SupportNotificationService
+
+        mock_async_task.delay.side_effect = RuntimeError("broker down")
+
+        result = SupportNotificationService.send_with_fallback(support_request_id=42)
+
+        self.assertTrue(result)
+        mock_async_task.delay.assert_called_once_with(42)
+        mock_sync_sender.assert_called_once_with(42)

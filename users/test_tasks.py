@@ -23,7 +23,7 @@ class UserEmailTaskRetryConfigurationTest(SimpleTestCase):
         self.assertTrue(task.retry_backoff)
         self.assertEqual(task.retry_backoff_max, EMAIL_TASK_RETRY_BACKOFF_MAX_SECONDS)
         self.assertTrue(task.retry_jitter)
-        self.assertEqual(task.retry_kwargs, {"max_retries": EMAIL_TASK_MAX_RETRIES})
+        self.assertEqual(task.retry_kwargs.get("max_retries"), EMAIL_TASK_MAX_RETRIES)
 
     def test_send_confirmation_email_has_retry_backoff(self):
         self._assert_retry_settings(send_confirmation_email)

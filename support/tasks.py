@@ -77,8 +77,12 @@ def _get_current_retry_count(task) -> int:
     return int(getattr(task.request, "retries", 0))
 
 
-@shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
-def send_support_request_notification(self, support_request_id: int) -> bool:
+def send_support_request_notification_sync(
+    support_request_id: int,
+    *,
+    raise_on_error: bool = False,
+    retries: int = EMAIL_TASK_MAX_RETRIES,
+) -> bool:
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
         _set_support_request_delivery_failure(support_request_id, "DEFAULT_FROM_EMAIL не настроен.")
         logger.error("Не настроен DEFAULT_FROM_EMAIL для уведомления поддержки")
@@ -107,7 +111,6 @@ def send_support_request_notification(self, support_request_id: int) -> bool:
             fail_silently=False,
         )
     except Exception as exc:
-        retries = _get_current_retry_count(self)
         error_type = exc.__class__.__name__
         logger.exception(
             "Ошибка отправки уведомления поддержки",
@@ -117,7 +120,7 @@ def send_support_request_notification(self, support_request_id: int) -> bool:
                 "retries": retries,
             },
         )
-        if not _is_final_retry(retries):
+        if raise_on_error and not _is_final_retry(retries):
             raise NotificationDeliveryError("Не удалось отправить уведомление поддержки") from exc
 
         _set_support_request_delivery_failure(support_request_id, str(exc))
@@ -130,3 +133,12 @@ def send_support_request_notification(self, support_request_id: int) -> bool:
     _set_support_request_delivery_success(support_request_id)
     logger.info("Уведомление поддержки отправлено", extra={"support_request_id": support_request_id})
     return True
+
+
+@shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
+def send_support_request_notification(self, support_request_id: int) -> bool:
+    return send_support_request_notification_sync(
+        support_request_id,
+        raise_on_error=True,
+        retries=_get_current_retry_count(self),
+    )
