@@ -4,7 +4,9 @@ from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
 from django.urls import reverse
+from django.utils import timezone
 
+from config.email_delivery import EMAIL_TASK_AUTORETRY_KWARGS, EMAIL_TASK_MAX_RETRIES, NotificationDeliveryError
 from support.models import SupportRequest
 
 logger = logging.getLogger(__name__)
@@ -51,22 +53,40 @@ def _build_support_notification_content(support_request: SupportRequest) -> tupl
     return subject, "\n".join(lines)
 
 
-@shared_task
-def send_support_request_notification(support_request_id: int) -> bool:
+def _set_support_request_delivery_failure(support_request_id: int, message: str) -> None:
+    SupportRequest.objects.filter(pk=support_request_id).update(
+        email_sent=False,
+        email_error=message,
+        updated_at=timezone.now(),
+    )
+
+
+def _set_support_request_delivery_success(support_request_id: int) -> None:
+    SupportRequest.objects.filter(pk=support_request_id).update(
+        email_sent=True,
+        email_error=None,
+        updated_at=timezone.now(),
+    )
+
+
+def _is_final_retry(retries: int) -> bool:
+    return retries >= EMAIL_TASK_MAX_RETRIES
+
+
+def _get_current_retry_count(task) -> int:
+    return int(getattr(task.request, "retries", 0))
+
+
+@shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
+def send_support_request_notification(self, support_request_id: int) -> bool:
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
-        SupportRequest.objects.filter(pk=support_request_id).update(
-            email_sent=False,
-            email_error="DEFAULT_FROM_EMAIL не настроен.",
-        )
+        _set_support_request_delivery_failure(support_request_id, "DEFAULT_FROM_EMAIL не настроен.")
         logger.error("Не настроен DEFAULT_FROM_EMAIL для уведомления поддержки")
         return False
 
     recipients = _get_support_notification_recipients()
     if not recipients:
-        SupportRequest.objects.filter(pk=support_request_id).update(
-            email_sent=False,
-            email_error="Не настроены получатели уведомлений поддержки.",
-        )
+        _set_support_request_delivery_failure(support_request_id, "Не настроены получатели уведомлений поддержки.")
         logger.error("Не настроены получатели уведомлений поддержки")
         return False
 
@@ -87,17 +107,26 @@ def send_support_request_notification(support_request_id: int) -> bool:
             fail_silently=False,
         )
     except Exception as exc:
-        support_request.email_sent = False
-        support_request.email_error = str(exc)
-        support_request.save(update_fields=["email_sent", "email_error", "updated_at"])
+        retries = _get_current_retry_count(self)
+        error_type = exc.__class__.__name__
         logger.exception(
             "Ошибка отправки уведомления поддержки",
-            extra={"support_request_id": support_request_id},
+            extra={
+                "support_request_id": support_request_id,
+                "error_type": error_type,
+                "retries": retries,
+            },
+        )
+        if not _is_final_retry(retries):
+            raise NotificationDeliveryError("Не удалось отправить уведомление поддержки") from exc
+
+        _set_support_request_delivery_failure(support_request_id, str(exc))
+        logger.error(
+            "Уведомление поддержки не доставлено после исчерпания retry",
+            extra={"support_request_id": support_request_id, "error_type": error_type, "retries": retries},
         )
         return False
 
-    support_request.email_sent = True
-    support_request.email_error = None
-    support_request.save(update_fields=["email_sent", "email_error", "updated_at"])
+    _set_support_request_delivery_success(support_request_id)
     logger.info("Уведомление поддержки отправлено", extra={"support_request_id": support_request_id})
     return True
