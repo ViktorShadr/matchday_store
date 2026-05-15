@@ -12,6 +12,7 @@ Django MVP интернет-магазина клубной атрибутики
 - история заказов пользователя
 - dashboard для обработки заказов и ручной отметки оплаты
 - email-уведомления по ключевым событиям заказа
+- встроенная форма обращения в поддержку с сохранением заявок и staff-уведомлениями
 
 ## Локальный запуск через Docker Compose
 
@@ -54,10 +55,10 @@ GitHub Actions:
 
 ```bash
 poetry check --lock
-find config store users orders payments delivery -name '*.py' -exec .venv/bin/black --check --target-version py312 {} \;
+find config store support users orders payments delivery -name '*.py' -exec .venv/bin/black --check --target-version py312 {} \;
 .venv/bin/black --check --target-version py312 manage.py
-poetry run isort --check-only config store users orders payments delivery manage.py
-poetry run flake8 config store users orders payments delivery manage.py --exclude=.git,.venv,__pycache__,staticfiles,media,*/migrations/* --max-line-length=119 --extend-ignore=E203,W503
+poetry run isort --check-only config store support users orders payments delivery manage.py
+poetry run flake8 config store support users orders payments delivery manage.py --exclude=.git,.venv,__pycache__,staticfiles,media,*/migrations/* --max-line-length=119 --extend-ignore=E203,W503
 poetry run python manage.py makemigrations --check --dry-run
 poetry run python manage.py check
 ```
@@ -104,8 +105,9 @@ poetry run python manage.py check
 - `EMAIL_HOST_USER`
 - `EMAIL_HOST_PASSWORD`
 - `STAFF_ORDER_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых заказах)
+- `SUPPORT_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых обращениях; если пусто, используется `STORE_SUPPORT_EMAIL`)
 - `CACHE_URL` (shared Redis cache для rate limiting между несколькими worker-процессами)
-- `RATELIMIT_*` (лимиты для login/registration/resend/checkout)
+- `RATELIMIT_*` (лимиты для login/registration/resend/checkout/support)
 - `CSP_ENFORCE` (`True` для production, `False` только для временной диагностики)
 - `METRIKA_ENABLED`, `METRIKA_COUNTER_ID` для Яндекс.Метрики в production
 - `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`

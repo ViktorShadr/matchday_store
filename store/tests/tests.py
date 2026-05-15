@@ -18,6 +18,7 @@ from payments.models import Payment
 from store.application import CartContext, CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
 from store.models import Cart, CartItem, Category, Page, Product, ProductImage, ProductVariant
+from store.presenters.catalog_presenters import ProductCardPresenter
 from store.services import InsufficientStockError, ProductNotOnSaleError
 from store.services.cart_service import CartService
 from users.models import User
@@ -254,6 +255,65 @@ class ProductVariantModelTest(TestCase):
 
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["sku"], "TSHIRT-BLUE-M")
+
+
+class ProductCardPresenterTest(TestCase):
+    """Тесты подготовки карточки товара."""
+
+    def setUp(self):
+        self.category = Category.objects.create(name="Карточки товаров")
+
+    def test_single_available_variant_can_be_added_from_card(self):
+        """Если доступен один вариант, карточка сразу добавляет его в корзину."""
+        product = Product.objects.create(name="Футболка с одним доступным размером", category=self.category)
+        available_variant = ProductVariant.objects.create(
+            product=product,
+            size="M",
+            color="Синий",
+            price=Decimal("1999.00"),
+            quantity=3,
+        )
+        ProductVariant.objects.create(
+            product=product,
+            size="L",
+            color="Синий",
+            price=Decimal("1999.00"),
+            quantity=0,
+        )
+
+        enriched = ProductCardPresenter.enrich(product)
+
+        self.assertEqual(enriched.variant_count, 2)
+        self.assertEqual(enriched.available_variant_count, 1)
+        self.assertFalse(enriched.requires_variant_selection)
+        self.assertEqual(enriched.card_cta_action, "cart")
+        self.assertEqual(enriched.card_cta_label, "В корзину")
+        self.assertEqual(enriched.first_available_variant_id, available_variant.id)
+
+    def test_multiple_available_variants_open_detail_selection(self):
+        """Если доступны несколько вариантов, карточка ведет к выбору варианта."""
+        product = Product.objects.create(name="Футболка с размерами", category=self.category)
+        ProductVariant.objects.create(
+            product=product,
+            size="M",
+            color="Черный",
+            price=Decimal("1999.00"),
+            quantity=2,
+        )
+        ProductVariant.objects.create(
+            product=product,
+            size="L",
+            color="Черный",
+            price=Decimal("1999.00"),
+            quantity=2,
+        )
+
+        enriched = ProductCardPresenter.enrich(product)
+
+        self.assertEqual(enriched.available_variant_count, 2)
+        self.assertTrue(enriched.requires_variant_selection)
+        self.assertEqual(enriched.card_cta_action, "detail")
+        self.assertEqual(enriched.card_cta_label, "Выбрать размер")
 
 
 class MainViewTest(TestCase):
@@ -563,6 +623,70 @@ class ProductDetailsViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Нет в наличии")
+        self.assertContains(response, "Временно недоступно")
+        self.assertNotContains(response, "data-sf-product-buy-form")
+
+    def test_product_detail_single_variant_hides_exact_stock_when_plenty_available(self):
+        """Один вариант с большим остатком показывает только общий статус наличия."""
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "В наличии")
+        self.assertContains(response, "Размер: L · Цвет: Красный")
+        self.assertNotContains(response, "Осталось мало")
+        self.assertNotContains(response, "Последний товар")
+        self.assertNotContains(response, "В наличии:")
+
+    def test_product_detail_single_variant_shows_low_stock_badge(self):
+        """Один вариант с остатком 2-5 показывает мягкое предупреждение без точного количества."""
+        self.variant.quantity = 3
+        self.variant.save(update_fields=["quantity"])
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Осталось мало")
+        self.assertNotContains(response, "3 шт.")
+
+    def test_product_detail_single_variant_shows_last_item_badge(self):
+        """Один вариант с остатком 1 показывает отдельный badge."""
+        self.variant.quantity = 1
+        self.variant.save(update_fields=["quantity"])
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Последний товар")
+        self.assertNotContains(response, "1 шт.")
+
+    def test_product_detail_multiple_variants_uses_clean_option_labels_and_stock_data(self):
+        """Select вариантов не показывает SKU и точные остатки, но хранит остаток для JS."""
+        self.variant.quantity = 3
+        self.variant.sku = "DETAIL-L-001"
+        self.variant.save(update_fields=["quantity", "sku", "updated_at"])
+        ProductVariant.objects.create(
+            product=self.product,
+            size="M",
+            color="Синий",
+            price=Decimal("3499.00"),
+            quantity=1,
+            image=self.image,
+            sku="DETAIL-M-002",
+        )
+
+        response = self.client.get(reverse("store:product_detail", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "L / Красный")
+        self.assertContains(response, "M / Синий")
+        self.assertContains(response, "3499 ₽")
+        self.assertContains(response, 'data-available-quantity="3"')
+        self.assertContains(response, 'data-available-quantity="1"')
+        self.assertContains(response, "Осталось мало")
+        self.assertNotContains(response, "DETAIL-L-001")
+        self.assertNotContains(response, "DETAIL-M-002")
+        self.assertNotContains(response, "3 шт.")
+        self.assertNotContains(response, "1 шт.")
 
     def test_product_detail_uses_primary_image_as_main(self):
         """Детальная страница должна показывать основное изображение в главном блоке."""
@@ -596,8 +720,8 @@ class ProductDetailsViewTest(TestCase):
         self.assertContains(response, "data-sf-product-detail-main")
         self.assertContains(response, "data-sf-product-detail-thumbs")
 
-    def test_product_detail_shows_commercial_fields_and_variant_sku(self):
-        """Карточка товара должна показывать коммерческие атрибуты и реальный SKU."""
+    def test_product_detail_shows_commercial_fields_and_hides_public_variant_sku(self):
+        """Карточка товара показывает коммерческие атрибуты, но не публичный SKU варианта."""
         self.product.short_description = "Короткое описание для карточки"
         self.product.old_price = Decimal("3499.00")
         self.product.material = "Хлопок 100%"
@@ -621,7 +745,7 @@ class ProductDetailsViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Короткое описание для карточки")
         self.assertContains(response, "3499,00 ₽")
-        self.assertContains(response, "DETAIL-L-001")
+        self.assertNotContains(response, "DETAIL-L-001")
         self.assertContains(response, "Хлопок 100%")
         self.assertContains(response, "Размерная сетка")
         self.assertContains(response, "Стирать при 30 градусах")

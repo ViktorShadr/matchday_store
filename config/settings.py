@@ -4,6 +4,7 @@ from pathlib import Path
 
 from csp.constants import NONCE, NONE, SELF
 from dotenv import load_dotenv
+from kombu import Queue
 
 from config.logging_utils import build_logging_config
 from config.sentry import init_sentry
@@ -56,10 +57,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "analytics.apps.AnalyticsConfig",
     "csp",
-    "djcelery_email",
     "orders.apps.OrdersConfig",
     "payments.apps.PaymentsConfig",
     "store.apps.StoreConfig",
+    "support.apps.SupportConfig",
     "users.apps.UsersConfig",
 ]
 
@@ -157,13 +158,25 @@ LOGOUT_REDIRECT_URL = "/"
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
-CELERY_EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_QUEUES = (
+    Queue("default"),
+    Queue("email"),
+)
+CELERY_TASK_ROUTES = {
+    "orders.tasks.send_order_notification": {"queue": "email"},
+    "orders.tasks.send_staff_new_order_notification": {"queue": "email"},
+    "support.tasks.send_support_request_notification": {"queue": "email"},
+    "users.tasks.send_confirmation_email": {"queue": "email"},
+    "users.tasks.send_welcome_email": {"queue": "email"},
+}
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL", False)
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL") or EMAIL_HOST_USER or "noreply@shinnik-store.example"
@@ -173,6 +186,7 @@ EMAIL_CONFIRMATION_TOKEN_TTL_HOURS = int(os.getenv("EMAIL_CONFIRMATION_TOKEN_TTL
 
 STORE_BRAND_NAME = os.getenv("STORE_BRAND_NAME", "ФК «Шинник»")
 STORE_SUPPORT_EMAIL = os.getenv("STORE_SUPPORT_EMAIL") or DEFAULT_FROM_EMAIL
+SUPPORT_NOTIFICATION_EMAILS = env_list("SUPPORT_NOTIFICATION_EMAILS")
 STORE_PICKUP_LOCATION_CODE = os.getenv("STORE_PICKUP_LOCATION_CODE", "main-store")
 STORE_PICKUP_LOCATION_NAME = os.getenv(
     "STORE_PICKUP_LOCATION_NAME",
@@ -237,6 +251,7 @@ RATELIMIT_CONFIRM_RESEND_IP_RATE = os.getenv("RATELIMIT_CONFIRM_RESEND_IP_RATE",
 RATELIMIT_CONFIRM_RESEND_USER_RATE = os.getenv("RATELIMIT_CONFIRM_RESEND_USER_RATE", "5/1h")
 RATELIMIT_CHECKOUT_IP_RATE = os.getenv("RATELIMIT_CHECKOUT_IP_RATE", "12/10m")
 RATELIMIT_CHECKOUT_USER_RATE = os.getenv("RATELIMIT_CHECKOUT_USER_RATE", "5/10m")
+RATELIMIT_SUPPORT_POST_RATE = os.getenv("RATELIMIT_SUPPORT_POST_RATE", "5/10m")
 CHECKOUT_MAX_ACTIVE_ORDERS = int(os.getenv("CHECKOUT_MAX_ACTIVE_ORDERS", "3"))
 CHECKOUT_MAX_QTY_PER_SKU = int(os.getenv("CHECKOUT_MAX_QTY_PER_SKU", "5"))
 STOCK_RESERVE_MODE_ENABLED = env_bool("STOCK_RESERVE_MODE_ENABLED", True)

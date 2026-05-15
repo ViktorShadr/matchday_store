@@ -4,18 +4,54 @@ from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
 
+from config.email_delivery import (
+    EMAIL_TASK_AUTORETRY_KWARGS,
+    NotificationDeliveryError,
+    build_email_delivery_log_extra,
+    is_permanent_email_delivery_error,
+)
+
 logger = logging.getLogger(__name__)
 
 
-@shared_task
-def send_welcome_email(user_email):
-    """
-    Отправка приветственного письма пользователю
-    """
+def _log_email_delivery_failure(
+    email_type: str,
+    reason: str,
+    exc: Exception,
+    *,
+    task=None,
+    retries: int | None = None,
+) -> None:
+    logger.exception(
+        "Ошибка отправки email",
+        extra=build_email_delivery_log_extra(
+            task=task,
+            retries=retries,
+            event="email_send_failed",
+            email_type=email_type,
+            reason=reason,
+            error_type=exc.__class__.__name__,
+        ),
+    )
+
+
+def send_welcome_email_sync(
+    user_email: str,
+    *,
+    raise_on_error: bool = False,
+    task=None,
+    retries: int | None = None,
+) -> bool:
+    """Синхронная отправка приветственного письма пользователю."""
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
         logger.error(
-            "Ошибка отправки email: не настроен DEFAULT_FROM_EMAIL",
-            extra={"event": "email_default_sender_not_configured", "email_type": "welcome"},
+            "Ошибка отправки приветственного email: не настроен DEFAULT_FROM_EMAIL",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                event="email_default_sender_not_configured",
+                email_type="welcome",
+            ),
         )
         return False
 
@@ -32,21 +68,37 @@ def send_welcome_email(user_email):
             fail_silently=False,
         )
         logger.info(
-            "Письмо успешно отправлено на %s",
-            user_email,
-            extra={"event": "welcome_email_sent", "email_type": "welcome"},
+            "Приветственное письмо успешно отправлено",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                event="welcome_email_sent",
+                email_type="welcome",
+            ),
         )
         return True
-    except Exception:
-        logger.exception(
-            "Ошибка отправки email на %s",
-            user_email,
-            extra={"event": "welcome_email_send_failed", "email_type": "welcome"},
+    except Exception as exc:
+        is_permanent_error = is_permanent_email_delivery_error(exc)
+        _log_email_delivery_failure(
+            "welcome",
+            "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
+            exc,
+            task=task,
+            retries=retries,
         )
+        if raise_on_error and not is_permanent_error:
+            raise NotificationDeliveryError("Не удалось отправить приветственное письмо") from exc
         return False
 
 
-def send_confirmation_email_sync(user_email, confirmation_token):
+def send_confirmation_email_sync(
+    user_email: str,
+    confirmation_token: str,
+    *,
+    raise_on_error: bool = False,
+    task=None,
+    retries: int | None = None,
+) -> bool:
     """
     Отправка письма с подтверждением email
 
@@ -57,7 +109,12 @@ def send_confirmation_email_sync(user_email, confirmation_token):
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
         logger.error(
             "Ошибка отправки email: не настроен DEFAULT_FROM_EMAIL",
-            extra={"event": "email_default_sender_not_configured", "email_type": "confirmation"},
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                event="email_default_sender_not_configured",
+                email_type="confirmation",
+            ),
         )
         return False
 
@@ -84,21 +141,36 @@ def send_confirmation_email_sync(user_email, confirmation_token):
             fail_silently=False,
         )
         logger.info(
-            "Письмо с подтверждением отправлено на %s",
-            user_email,
-            extra={"event": "confirmation_email_sent", "email_type": "confirmation"},
+            "Письмо с подтверждением отправлено",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                event="confirmation_email_sent",
+                email_type="confirmation",
+            ),
         )
         return True
-    except Exception:
-        logger.exception(
-            "Ошибка отправки email с подтверждением на %s",
-            user_email,
-            extra={"event": "confirmation_email_send_failed", "email_type": "confirmation"},
+    except Exception as exc:
+        is_permanent_error = is_permanent_email_delivery_error(exc)
+        _log_email_delivery_failure(
+            "confirmation",
+            "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
+            exc,
+            task=task,
+            retries=retries,
         )
+        if raise_on_error and not is_permanent_error:
+            raise NotificationDeliveryError("Не удалось отправить письмо с подтверждением email") from exc
         return False
 
 
-@shared_task
-def send_confirmation_email(user_email, confirmation_token):
+@shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
+def send_confirmation_email(self, user_email: str, confirmation_token: str) -> bool:
     """Celery task для отправки письма с подтверждением email."""
-    return send_confirmation_email_sync(user_email, confirmation_token)
+    return send_confirmation_email_sync(user_email, confirmation_token, raise_on_error=True, task=self)
+
+
+@shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
+def send_welcome_email(self, user_email: str) -> bool:
+    """Celery task для отправки приветственного письма."""
+    return send_welcome_email_sync(user_email, raise_on_error=True, task=self)

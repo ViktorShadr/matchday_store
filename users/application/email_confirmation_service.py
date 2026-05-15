@@ -6,8 +6,9 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from config.email_delivery import build_email_delivery_log_extra
 from users.models import User
-from users.tasks import send_confirmation_email, send_confirmation_email_sync
+from users.tasks import send_confirmation_email
 
 logger = logging.getLogger(__name__)
 
@@ -18,24 +19,25 @@ class EmailConfirmationService:
     resend_cooldown_seconds = 60
 
     @staticmethod
-    def send_confirmation_email_with_fallback(
+    def enqueue_confirmation_email(
         user_email: str,
         confirmation_token: str,
         async_sender=None,
-        sync_sender=None,
     ) -> bool:
         async_sender = async_sender or send_confirmation_email
-        sync_sender = sync_sender or send_confirmation_email_sync
         try:
             async_sender.delay(user_email, confirmation_token)
             return True
-        except Exception:
+        except Exception as exc:
             logger.exception(
-                "Ошибка постановки задачи отправки подтверждения для %s, используем sync fallback",
-                user_email,
-                extra={"event": "confirmation_email_dispatch_failed"},
+                "Ошибка постановки email-задачи отправки подтверждения",
+                extra=build_email_delivery_log_extra(
+                    event="confirmation_email_dispatch_failed",
+                    error_type=exc.__class__.__name__,
+                    email_type="confirmation",
+                ),
             )
-            return sync_sender(user_email, confirmation_token)
+            return False
 
     @staticmethod
     def generate_token() -> str:
@@ -70,9 +72,9 @@ class EmailConfirmationService:
         confirmation_token = user.generate_email_token()
 
         def _dispatch_confirmation_email():
-            is_sent = cls.send_confirmation_email_with_fallback(user.email, confirmation_token)
-            send_result["success"] = is_sent
-            if is_sent:
+            is_queued = cls.enqueue_confirmation_email(user.email, confirmation_token)
+            send_result["success"] = is_queued
+            if is_queued:
                 User.objects.filter(pk=user.pk).update(confirmation_email_last_sent_at=timezone.now())
 
         transaction.on_commit(_dispatch_confirmation_email)
@@ -81,7 +83,7 @@ class EmailConfirmationService:
     @classmethod
     def resend_confirmation(cls, user: User) -> bool:
         confirmation_token = cls.generate_token()
-        if not cls.send_confirmation_email_with_fallback(user.email, confirmation_token):
+        if not cls.enqueue_confirmation_email(user.email, confirmation_token):
             return False
 
         user.email_token = confirmation_token

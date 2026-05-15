@@ -94,36 +94,27 @@
             </div>
 
             <div class="sf-product-card-actions">
-                <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-secondary">
-                    Подробнее
-                </a>
-
-                {% if product.in_stock and product.first_available_variant_id %}
-                    {% if product.available_variant_count > 1 %}
-                        <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-primary">
-                            Выбрать вариант
-                        </a>
-                    {% else %}
-                        <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-card-cart-form">
-                            {% csrf_token %}
-                            <input type="hidden" name="variant_id" value="{{ product.first_available_variant_id }}">
-                            <input type="hidden" name="quantity" value="1">
-                            <button type="submit" class="btn btn-primary sf-product-card-cart-btn">
-                                <span class="sf-product-card-cart-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="9" cy="20" r="1.4"></circle>
-                                        <circle cx="18" cy="20" r="1.4"></circle>
-                                        <path d="M3 4h2l2.2 10.2a1 1 0 0 0 .98.8h9.7a1 1 0 0 0 .97-.77L21 7H7"></path>
-                                    </svg>
-                                </span>
-                                <span>В корзину</span>
-                            </button>
-                        </form>
-                    {% endif %}
-                {% else %}
-                    <button type="button" class="btn btn-secondary" disabled>
-                        Недоступно
+                {% if product.card_cta_action == 'cart' %}
+                    <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-card-cart-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="variant_id" value="{{ product.first_available_variant_id }}">
+                        <input type="hidden" name="quantity" value="1">
+                        <button type="submit" class="btn btn-primary sf-product-card-cta">
+                            {{ product.card_cta_label|default:'В корзину' }}
+                        </button>
+                    </form>
+                {% elif product.card_cta_action == 'detail' %}
+                    <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-primary sf-product-card-cta">
+                        {{ product.card_cta_label|default:'Открыть товар' }}
+                    </a>
+                {% elif product.card_cta_action == 'disabled' %}
+                    <button type="button" class="btn btn-secondary sf-product-card-cta sf-product-card-cta--disabled" disabled>
+                        {{ product.card_cta_label|default:'Недоступно' }}
                     </button>
+                {% else %}
+                    <a href="{% url 'store:product_detail' pk=product.pk %}" class="btn btn-primary sf-product-card-cta">
+                        Открыть товар
+                    </a>
                 {% endif %}
             </div>
         </div>
