@@ -16,6 +16,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 from django_ratelimit.decorators import ratelimit
 
+from config.email_delivery import build_email_delivery_log_extra
 from config.rate_limits import setting_rate
 from orders.application.checkout_session_service import CheckoutSessionService
 from orders.application.order_status_policy import OrderStatusPolicy
@@ -568,11 +569,16 @@ class EmailConfirmationView(View):
             auth_login(request, user, backend=auth_backend)
             try:
                 send_welcome_email.delay(user.email)
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "Ошибка при отправке приветственного письма пользователю %s",
                     user.email,
-                    extra={"event": "welcome_email_dispatch_failed", "user_id": user.id},
+                    extra=build_email_delivery_log_extra(
+                        event="welcome_email_dispatch_failed",
+                        user_id=user.id,
+                        email_type="welcome",
+                        error_type=exc.__class__.__name__,
+                    ),
                 )
             messages.success(request, "Email подтвержден. Вы автоматически вошли в аккаунт.")
             return redirect("users:profile_detail", pk=user.pk)

@@ -1,4 +1,4 @@
-from smtplib import SMTPException
+from smtplib import SMTPDataError, SMTPException
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -52,6 +52,21 @@ class UserEmailDeliveryFailureTest(SimpleTestCase):
         mock_send_mail.assert_called_once()
 
     @override_settings(DEFAULT_FROM_EMAIL="noreply@matchday-store.com", SITE_URL="https://shop.example.com")
+    @patch(
+        "users.tasks.send_mail",
+        side_effect=SMTPDataError(
+            553,
+            b'5.1.10 No valid recipients: On the "free_tier" tariff it is allowed to send letters only to the '
+            b'"checked" domains or "checked" emails.',
+        ),
+    )
+    def test_confirmation_task_returns_false_on_permanent_smtp_rejection(self, mock_send_mail):
+        result = send_confirmation_email.run("buyer@example.com", "token-123")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@matchday-store.com", SITE_URL="https://shop.example.com")
     @patch("users.tasks.send_mail", side_effect=SMTPException("smtp temp failure"))
     def test_confirmation_task_surface_domain_error_for_celery_autoretry(self, mock_send_mail):
         with self.assertRaises(NotificationDeliveryError):
@@ -59,21 +74,18 @@ class UserEmailDeliveryFailureTest(SimpleTestCase):
         mock_send_mail.assert_called_once()
 
 
-class EmailConfirmationFallbackTest(SimpleTestCase):
-    @patch("users.application.email_confirmation_service.send_confirmation_email_sync", return_value=True)
+class EmailConfirmationQueueDispatchTest(SimpleTestCase):
     @patch("users.application.email_confirmation_service.send_confirmation_email")
-    def test_dispatch_fallback_uses_sync_sender_when_queue_is_unavailable(
+    def test_dispatch_failure_does_not_send_sync_when_queue_is_unavailable(
         self,
         mock_async_sender,
-        mock_sync_sender,
     ):
         mock_async_sender.delay.side_effect = RuntimeError("broker down")
 
-        result = EmailConfirmationService.send_confirmation_email_with_fallback(
+        result = EmailConfirmationService.enqueue_confirmation_email(
             user_email="buyer@example.com",
             confirmation_token="token-123",
         )
 
-        self.assertTrue(result)
+        self.assertFalse(result)
         mock_async_sender.delay.assert_called_once_with("buyer@example.com", "token-123")
-        mock_sync_sender.assert_called_once_with("buyer@example.com", "token-123")
