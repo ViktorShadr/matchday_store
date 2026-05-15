@@ -3,7 +3,9 @@ from typing import Any, Final
 
 
 class NotificationDeliveryError(Exception):
-    """Ошибка доставки email-уведомления, которую Celery может безопасно ретраить."""
+    """
+    Ошибка доставки email-уведомления, которую Celery может безопасно ретраить.
+    """
 
 
 EMAIL_TASK_MAX_RETRIES: Final = 5
@@ -21,10 +23,34 @@ EMAIL_TASK_AUTORETRY_KWARGS: Final = {
 }
 
 
+def _coerce_smtp_code(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _extract_recipient_refusal_code(refusal: Any) -> int | None:
+    if isinstance(refusal, tuple) and refusal:
+        return _coerce_smtp_code(refusal[0])
+    return _coerce_smtp_code(getattr(refusal, "smtp_code", refusal))
+
+
+def _is_permanent_smtp_code(code: int | None) -> bool:
+    return code is not None and code >= 500
+
+
 def is_permanent_email_delivery_error(exc: Exception) -> bool:
-    """Return True when SMTP rejected the message for a non-retryable reason."""
+    """Return True when SMTP rejected the message permanently."""
     if isinstance(exc, SMTPRecipientsRefused):
-        return True
+        refusal_codes = []
+        for refusal in getattr(exc, "recipients", {}).values():
+            refusal_codes.append(_extract_recipient_refusal_code(refusal))
+
+        if not refusal_codes:
+            return False
+        return all(_is_permanent_smtp_code(code) for code in refusal_codes)
 
     if isinstance(exc, SMTPResponseException):
         smtp_code = getattr(exc, "smtp_code", None)

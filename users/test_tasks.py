@@ -1,4 +1,4 @@
-from smtplib import SMTPDataError, SMTPException
+from smtplib import SMTPDataError, SMTPException, SMTPRecipientsRefused
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -69,6 +69,16 @@ class UserEmailDeliveryFailureTest(SimpleTestCase):
     @override_settings(DEFAULT_FROM_EMAIL="noreply@matchday-store.com", SITE_URL="https://shop.example.com")
     @patch("users.tasks.send_mail", side_effect=SMTPException("smtp temp failure"))
     def test_confirmation_task_surface_domain_error_for_celery_autoretry(self, mock_send_mail):
+        with self.assertRaises(NotificationDeliveryError):
+            send_confirmation_email.run("buyer@example.com", "token-123")
+        mock_send_mail.assert_called_once()
+
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@matchday-store.com", SITE_URL="https://shop.example.com")
+    @patch(
+        "users.tasks.send_mail",
+        side_effect=SMTPRecipientsRefused({"buyer@example.com": (450, b"4.2.0 Greylisted")}),
+    )
+    def test_confirmation_task_retries_transient_recipient_refusal(self, mock_send_mail):
         with self.assertRaises(NotificationDeliveryError):
             send_confirmation_email.run("buyer@example.com", "token-123")
         mock_send_mail.assert_called_once()
