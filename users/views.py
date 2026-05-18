@@ -13,6 +13,7 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 from django_ratelimit.decorators import ratelimit
 
@@ -44,6 +45,19 @@ USER_PAYMENT_STATUS_LABELS = {
     Order.PaymentStatus.CANCELLED: "Оплата отменена",
     Order.PaymentStatus.REFUNDED: "Возврат выполнен",
 }
+
+
+def csrf_failure(request, reason="", template_name=None):
+    """Кастомный UX-обработчик CSRF-ошибок без отключения CSRF-защиты."""
+    messages.warning(request, "Страница устарела. Обновите страницу и повторите действие.")
+    redirect_url = request.META.get("HTTP_REFERER")
+    if redirect_url and url_has_allowed_host_and_scheme(
+        url=redirect_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(redirect_url)
+    return redirect("store:base")
 
 
 def apply_user_order_status(order: Order) -> Order:
@@ -269,7 +283,7 @@ class ResendOwnConfirmationEmailView(LoginRequiredMixin, View):
         user = request.user
 
         if user.is_email_confirmed:
-            messages.info(request, "Email уже подтвержден.")
+            messages.info(request, "Ваша почта уже подтверждена.")
             return redirect("users:profile_detail", pk=user.pk)
 
         can_resend, seconds_left = EmailConfirmationService.can_resend(user)
@@ -566,6 +580,7 @@ class EmailConfirmationView(View):
                 return redirect("users:login")
             user.confirm_email()
             auth_backend = getattr(user, "backend", None) or settings.AUTHENTICATION_BACKENDS[0]
+            # login() ротирует CSRF-токен: формы в других вкладках могут содержать устаревший token до обновления страницы.
             auth_login(request, user, backend=auth_backend)
             try:
                 send_welcome_email.delay(user.email)

@@ -274,8 +274,31 @@ class UserViewsTest(TestCase):
         response = self.client.post(reverse("users:resend_confirmation"), follow=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Email уже подтвержден")
+        self.assertContains(response, "Ваша почта уже подтверждена.")
         mock_confirmation_email.delay.assert_not_called()
+
+    def test_resend_confirmation_csrf_failure_redirects_back_with_message(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.login(email="user@example.com", password="userpass123")
+        profile_url = reverse("users:profile_detail", kwargs={"pk": self.user.pk})
+
+        response = csrf_client.post(
+            reverse("users:resend_confirmation"),
+            HTTP_REFERER=profile_url,
+            follow=True,
+        )
+
+        self.assertRedirects(response, profile_url)
+        self.assertContains(response, "Страница устарела. Обновите страницу и повторите действие.")
+
+    def test_resend_confirmation_csrf_failure_without_referer_redirects_home(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.login(email="user@example.com", password="userpass123")
+
+        response = csrf_client.post(reverse("users:resend_confirmation"), follow=True)
+
+        self.assertRedirects(response, reverse("store:base"))
+        self.assertContains(response, "Страница устарела. Обновите страницу и повторите действие.")
 
     def test_resend_confirmation_email_failure_keeps_existing_token(self):
         old_token = self.user.generate_email_token()
@@ -505,6 +528,7 @@ class UserViewsTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Подтвердите email для истории заказов")
+        self.assertNotContains(response, reverse("users:resend_confirmation"))
 
     def test_profile_detail_view_other_profile_denied(self):
         """Проверяет сценарий 'profile detail view other profile denied'."""
