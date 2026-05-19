@@ -55,6 +55,8 @@ def csrf_failure(request, reason="", template_name=None):
         resolver_match and resolver_match.view_name == "users:resend_confirmation"
     ) or request.path == reverse("users:resend_confirmation")
     if not is_resend_confirmation:
+        if template_name is None:
+            return default_csrf_failure(request, reason=reason)
         return default_csrf_failure(request, reason=reason, template_name=template_name)
 
     messages.warning(request, "Страница устарела. Обновите страницу и повторите действие.")
