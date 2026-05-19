@@ -580,7 +580,8 @@ class EmailConfirmationView(View):
                 return redirect("users:login")
             user.confirm_email()
             auth_backend = getattr(user, "backend", None) or settings.AUTHENTICATION_BACKENDS[0]
-            # login() ротирует CSRF-токен: формы в других вкладках могут содержать устаревший token до обновления страницы.
+            # login() ротирует CSRF-токен: формы в других вкладках могут
+            # содержать устаревший token до обновления страницы.
             auth_login(request, user, backend=auth_backend)
             try:
                 send_welcome_email.delay(user.email)
