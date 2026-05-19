@@ -18,11 +18,9 @@ class OrderNotificationService:
             return True
         except Exception as exc:
             logger.exception(
-                "Ошибка постановки email-задачи уведомления %s для заказа %s",
-                event_key,
-                order_id,
+                "order.notification_enqueue_failed",
                 extra=build_email_delivery_log_extra(
-                    event="order_notification_dispatch_failed",
+                    event="order.notification_enqueue_failed",
                     order_id=order_id,
                     event_key=event_key,
                     error_type=exc.__class__.__name__,
@@ -41,10 +39,9 @@ class OrderNotificationService:
             return True
         except Exception as exc:
             logger.exception(
-                "Ошибка постановки staff email-задачи уведомления о новом заказе %s",
-                order_id,
+                "order.staff_notification_enqueue_failed",
                 extra=build_email_delivery_log_extra(
-                    event="staff_order_notification_dispatch_failed",
+                    event="order.staff_notification_enqueue_failed",
                     order_id=order_id,
                     event_key="staff_created",
                     error_type=exc.__class__.__name__,

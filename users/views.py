@@ -59,6 +59,16 @@ def csrf_failure(request, reason="", template_name=None):
             return default_csrf_failure(request, reason=reason)
         return default_csrf_failure(request, reason=reason, template_name=template_name)
 
+    logger.warning(
+        "security.csrf_rejected",
+        extra={
+            "event": "security.csrf_rejected",
+            "view_name": "users:resend_confirmation",
+            "path": request.path,
+            "method": request.method,
+            "reason": reason or "",
+        },
+    )
     messages.warning(request, "Страница устарела. Обновите страницу и повторите действие.")
     redirect_url = request.META.get("HTTP_REFERER")
     if redirect_url and url_has_allowed_host_and_scheme(
@@ -597,10 +607,9 @@ class EmailConfirmationView(View):
                 send_welcome_email.delay(user.email)
             except Exception as exc:
                 logger.exception(
-                    "Ошибка при отправке приветственного письма пользователю %s",
-                    user.email,
+                    "user.welcome_email_enqueue_failed",
                     extra=build_email_delivery_log_extra(
-                        event="welcome_email_dispatch_failed",
+                        event="user.welcome_email_enqueue_failed",
                         user_id=user.id,
                         email_type="welcome",
                         error_type=exc.__class__.__name__,

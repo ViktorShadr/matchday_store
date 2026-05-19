@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -21,6 +22,9 @@ from store.models import ProductVariant
 from store.repositories import IProductVariantRepository, ProductVariantRepository
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
+
+logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger("audit")
 
 
 class CheckoutError(Exception):
@@ -60,6 +64,15 @@ class OrderStockReservationService:
             updated_at=timezone.now(),
         )
         if updated != 1:
+            logger.warning(
+                "checkout.stock_reservation_failed",
+                extra={
+                    "event": "checkout.stock_reservation_failed",
+                    "product_variant_id": variant.pk,
+                    "requested_quantity": quantity,
+                    "available_quantity": variant.available_quantity,
+                },
+            )
             raise CheckoutError(
                 f'Недостаточно товара "{variant.product.name}" на складе. '
                 f"Доступно: {variant.available_quantity} шт."
@@ -156,6 +169,11 @@ class CheckoutService(ICheckoutService):
         if value is None:
             return ""
         return str(value)
+
+    @staticmethod
+    def _get_cart_id(cart) -> Optional[int]:
+        """Безопасно извлечь cart id (в т.ч. для тестовых/fake объектов)."""
+        return getattr(cart, "id", None)
 
     @staticmethod
     def build_checkout_idempotency_key(
@@ -283,6 +301,15 @@ class CheckoutService(ICheckoutService):
             self._ensure_sku_quantity_limit(cart_item, variant)
 
             if available_quantity < cart_item.quantity:
+                logger.warning(
+                    "checkout.stock_reservation_failed",
+                    extra={
+                        "event": "checkout.stock_reservation_failed",
+                        "product_variant_id": variant.id,
+                        "requested_quantity": cart_item.quantity,
+                        "available_quantity": available_quantity,
+                    },
+                )
                 raise CheckoutError(
                     f'Недостаточно товара "{variant.product.name}" на складе. ' f"Доступно: {available_quantity} шт."
                 )
@@ -341,7 +368,7 @@ class CheckoutService(ICheckoutService):
             discount_amount=Decimal("0.00"),
             total_amount=subtotal_amount,
             customer_comment=cleaned_data.get("customer_comment", "").strip(),
-            source_cart_id=cart.id,
+            source_cart_id=self._get_cart_id(cart),
             confirmed_at=timezone.now(),
         )
 
@@ -380,6 +407,28 @@ class CheckoutService(ICheckoutService):
     def _schedule_notifications_on_commit(order: Order) -> None:
         OrderNotificationService.schedule_created(order.id)
 
+    @staticmethod
+    def _log_checkout_started(checkout_context: CheckoutContext) -> None:
+        logger.info(
+            "checkout.started",
+            extra={
+                "event": "checkout.started",
+                "user_id": checkout_context.user_id,
+                "cart_id": CheckoutService._get_cart_id(checkout_context.cart_context.cart),
+            },
+        )
+
+    @staticmethod
+    def _log_checkout_idempotency_conflict(checkout_context: CheckoutContext, order_id: int) -> None:
+        logger.info(
+            "checkout.idempotency_conflict",
+            extra={
+                "event": "checkout.idempotency_conflict",
+                "order_id": order_id,
+                "user_id": checkout_context.user_id,
+            },
+        )
+
     def create_order_from_cart(
         self,
         checkout_context: CheckoutContext,
@@ -387,6 +436,7 @@ class CheckoutService(ICheckoutService):
         checkout_token: Optional[str] = None,
     ):
         """Создать заказ, зарезервировать остатки и очистить корзину."""
+        self._log_checkout_started(checkout_context)
         payment_idempotency_key = self.build_checkout_idempotency_key(
             checkout_token,
             user_id=checkout_context.user_id,
@@ -399,6 +449,7 @@ class CheckoutService(ICheckoutService):
             checkout_context.session_key,
         )
         if existing_payment:
+            self._log_checkout_idempotency_conflict(checkout_context, existing_payment.order_id)
             return existing_payment.order
 
         self._ensure_stock_reserve_mode_enabled()
@@ -419,6 +470,7 @@ class CheckoutService(ICheckoutService):
                     checkout_context.session_key,
                 )
                 if existing_payment:
+                    self._log_checkout_idempotency_conflict(checkout_context, existing_payment.order_id)
                     return existing_payment.order
                 self._ensure_stock_reserve_mode_enabled()
                 self._ensure_active_order_limit(checkout_context.user_id)
@@ -436,6 +488,7 @@ class CheckoutService(ICheckoutService):
                             checkout_context.session_key,
                         )
                         if existing_payment:
+                            self._log_checkout_idempotency_conflict(checkout_context, existing_payment.order_id)
                             return existing_payment.order
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
@@ -458,6 +511,17 @@ class CheckoutService(ICheckoutService):
                     self._reserve_stock(order_lines.processable_cart_items, locked_variants)
                     self._cleanup_cart(cart, [item.pk for item in order_lines.processable_cart_items])
                     self._schedule_notifications_on_commit(order)
+        except CheckoutError as exc:
+            logger.warning(
+                "checkout.failed",
+                extra={
+                    "event": "checkout.failed",
+                    "user_id": checkout_context.user_id,
+                    "cart_id": self._get_cart_id(checkout_context.cart_context.cart),
+                    "reason": str(exc),
+                },
+            )
+            raise
         except IntegrityError as exc:
             if checkout_token:
                 existing_payment = self._find_existing_checkout_payment(
@@ -466,15 +530,59 @@ class CheckoutService(ICheckoutService):
                     checkout_context.session_key,
                 )
                 if existing_payment:
+                    self._log_checkout_idempotency_conflict(checkout_context, existing_payment.order_id)
                     return existing_payment.order
+            logger.warning(
+                "checkout.idempotency_conflict",
+                extra={
+                    "event": "checkout.idempotency_conflict",
+                    "user_id": checkout_context.user_id,
+                    "cart_id": self._get_cart_id(checkout_context.cart_context.cart),
+                    "reason": "integrity_error",
+                },
+            )
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
 
         if order:
+            logger.info(
+                "order.created",
+                extra={
+                    "event": "order.created",
+                    "order_id": order.id,
+                    "user_id": order.user_id,
+                },
+            )
+            audit_logger.info(
+                "order.created",
+                extra={
+                    "event": "order.created",
+                    "order_id": order.id,
+                    "user_id": order.user_id,
+                },
+            )
             return order
 
         if unavailable_only_error:
+            logger.warning(
+                "checkout.failed",
+                extra={
+                    "event": "checkout.failed",
+                    "user_id": checkout_context.user_id,
+                    "cart_id": self._get_cart_id(checkout_context.cart_context.cart),
+                    "reason": unavailable_only_error,
+                },
+            )
             raise CheckoutError(unavailable_only_error)
 
+        logger.warning(
+            "checkout.failed",
+            extra={
+                "event": "checkout.failed",
+                "user_id": checkout_context.user_id,
+                "cart_id": self._get_cart_id(checkout_context.cart_context.cart),
+                "reason": "empty_cart",
+            },
+        )
         raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
 
@@ -566,6 +674,15 @@ class OrderCancellationService:
 
             if order.status == Order.Status.CANCELLED:
                 self._cancel_manual_payments(order)
+                logger.info(
+                    "order.cancel_already_applied",
+                    extra={
+                        "event": "order.cancel_already_applied",
+                        "order_id": order.id,
+                        "user_id": order.user_id,
+                        "actor_id": getattr(actor, "id", None),
+                    },
+                )
                 return order
 
             self._ensure_order_can_be_cancelled(order)
@@ -575,6 +692,7 @@ class OrderCancellationService:
             locked_variants = {
                 variant.id: variant for variant in self.product_variant_repository.get_variants_for_update(variant_ids)
             }
+            released_items_count = 0
 
             for order_item in order_items:
                 if not order_item.product_variant_id:
@@ -585,6 +703,7 @@ class OrderCancellationService:
                     continue
 
                 OrderStockReservationService.release_variant_reservation(variant, order_item.quantity)
+                released_items_count += order_item.quantity
 
             self._cancel_manual_payments(order)
 
@@ -627,6 +746,38 @@ class OrderCancellationService:
                 changed_by=actor,
             )
             OrderNotificationService.schedule_cancelled(order.id)
+            logger.info(
+                "order.cancelled",
+                extra={
+                    "event": "order.cancelled",
+                    "order_id": order.id,
+                    "user_id": order.user_id,
+                    "actor_id": getattr(actor, "id", None),
+                    "from_order_status": previous_order_status,
+                    "to_order_status": order.status,
+                    "from_fulfillment_status": previous_fulfillment_status,
+                    "to_fulfillment_status": order.fulfillment_status,
+                    "from_payment_status": previous_payment_status,
+                    "to_payment_status": order.payment_status,
+                },
+            )
+            audit_logger.info(
+                "order.cancelled",
+                extra={
+                    "event": "order.cancelled",
+                    "order_id": order.id,
+                    "user_id": order.user_id,
+                    "actor_id": getattr(actor, "id", None),
+                },
+            )
+            logger.info(
+                "checkout.stock_reservation_released",
+                extra={
+                    "event": "checkout.stock_reservation_released",
+                    "order_id": order.id,
+                    "released_items_count": released_items_count,
+                },
+            )
 
             return order
 
@@ -679,6 +830,7 @@ class OrderIssueService:
             locked_variants = {
                 variant.id: variant for variant in self.product_variant_repository.get_variants_for_update(variant_ids)
             }
+            issued_items_count = 0
 
             for order_item in order_items:
                 if not order_item.product_variant_id:
@@ -689,6 +841,16 @@ class OrderIssueService:
                     raise OrderIssueError(f"Товар из позиции заказа {order_item.pk} не найден на складе.")
 
                 OrderStockReservationService.issue_variant(variant, order_item.quantity)
+                issued_items_count += order_item.quantity
+
+            logger.info(
+                "order.stock_issued",
+                extra={
+                    "event": "order.stock_issued",
+                    "order_id": order.id,
+                    "issued_items_count": issued_items_count,
+                },
+            )
 
             return order
 
@@ -772,10 +934,30 @@ class OrderAutoCancellationService:
 
             try:
                 self.cancellation_service.cancel_order(order_id=order.pk)
-            except OrderCancellationError:
+            except OrderCancellationError as exc:
                 result["failed"] += 1
+                logger.warning(
+                    "order.auto_cancel_failed",
+                    extra={
+                        "event": "order.auto_cancel_failed",
+                        "order_id": order.id,
+                        "reason": str(exc),
+                    },
+                )
             else:
                 result["cancelled"] += 1
+
+        if result["scanned"] > 0:
+            logger.info(
+                "order.auto_cancel_completed",
+                extra={
+                    "event": "order.auto_cancel_completed",
+                    "scanned": result["scanned"],
+                    "cancelled": result["cancelled"],
+                    "skipped": result["skipped"],
+                    "failed": result["failed"],
+                },
+            )
 
         return result
 
@@ -891,6 +1073,17 @@ class ManualPaymentUpdateService:
                 from_value=previous_payment_status,
                 to_value=order.payment_status,
                 changed_by=actor,
+            )
+            logger.info(
+                "order.payment_status_updated",
+                extra={
+                    "event": "order.payment_status_updated",
+                    "order_id": order.id,
+                    "user_id": order.user_id,
+                    "actor_id": getattr(actor, "id", None),
+                    "from_payment_status": previous_payment_status,
+                    "to_payment_status": order.payment_status,
+                },
             )
             if (
                 previous_payment_status != Order.PaymentStatus.SUCCEEDED

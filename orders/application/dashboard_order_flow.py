@@ -100,9 +100,10 @@ class DashboardOrderFlowService:
                     changed_by=actor,
                 )
                 audit_logger.info(
-                    "Статус заказа изменен через dashboard",
+                    "order.status_changed",
                     extra={
-                        "event": "dashboard_order_status_changed",
+                        "event": "order.status_changed",
+                        "source": "dashboard",
                         "order_id": cancelled_order.id,
                         "from_status": current_status,
                         "to_status": next_status,
@@ -150,9 +151,10 @@ class DashboardOrderFlowService:
                 changed_by=actor,
             )
             audit_logger.info(
-                "Статус заказа изменен через dashboard",
+                "order.status_changed",
                 extra={
-                    "event": "dashboard_order_status_changed",
+                    "event": "order.status_changed",
+                    "source": "dashboard",
                     "order_id": order.id,
                     "from_status": current_status,
                     "to_status": next_status,
@@ -172,6 +174,7 @@ class DashboardOrderFlowService:
         if not self.validate_payment_status_key(next_payment_status):
             raise DashboardOrderFlowError("Недопустимый статус оплаты.")
 
+        previous_payment_status = order.payment_status
         try:
             updated_order = self.payment_service.update_order_payment_status(
                 order_id=order.pk,
@@ -182,11 +185,13 @@ class DashboardOrderFlowService:
             raise DashboardOrderFlowError(str(exc)) from exc
 
         audit_logger.info(
-            "Статус оплаты заказа изменен через dashboard",
+            "order.payment_status_updated",
             extra={
-                "event": "dashboard_payment_status_changed",
+                "event": "order.payment_status_updated",
+                "source": "dashboard",
                 "order_id": updated_order.id,
-                "payment_status": next_payment_status,
+                "from_payment_status": previous_payment_status,
+                "to_payment_status": updated_order.payment_status,
                 "actor_id": getattr(actor, "id", None),
             },
         )

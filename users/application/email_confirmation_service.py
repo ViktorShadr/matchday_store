@@ -30,9 +30,9 @@ class EmailConfirmationService:
             return True
         except Exception as exc:
             logger.exception(
-                "Ошибка постановки email-задачи отправки подтверждения",
+                "user.email_confirmation_enqueue_failed",
                 extra=build_email_delivery_log_extra(
-                    event="confirmation_email_dispatch_failed",
+                    event="user.email_confirmation_enqueue_failed",
                     error_type=exc.__class__.__name__,
                     email_type="confirmation",
                 ),

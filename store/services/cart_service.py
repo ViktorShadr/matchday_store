@@ -71,11 +71,14 @@ class CartService:
         available_quantity = product_variant.available_quantity
         if available_quantity < quantity:
             logger.warning(
-                "%s: variant %s, available %s, requested %s",
-                stock_log_label,
-                product_variant_id,
-                available_quantity,
-                quantity,
+                "cart.stock_insufficient",
+                extra={
+                    "event": "cart.stock_insufficient",
+                    "reason": stock_log_label,
+                    "product_variant_id": product_variant_id,
+                    "available_quantity": available_quantity,
+                    "requested_quantity": quantity,
+                },
             )
             raise InsufficientStockError(
                 f"Недостаточно товара на складе. Доступно: {available_quantity}",
@@ -109,7 +112,15 @@ class CartService:
             # Это предотвращает race conditions при одновременных запросах
             product_variant = self.product_variant_repository.get_variant_for_update(product_variant_id)
 
-            logger.info("User %s adding variant %s qty %s", cart_context.actor_label, product_variant_id, quantity)
+            logger.debug(
+                "cart.add.requested",
+                extra={
+                    "event": "cart.add.requested",
+                    "user_id": cart_context.user_id,
+                    "product_variant_id": product_variant_id,
+                    "quantity": quantity,
+                },
+            )
 
             self._validate_variant_quantity(
                 product_variant,
@@ -135,21 +146,56 @@ class CartService:
 
                 cart_item.quantity = new_quantity
                 cart_item.save()
-                logger.info(f"Cart item updated: {cart_item.id}, qty={new_quantity}")
+                logger.debug(
+                    "cart.item_quantity_incremented",
+                    extra={
+                        "event": "cart.item_quantity_incremented",
+                        "cart_item_id": cart_item.id,
+                        "cart_id": cart_context.cart.id,
+                        "user_id": cart_context.user_id,
+                        "product_variant_id": product_variant_id,
+                        "quantity": new_quantity,
+                    },
+                )
             else:
-                logger.info(f"New cart item created: {cart_item.id}, qty={quantity}")
+                logger.debug(
+                    "cart.item_created",
+                    extra={
+                        "event": "cart.item_created",
+                        "cart_item_id": cart_item.id,
+                        "cart_id": cart_context.cart.id,
+                        "user_id": cart_context.user_id,
+                        "product_variant_id": product_variant_id,
+                        "quantity": quantity,
+                    },
+                )
 
             return cart_item
 
         except ProductVariant.DoesNotExist:
-            logger.error(f"Product variant not found: {product_variant_id}")
+            logger.warning(
+                "cart.variant_not_found",
+                extra={
+                    "event": "cart.variant_not_found",
+                    "product_variant_id": product_variant_id,
+                    "user_id": cart_context.user_id,
+                },
+            )
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
         except (InsufficientStockError, ProductVariantNotFoundError, ProductNotOnSaleError):
             # Пробрасываем свои исключения дальше
             raise
-        except Exception as e:
-            logger.error(f"Error adding item to cart: {e}", exc_info=True)
-            raise CartOperationError(f"Ошибка при добавлении товара в корзину: {str(e)}")
+        except Exception as exc:
+            logger.exception(
+                "cart.add.unexpected_error",
+                extra={
+                    "event": "cart.add.unexpected_error",
+                    "user_id": cart_context.user_id,
+                    "product_variant_id": product_variant_id,
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            raise CartOperationError(f"Ошибка при добавлении товара в корзину: {str(exc)}")
 
     @transaction.atomic
     def update_item_quantity(self, cart_context: CartContext, product_variant_id, quantity):
@@ -173,8 +219,14 @@ class CartService:
             # Получаем вариант товара с блокировкой
             product_variant = self.product_variant_repository.get_variant_for_update(product_variant_id)
 
-            logger.info(
-                "User %s updating variant %s qty to %s", cart_context.actor_label, product_variant_id, quantity
+            logger.debug(
+                "cart.update.requested",
+                extra={
+                    "event": "cart.update.requested",
+                    "user_id": cart_context.user_id,
+                    "product_variant_id": product_variant_id,
+                    "quantity": quantity,
+                },
             )
 
             self._validate_variant_quantity(
@@ -189,18 +241,43 @@ class CartService:
                 cart_context.cart, product_variant, {"quantity": quantity}
             )
 
-            logger.info(f"Cart item {'created' if created else 'updated'}: {cart_item.id}, qty={quantity}")
+            logger.debug(
+                "cart.item_updated" if not created else "cart.item_created",
+                extra={
+                    "event": "cart.item_updated" if not created else "cart.item_created",
+                    "cart_item_id": cart_item.id,
+                    "cart_id": cart_context.cart.id,
+                    "user_id": cart_context.user_id,
+                    "product_variant_id": product_variant_id,
+                    "quantity": quantity,
+                },
+            )
 
             return cart_item
 
         except ProductVariant.DoesNotExist:
-            logger.error(f"Product variant not found: {product_variant_id}")
+            logger.warning(
+                "cart.variant_not_found",
+                extra={
+                    "event": "cart.variant_not_found",
+                    "product_variant_id": product_variant_id,
+                    "user_id": cart_context.user_id,
+                },
+            )
             raise ProductVariantNotFoundError(f"Вариант товара с ID {product_variant_id} не найден")
         except (InsufficientStockError, ProductVariantNotFoundError, ProductNotOnSaleError, ValueError):
             raise
-        except Exception as e:
-            logger.error(f"Error updating cart item: {e}", exc_info=True)
-            raise CartOperationError(f"Ошибка при обновлении товара в корзине: {str(e)}")
+        except Exception as exc:
+            logger.exception(
+                "cart.update.unexpected_error",
+                extra={
+                    "event": "cart.update.unexpected_error",
+                    "user_id": cart_context.user_id,
+                    "product_variant_id": product_variant_id,
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            raise CartOperationError(f"Ошибка при обновлении товара в корзине: {str(exc)}")
 
     @transaction.atomic
     def remove_item(self, cart_context: CartContext, product_variant_id):
@@ -217,13 +294,38 @@ class CartService:
         try:
             success = self.cart_repository.delete_cart_item(cart_context.cart, product_variant_id)
             if success:
-                logger.info("Cart item removed: %s from user %s", product_variant_id, cart_context.actor_label)
+                logger.debug(
+                    "cart.item_removed",
+                    extra={
+                        "event": "cart.item_removed",
+                        "cart_id": cart_context.cart.id,
+                        "user_id": cart_context.user_id,
+                        "product_variant_id": product_variant_id,
+                    },
+                )
             else:
-                logger.warning("Cart item not found: %s in cart %s", product_variant_id, cart_context.cart.id)
+                logger.info(
+                    "cart.remove.item_not_found",
+                    extra={
+                        "event": "cart.remove.item_not_found",
+                        "cart_id": cart_context.cart.id,
+                        "user_id": cart_context.user_id,
+                        "product_variant_id": product_variant_id,
+                    },
+                )
             return success
-        except Exception as e:
-            logger.error(f"Error removing item from cart: {e}", exc_info=True)
-            raise CartOperationError(f"Ошибка при удалении товара из корзины: {str(e)}")
+        except Exception as exc:
+            logger.exception(
+                "cart.remove.unexpected_error",
+                extra={
+                    "event": "cart.remove.unexpected_error",
+                    "cart_id": cart_context.cart.id,
+                    "user_id": cart_context.user_id,
+                    "product_variant_id": product_variant_id,
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            raise CartOperationError(f"Ошибка при удалении товара из корзины: {str(exc)}")
 
     def get_cart_summary(self, cart_context: CartContext):
         """

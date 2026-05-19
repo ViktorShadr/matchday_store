@@ -11,11 +11,11 @@ from config.logging_context import get_request_id
 STANDARD_RECORD_FIELDS = set(logging.makeLogRecord({}).__dict__.keys()) | {"message", "asctime"}
 
 SENSITIVE_KEY_RE = re.compile(
-    r"(pass(word)?|secret|token|api[_-]?key|authorization|cookie)",
+    r"(pass(word)?|secret|token|api[_-]?key|authorization|cookie|email|phone)",
     re.IGNORECASE,
 )
 SENSITIVE_PAIR_RE = re.compile(
-    r"(?i)\b(password|passwd|secret|token|api[_-]?key|authorization|cookie)\b(\s*[:=]\s*)([^\s,;]+)"
+    r"(?i)\b(password|passwd|secret|token|api[_-]?key|authorization|cookie|email|phone)\b(\s*[:=]\s*)([^\s,;]+)"
 )
 BEARER_TOKEN_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
 EMAIL_RE = re.compile(r"\b([A-Za-z0-9._%+-])([A-Za-z0-9._%+-]*)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
@@ -38,8 +38,8 @@ def _mask_phone_number(match: re.Match) -> str:
 
 
 def _sanitize_string(value: str) -> str:
-    sanitized = SENSITIVE_PAIR_RE.sub(r"\1\2***", value)
-    sanitized = BEARER_TOKEN_RE.sub("Bearer ***", sanitized)
+    sanitized = BEARER_TOKEN_RE.sub("Bearer ***", value)
+    sanitized = SENSITIVE_PAIR_RE.sub(r"\1\2***", sanitized)
     sanitized = EMAIL_RE.sub(_mask_email_local_part, sanitized)
     sanitized = PHONE_RE.sub(_mask_phone_number, sanitized)
     return sanitized
@@ -66,7 +66,8 @@ class RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         request = getattr(record, "request", None)
         request_id = getattr(request, "request_id", None)
-        record.request_id = request_id or get_request_id()
+        normalized_request_id = (str(request_id).strip() if request_id is not None else "") or get_request_id()
+        record.request_id = normalized_request_id or "-"
         return True
 
 
@@ -91,12 +92,13 @@ class JsonFormatter(logging.Formatter):
     """JSON formatter для production-логов."""
 
     def format(self, record: logging.LogRecord) -> str:
+        request_id = str(getattr(record, "request_id", "")).strip() or get_request_id() or "-"
         payload = {
             "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "request_id": getattr(record, "request_id", get_request_id()),
+            "request_id": request_id,
             "module": record.module,
             "func_name": record.funcName,
             "line_no": record.lineno,

@@ -127,15 +127,34 @@ class CartContextResolver:
                     if cart_item.quantity != new_quantity:
                         cart_item.quantity = new_quantity
                         cart_item.save()
-                    logger.info(
-                        "Merged cart item: user=%s, variant=%s, qty=%s",
-                        user_cart.user.id if user_cart.user_id else "anonymous",
-                        item.product_variant.id,
-                        cart_item.quantity,
+                    logger.debug(
+                        "cart.merge_item_applied",
+                        extra={
+                            "event": "cart.merge_item_applied",
+                            "user_id": user_cart.user_id,
+                            "cart_id": locked_user_cart.id,
+                            "product_variant_id": item.product_variant.id,
+                            "quantity": cart_item.quantity,
+                        },
                     )
 
             self.cart_repository.delete_cart(locked_session_cart)
-            logger.info("Session cart %s... merged and deleted", session_key[:8])
+            logger.info(
+                "cart.session_merged",
+                extra={
+                    "event": "cart.session_merged",
+                    "user_id": user_cart.user_id,
+                    "cart_id": locked_user_cart.id,
+                },
+            )
         except Exception as exc:
-            logger.error("Error merging carts: %s", exc, exc_info=True)
+            logger.exception(
+                "cart.merge_failed",
+                extra={
+                    "event": "cart.merge_failed",
+                    "user_id": user_cart.user_id,
+                    "cart_id": getattr(user_cart, "id", None),
+                    "error_type": exc.__class__.__name__,
+                },
+            )
             raise CartOperationError(f"Ошибка при объединении корзин: {str(exc)}")

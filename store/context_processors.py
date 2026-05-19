@@ -1,9 +1,13 @@
+import logging
+
 from django.db.utils import OperationalError, ProgrammingError
 from django.urls import reverse
 
 from store.models import Page
 from store.services import PermissionService
 from store.site_contacts import build_store_contacts
+
+logger = logging.getLogger(__name__)
 
 LEGAL_PAGE_URLS = (
     ("privacy-policy", "privacy_policy"),
@@ -28,7 +32,12 @@ def navigation_permissions(request):
             legal_page_urls[url_name] = reverse(f"store:{url_name}") if slug in published_pages else None
     except (OperationalError, ProgrammingError):
         # Таблица store_page может отсутствовать до применения миграций.
-        pass
+        logger.debug(
+            "navigation.legal_pages_unavailable",
+            extra={
+                "event": "navigation.legal_pages_unavailable",
+            },
+        )
 
     return {
         "navigation_permissions": PermissionService.get_user_permissions(request.user),
