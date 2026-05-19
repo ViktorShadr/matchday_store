@@ -11,9 +11,10 @@ from django.db.models import Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.csrf import csrf_failure as default_csrf_failure
 from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView, View
 from django_ratelimit.decorators import ratelimit
 
@@ -48,7 +49,14 @@ USER_PAYMENT_STATUS_LABELS = {
 
 
 def csrf_failure(request, reason="", template_name=None):
-    """Кастомный UX-обработчик CSRF-ошибок без отключения CSRF-защиты."""
+    """UX-recovery only for resend-confirmation; default CSRF behavior elsewhere."""
+    resolver_match = getattr(request, "resolver_match", None)
+    is_resend_confirmation = (
+        resolver_match and resolver_match.view_name == "users:resend_confirmation"
+    ) or request.path == reverse("users:resend_confirmation")
+    if not is_resend_confirmation:
+        return default_csrf_failure(request, reason=reason, template_name=template_name)
+
     messages.warning(request, "Страница устарела. Обновите страницу и повторите действие.")
     redirect_url = request.META.get("HTTP_REFERER")
     if redirect_url and url_has_allowed_host_and_scheme(

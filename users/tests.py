@@ -300,6 +300,30 @@ class UserViewsTest(TestCase):
         self.assertRedirects(response, reverse("store:base"))
         self.assertContains(response, "Страница устарела. Обновите страницу и повторите действие.")
 
+    def test_non_resend_csrf_failure_keeps_default_403_response(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse("users:login"),
+            {"username": "user@example.com", "password": "userpass123"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("Location", response.headers)
+
+    def test_cart_ajax_csrf_failure_keeps_default_403_response(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse("store:add_to_cart"),
+            {"variant_id": self.variant.id, "quantity": 1},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("Location", response.headers)
+
     def test_resend_confirmation_email_failure_keeps_existing_token(self):
         old_token = self.user.generate_email_token()
         self.client.login(email="user@example.com", password="userpass123")
