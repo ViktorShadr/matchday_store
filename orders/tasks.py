@@ -28,18 +28,32 @@ def _log_notification_error(
     task=None,
     retries: int | None = None,
 ) -> None:
+    base_event_name = (
+        "order.staff_notification_send_failed"
+        if event_key == STAFF_NEW_ORDER_EVENT_KEY
+        else "order.notification_send_failed"
+    )
+    if reason == "smtp_permanent_failure":
+        event_name = f"{base_event_name}.permanent"
+    elif reason == "send_mail_failed":
+        event_name = f"{base_event_name}.transient"
+    elif reason == "invalid_default_from_email":
+        event_name = f"{base_event_name}.configuration"
+    else:
+        event_name = base_event_name
     extra = build_email_delivery_log_extra(
         task=task,
         retries=retries,
+        event=event_name,
         reason=reason,
         error_type=error_type,
         order_id=order_id,
         event_key=event_key,
     )
     if with_traceback:
-        logger.exception("Ошибка отправки уведомления", extra=extra)
+        logger.exception(event_name, extra=extra)
         return
-    logger.error("Ошибка отправки уведомления", extra=extra)
+    logger.error(event_name, extra=extra)
 
 
 def _build_order_detail_url(order: Order) -> str:
@@ -118,7 +132,14 @@ def _get_staff_order_notification_recipients() -> list[str]:
     valid_recipient_list = [email for email in recipient_list if "@" in email]
 
     if len(valid_recipient_list) != len(recipient_list):
-        logger.warning("Некоторые адреса в STAFF_ORDER_NOTIFICATION_EMAILS имеют неверный формат и будут пропущены")
+        logger.warning(
+            "order.staff_notification_recipients_invalid",
+            extra={
+                "event": "order.staff_notification_recipients_invalid",
+                "configured_recipient_count": len(recipient_list),
+                "valid_recipient_count": len(valid_recipient_list),
+            },
+        )
 
     return valid_recipient_list
 
@@ -185,19 +206,27 @@ def send_order_notification_sync(
         order = Order.objects.select_related("user").get(pk=order_id)
     except Order.DoesNotExist:
         logger.warning(
-            "Заказ %s не найден, уведомление %s не отправлено",
-            order_id,
-            event_key,
-            extra=build_email_delivery_log_extra(task=task, retries=retries, order_id=order_id, event_key=event_key),
+            "order.notification_skipped_order_not_found",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                event="order.notification_skipped_order_not_found",
+                order_id=order_id,
+                event_key=event_key,
+            ),
         )
         return False
 
     if not order.email:
         logger.warning(
-            "У заказа %s отсутствует email, уведомление %s не отправлено",
-            order_id,
-            event_key,
-            extra=build_email_delivery_log_extra(task=task, retries=retries, order_id=order_id, event_key=event_key),
+            "order.notification_skipped_recipient_missing",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                retries=retries,
+                event="order.notification_skipped_recipient_missing",
+                order_id=order_id,
+                event_key=event_key,
+            ),
         )
         return False
 
@@ -212,12 +241,11 @@ def send_order_notification_sync(
             fail_silently=False,
         )
         logger.info(
-            "Уведомление %s отправлено для заказа %s",
-            event_key,
-            order_id,
+            "order.notification_sent",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="order.notification_sent",
                 order_id=order_id,
                 event_key=event_key,
             ),
@@ -259,11 +287,11 @@ def send_staff_new_order_notification_sync(
     recipient_list = _get_staff_order_notification_recipients()
     if not recipient_list:
         logger.warning(
-            "STAFF_ORDER_NOTIFICATION_EMAILS пуст, staff-уведомление о заказе %s пропущено",
-            order_id,
+            "order.staff_notification_skipped_recipients_missing",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="order.staff_notification_skipped_recipients_missing",
                 order_id=order_id,
                 event_key=STAFF_NEW_ORDER_EVENT_KEY,
             ),
@@ -274,11 +302,11 @@ def send_staff_new_order_notification_sync(
         order = Order.objects.select_related("user").prefetch_related("items").get(pk=order_id)
     except Order.DoesNotExist:
         logger.warning(
-            "Заказ %s не найден, staff-уведомление не отправлено",
-            order_id,
+            "order.staff_notification_skipped_order_not_found",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="order.staff_notification_skipped_order_not_found",
                 order_id=order_id,
                 event_key=STAFF_NEW_ORDER_EVENT_KEY,
             ),
@@ -296,11 +324,11 @@ def send_staff_new_order_notification_sync(
             fail_silently=False,
         )
         logger.info(
-            "Staff-уведомление о новом заказе %s отправлено",
-            order_id,
+            "order.staff_notification_sent",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="order.staff_notification_sent",
                 order_id=order_id,
                 event_key=STAFF_NEW_ORDER_EVENT_KEY,
             ),

@@ -151,14 +151,37 @@ class AddToCartView(View):
                 payload,
             )
 
-        except (ProductVariantNotFoundError, ProductNotOnSaleError, InvalidQuantityError, InsufficientStockError) as e:
-            logger.warning(f"Validation error in add_to_cart: {e}")
-            return build_cart_error_response(request, wants_json, e)
-        except CartOperationError as e:
-            logger.error(f"Operation error in add_to_cart: {e}")
-            return build_cart_error_response(request, wants_json, e)
-        except Exception as e:
-            logger.error(f"Unexpected error in add_to_cart: {e}", exc_info=True)
+        except (
+            ProductVariantNotFoundError,
+            ProductNotOnSaleError,
+            InvalidQuantityError,
+            InsufficientStockError,
+        ) as exc:
+            logger.warning(
+                "cart.add.validation_failed",
+                extra={
+                    "event": "cart.add.validation_failed",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            return build_cart_error_response(request, wants_json, exc)
+        except CartOperationError as exc:
+            logger.error(
+                "cart.add.operation_failed",
+                extra={
+                    "event": "cart.add.operation_failed",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            return build_cart_error_response(request, wants_json, exc)
+        except Exception as exc:
+            logger.exception(
+                "cart.add.unexpected_error",
+                extra={
+                    "event": "cart.add.unexpected_error",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
             error = CartOperationError("Произошла ошибка при добавлении товара")
             return build_cart_error_response(request, wants_json, error)
 
@@ -214,14 +237,37 @@ class UpdateCartView(View):
                 },
             )
 
-        except (ProductVariantNotFoundError, ProductNotOnSaleError, InvalidQuantityError, InsufficientStockError) as e:
-            logger.warning(f"Validation error in update_cart: {e}")
-            return build_cart_error_response(request, wants_json, e)
-        except CartOperationError as e:
-            logger.error(f"Operation error in update_cart: {e}")
-            return build_cart_error_response(request, wants_json, e)
-        except Exception as e:
-            logger.error(f"Unexpected error in update_cart: {e}", exc_info=True)
+        except (
+            ProductVariantNotFoundError,
+            ProductNotOnSaleError,
+            InvalidQuantityError,
+            InsufficientStockError,
+        ) as exc:
+            logger.warning(
+                "cart.update.validation_failed",
+                extra={
+                    "event": "cart.update.validation_failed",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            return build_cart_error_response(request, wants_json, exc)
+        except CartOperationError as exc:
+            logger.error(
+                "cart.update.operation_failed",
+                extra={
+                    "event": "cart.update.operation_failed",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            return build_cart_error_response(request, wants_json, exc)
+        except Exception as exc:
+            logger.exception(
+                "cart.update.unexpected_error",
+                extra={
+                    "event": "cart.update.unexpected_error",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
             error = CartOperationError("Произошла ошибка при обновлении")
             return build_cart_error_response(request, wants_json, error)
 
@@ -273,16 +319,40 @@ class RemoveFromCartView(View):
                     },
                 )
 
-            logger.warning(f"Item not found in cart: variant_id {variant_id}")
+            logger.info(
+                "cart.remove.item_not_found",
+                extra={
+                    "event": "cart.remove.item_not_found",
+                    "product_variant_id": variant_id,
+                },
+            )
             return build_cart_item_missing_response(request, wants_json)
 
-        except (ProductVariantNotFoundError, InvalidQuantityError) as e:
-            logger.warning(f"Validation error in remove_from_cart: {e}")
-            return build_cart_error_response(request, wants_json, e)
-        except CartOperationError as e:
-            logger.error(f"Operation error in remove_from_cart: {e}")
-            return build_cart_error_response(request, wants_json, e)
-        except Exception as e:
-            logger.error(f"Unexpected error in remove_from_cart: {e}", exc_info=True)
+        except (ProductVariantNotFoundError, InvalidQuantityError) as exc:
+            logger.warning(
+                "cart.remove.validation_failed",
+                extra={
+                    "event": "cart.remove.validation_failed",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            return build_cart_error_response(request, wants_json, exc)
+        except CartOperationError as exc:
+            logger.error(
+                "cart.remove.operation_failed",
+                extra={
+                    "event": "cart.remove.operation_failed",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
+            return build_cart_error_response(request, wants_json, exc)
+        except Exception as exc:
+            logger.exception(
+                "cart.remove.unexpected_error",
+                extra={
+                    "event": "cart.remove.unexpected_error",
+                    "error_type": exc.__class__.__name__,
+                },
+            )
             error = CartOperationError("Произошла ошибка при удалении товара")
             return build_cart_error_response(request, wants_json, error)

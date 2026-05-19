@@ -22,12 +22,19 @@ def _log_email_delivery_failure(
     task=None,
     retries: int | None = None,
 ) -> None:
+    if reason == "smtp_permanent_failure":
+        event_name = "email.send_failed.permanent"
+    elif reason == "send_mail_failed":
+        event_name = "email.send_failed.transient"
+    else:
+        event_name = "email.send_failed"
+
     logger.exception(
-        "Ошибка отправки email",
+        event_name,
         extra=build_email_delivery_log_extra(
             task=task,
             retries=retries,
-            event="email_send_failed",
+            event=event_name,
             email_type=email_type,
             reason=reason,
             error_type=exc.__class__.__name__,
@@ -45,11 +52,11 @@ def send_welcome_email_sync(
     """Синхронная отправка приветственного письма пользователю."""
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
         logger.error(
-            "Ошибка отправки приветственного email: не настроен DEFAULT_FROM_EMAIL",
+            "email.sender_not_configured",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
-                event="email_default_sender_not_configured",
+                event="email.sender_not_configured",
                 email_type="welcome",
             ),
         )
@@ -68,11 +75,11 @@ def send_welcome_email_sync(
             fail_silently=False,
         )
         logger.info(
-            "Приветственное письмо успешно отправлено",
+            "user.welcome_email_sent",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
-                event="welcome_email_sent",
+                event="user.welcome_email_sent",
                 email_type="welcome",
             ),
         )
@@ -108,11 +115,11 @@ def send_confirmation_email_sync(
     """
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
         logger.error(
-            "Ошибка отправки email: не настроен DEFAULT_FROM_EMAIL",
+            "email.sender_not_configured",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
-                event="email_default_sender_not_configured",
+                event="email.sender_not_configured",
                 email_type="confirmation",
             ),
         )
@@ -141,11 +148,11 @@ def send_confirmation_email_sync(
             fail_silently=False,
         )
         logger.info(
-            "Письмо с подтверждением отправлено",
+            "user.email_confirmation_sent",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
-                event="confirmation_email_sent",
+                event="user.email_confirmation_sent",
                 email_type="confirmation",
             ),
         )

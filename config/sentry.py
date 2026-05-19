@@ -13,7 +13,15 @@ def _env_float(name: str, default: float) -> float:
     try:
         return float(value)
     except ValueError:
-        logger.warning("Invalid float value for %s=%r, using default %s", name, value, default)
+        logger.warning(
+            "sentry.invalid_float_config",
+            extra={
+                "event": "sentry.invalid_float_config",
+                "setting_name": name,
+                "setting_value": value,
+                "default_value": default,
+            },
+        )
         return default
 
 
@@ -28,7 +36,12 @@ def init_sentry(debug: bool) -> None:
         from sentry_sdk.integrations.celery import CeleryIntegration
         from sentry_sdk.integrations.django import DjangoIntegration
     except Exception:
-        logger.exception("Failed to import sentry_sdk integrations")
+        logger.exception(
+            "sentry.integrations_import_failed",
+            extra={
+                "event": "sentry.integrations_import_failed",
+            },
+        )
         return
 
     environment = (os.getenv("SENTRY_ENVIRONMENT") or "").strip() or ("development" if debug else "production")

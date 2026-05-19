@@ -94,10 +94,11 @@ def send_support_request_notification_sync(
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
         _set_support_request_delivery_failure(support_request_id, "DEFAULT_FROM_EMAIL не настроен.")
         logger.error(
-            "Не настроен DEFAULT_FROM_EMAIL для уведомления поддержки",
+            "support.notification_sender_not_configured",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="support.notification_sender_not_configured",
                 support_request_id=support_request_id,
                 email_type="support",
             ),
@@ -108,10 +109,11 @@ def send_support_request_notification_sync(
     if not recipients:
         _set_support_request_delivery_failure(support_request_id, "Не настроены получатели уведомлений поддержки.")
         logger.error(
-            "Не настроены получатели уведомлений поддержки",
+            "support.notification_recipients_not_configured",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="support.notification_recipients_not_configured",
                 support_request_id=support_request_id,
                 email_type="support",
             ),
@@ -122,11 +124,11 @@ def send_support_request_notification_sync(
         support_request = SupportRequest.objects.get(pk=support_request_id)
     except SupportRequest.DoesNotExist:
         logger.warning(
-            "Обращение в поддержку %s не найдено, уведомление не отправлено",
-            support_request_id,
+            "support.notification_skipped_request_not_found",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="support.notification_skipped_request_not_found",
                 support_request_id=support_request_id,
                 email_type="support",
             ),
@@ -146,11 +148,17 @@ def send_support_request_notification_sync(
     except Exception as exc:
         error_type = exc.__class__.__name__
         is_permanent_error = is_permanent_email_delivery_error(exc)
+        failure_event = (
+            "support.notification_send_failed_permanent"
+            if is_permanent_error
+            else "support.notification_send_failed_transient"
+        )
         logger.exception(
-            "Ошибка отправки уведомления поддержки",
+            failure_event,
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event=failure_event,
                 support_request_id=support_request_id,
                 email_type="support",
                 error_type=error_type,
@@ -166,10 +174,11 @@ def send_support_request_notification_sync(
 
         _set_support_request_delivery_failure(support_request_id, str(exc))
         logger.error(
-            "Уведомление поддержки не доставлено после исчерпания retry",
+            "support.notification_retry_exhausted",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
+                event="support.notification_retry_exhausted",
                 support_request_id=support_request_id,
                 email_type="support",
                 error_type=error_type,
@@ -179,10 +188,11 @@ def send_support_request_notification_sync(
 
     _set_support_request_delivery_success(support_request_id)
     logger.info(
-        "Уведомление поддержки отправлено",
+        "support.notification_sent",
         extra=build_email_delivery_log_extra(
             task=task,
             retries=retries,
+            event="support.notification_sent",
             support_request_id=support_request_id,
             email_type="support",
         ),
