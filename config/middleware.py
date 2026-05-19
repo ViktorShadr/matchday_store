@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+import logging
 from uuid import uuid4
 
 from config.logging_context import reset_request_id, set_request_id
 
+logger = logging.getLogger(__name__)
+
 try:
     import sentry_sdk
 except Exception:  # pragma: no cover - sentry optional at runtime
+    logger.debug(
+        "sentry.sdk_unavailable",
+        extra={
+            "event": "sentry.sdk_unavailable",
+        },
+    )
     sentry_sdk = None
 
 

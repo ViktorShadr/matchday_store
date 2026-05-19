@@ -25,10 +25,9 @@ class SupportNotificationService:
                 updated_at=timezone.now(),
             )
             logger.exception(
-                "Ошибка постановки email-задачи уведомления поддержки %s",
-                support_request_id,
+                "support.notification_enqueue_failed",
                 extra=build_email_delivery_log_extra(
-                    event="support_notification_dispatch_failed",
+                    event="support.notification_enqueue_failed",
                     support_request_id=support_request_id,
                     email_type="support",
                     error_type=exc.__class__.__name__,
