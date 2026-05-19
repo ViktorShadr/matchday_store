@@ -1,200 +1,529 @@
-# Matchday Store MVP
+# Matchday Store
 
-Django MVP интернет-магазина клубной атрибутики с каталогом, корзиной, checkout по самовывозу, ручной оплатой и staff-dashboard для обработки заказов.
+[![CI/CD](https://github.com/ViktorShadr/matchday_store/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/ViktorShadr/matchday_store/actions/workflows/ci-cd.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Celery](https://img.shields.io/badge/Celery-5.x-37814A)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-## Что уже входит в MVP
+🇷🇺 Russian version: [README.ru.md](README.ru.md)
 
-- каталог и карточки товаров
-- корзина для гостя и авторизованного пользователя
-- регистрация, логин, подтверждение email
-- checkout только для самовывоза
-- создание заказа из корзины со списанием остатков
-- история заказов пользователя
-- dashboard для обработки заказов и ручной отметки оплаты
-- email-уведомления по ключевым событиям заказа
-- встроенная форма обращения в поддержку с сохранением заявок и staff-уведомлениями
+---
 
-## Локальный запуск через Docker Compose
+## Overview
 
-1. Скопируйте `.env.example` в `.env` и заполните секреты и email-настройки.
-2. Запустите приложение:
+Matchday Store is a production-oriented Django MVP for a football club merchandise store.
 
-```bash
-docker compose up --build
+The project models a realistic ecommerce workflow with transactional checkout, stock reservation, asynchronous processing, staff tooling, operational monitoring, and production-style deployment infrastructure.
+
+The main engineering focus is not CRUD functionality, but consistency, reliability, observability, security, and maintainability under real operational conditions.
+
+---
+
+## Highlights
+
+- Transaction-safe checkout with stock reservation
+- Idempotent order processing
+- Concurrency protection with `select_for_update`
+- Async email pipeline with Celery
+- Structured JSON logging with request tracing
+- Dockerized production deployment
+- GitHub Actions CI/CD pipeline
+- Background job processing with retries
+- Staff dashboard for operational workflows
+- 300+ automated tests including concurrency scenarios
+
+---
+
+## Features
+
+### Ecommerce & Checkout
+
+- Product catalog with categories, variants, SKU support, pricing, stock visibility, and product images
+- Guest and authenticated carts with session merge on login
+- Pickup checkout workflow
+- Reservation-based stock handling
+- Duplicate-submit protection with idempotent checkout flow
+- Manual payment workflow synchronized with order statuses
+- Order lifecycle transitions with staff-controlled issue flow
+- Automatic release of reserved stock on cancellation or expiration
+
+### Staff & Operations
+
+- Warehouse/staff dashboard
+- Order filtering and moderation workflows
+- Payment status management
+- Internal order notes and transition history
+- Role-based staff access with Django permissions
+
+### Infrastructure & Reliability
+
+- Dockerized runtime environment
+- Nginx reverse proxy + Gunicorn application server
+- Redis + Celery background processing
+- Dedicated email worker queue
+- Healthchecks and operational scripts
+- GitHub Actions CI/CD pipeline
+- Automated Docker image publishing to GHCR
+
+### Security & Stability
+
+- Transactional stock consistency
+- Race-condition protection
+- Rate limiting for critical endpoints
+- CSP and secure cookie configuration
+- CSRF protection
+- Safe redirect validation
+- Sensitive-data masking in logs
+- Environment-based production settings
+
+### Observability
+
+- Structured JSON logging
+- Request tracing with `X-Request-ID`
+- Sentry integration
+- Audit logging
+- Celery request propagation
+- Health endpoints
+- Ecommerce analytics integration
+
+---
+
+# Architecture
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    Browser --> Nginx
+    Nginx --> Django[Gunicorn + Django]
+    Django --> PostgreSQL[(PostgreSQL)]
+    Django --> Redis[(Redis)]
+    Redis --> Celery[Celery Workers]
+    Beat[Celery Beat] --> Redis
+    Celery --> SMTP[SMTP Provider]
+    Django -. logs/errors .-> Sentry
+    Celery -. logs/errors .-> Sentry
 ```
 
-3. Откройте `http://localhost:8000`.
+The project uses a modular Django monolith architecture with explicit separation between:
 
-По умолчанию поднимаются `nginx`, `web`, `db` и `redis`.
+- HTTP layer
+- application workflows
+- domain services
+- repositories
+- query services
+- presenters
+- infrastructure concerns
 
-## Запуск worker при необходимости
+The public surface is intentionally server-rendered for simplicity and operational reliability, while critical business workflows are isolated in service-layer logic.
 
-Celery worker не обязателен для MVP: уведомления умеют уходить через sync fallback. Если нужен фоновой worker:
+---
 
-```bash
-docker compose --profile worker up --build
+## Why a Modular Monolith?
+
+The project intentionally uses a modular monolith instead of microservices because:
+
+- transactional consistency is easier to guarantee,
+- infrastructure remains operationally simple,
+- local development is significantly faster,
+- deployment complexity stays manageable,
+- business workflows remain easier to reason about.
+
+Background workloads are isolated through Celery queues rather than separate deployable services.
+
+---
+
+# Engineering Challenges
+
+## Preventing Overselling
+
+One of the main technical challenges was guaranteeing stock consistency during concurrent checkout attempts.
+
+The solution combines:
+
+- `transaction.atomic()`
+- `select_for_update()`
+- conditional `F()` updates
+- deterministic lock ordering
+- idempotent checkout tokens
+- database constraints
+- concurrency tests using `TransactionTestCase`
+
+This ensures that parallel checkout requests cannot oversell inventory.
+
+---
+
+## Reliable Checkout Flow
+
+The checkout system was designed to tolerate:
+
+- page refreshes,
+- duplicate form submits,
+- network retries,
+- parallel browser requests,
+- asynchronous email failures.
+
+The final workflow uses scoped idempotency keys and transaction-aware reservation logic to safely return an already-created order instead of creating duplicates.
+
+---
+
+## Background Processing Reliability
+
+Email delivery and scheduled maintenance tasks run asynchronously through Celery.
+
+Special attention was paid to:
+
+- retry safety,
+- exponential backoff,
+- transient SMTP handling,
+- queue isolation,
+- failure visibility through logging and Sentry.
+
+---
+
+# Tech Stack
+
+| Area | Technologies |
+| --- | --- |
+| Backend | Python 3.12, Django 5.2 |
+| Database | PostgreSQL 16 |
+| Async | Celery 5.x, Redis 7 |
+| Infrastructure | Docker, Docker Compose, Nginx, Gunicorn |
+| CI/CD | GitHub Actions, GHCR |
+| Monitoring | Structured logs, Sentry, healthchecks |
+| Security | django-csp, django-ratelimit, CSRF protection |
+| Frontend | Django Templates, Bootstrap, Vanilla JS |
+| Testing | Django TestCase, TransactionTestCase |
+
+---
+
+# Project Structure
+
+```text
+.
+├── analytics/
+├── config/
+├── docker/
+├── ops/
+├── orders/
+├── payments/
+├── store/
+├── support/
+├── users/
+├── .github/workflows/
+├── docker-compose.yml
+├── docker-compose.prod.yml
+├── Dockerfile
+└── pyproject.toml
 ```
 
-Это дополнительно поднимет `worker` (redis уже запущен как shared cache/queue backend).
+---
 
-## CI/CD
+# Key Engineering Decisions
 
-GitHub Actions:
+## Service Layer Instead of Fat Views
 
-- CI: `.github/workflows/ci.yml`
-  - Poetry metadata/lock check
-  - Black, isort, flake8
-  - проверка миграций
-  - `manage.py check`
-  - Django tests на PostgreSQL 16 и Redis 7
-  - Docker image build
-- CD: `.github/workflows/cd.yml`
-  - сборка и публикация Docker-образа в GitHub Container Registry (`ghcr.io`) на `main`, `master`, `v*.*.*` tags и ручной запуск
+Business workflows are isolated inside dedicated services:
 
-Локальная проверка перед push:
+- `CheckoutService`
+- `OrderCancellationService`
+- `OrderIssueService`
+- `PaymentWorkflowService`
+- `DashboardOrderFlowService`
 
-```bash
-poetry check --lock
-find config store support users orders payments delivery -name '*.py' -exec .venv/bin/black --check --target-version py312 {} \;
-.venv/bin/black --check --target-version py312 manage.py
-poetry run isort --check-only config store support users orders payments delivery manage.py
-poetry run flake8 config store support users orders payments delivery manage.py --exclude=.git,.venv,__pycache__,staticfiles,media,*/migrations/* --max-line-length=119 --extend-ignore=E203,W503
-poetry run python manage.py makemigrations --check --dry-run
-poetry run python manage.py check
+Views remain thin and handle only HTTP concerns.
+
+This keeps critical workflows testable and independent from Django request objects.
+
+---
+
+## Explicit Reservation Model
+
+The system separates:
+
+- physical stock (`quantity`)
+- reserved stock (`reserved_quantity`)
+
+This models a realistic pickup-order warehouse flow:
+
+- checkout reserves items,
+- cancellation releases reservation,
+- order issue consumes physical inventory.
+
+---
+
+## Request-Scoped Logging
+
+Every request receives an `X-Request-ID`.
+
+The same identifier propagates through:
+
+- Django logs,
+- Celery tasks,
+- Sentry events.
+
+Production logs support JSON formatting with masking of passwords, tokens, cookies, emails, and phone numbers.
+
+---
+
+## Queue Separation
+
+The Compose stack separates workloads into:
+
+- `web`
+- `worker`
+- `email-worker`
+- `beat`
+
+This avoids email delivery slowing down application processing and makes operational troubleshooting simpler.
+
+---
+
+# Checkout & Stock Flow
+
+```text
+Cart
+   ↓
+Checkout Submit
+   ↓
+Order + Payment
+   ↓
+Stock Reservation
+   ↓
+Staff Processing
+   ↓
+Order Issued
+   ↓
+Physical Stock Reduced
 ```
 
-## Стек runtime
+Stock lifecycle:
 
-- `nginx` принимает HTTP на `localhost:8000`
-- `nginx` раздает `/static/` и `/media/`
-- `nginx` проксирует приложение в `gunicorn`
-- `web` применяет миграции, собирает статику и запускает Django
-- `db` хранит данные
-- `redis` используется как shared cache и брокер очередей
-- `worker` поднимается только через профиль `worker`
+| Event | quantity | reserved_quantity |
+| --- | ---: | ---: |
+| Checkout placed | unchanged | increases |
+| Order cancelled | unchanged | decreases |
+| Order issued | decreases | decreases |
 
-Основные файлы:
+Critical checkout protections include:
 
-- entrypoint: [docker/web-entrypoint.sh](/home/viktor-shadrin/PycharmProjects/matchday_store/docker/web-entrypoint.sh:1)
-- nginx config: [docker/nginx/default.conf](/home/viktor-shadrin/PycharmProjects/matchday_store/docker/nginx/default.conf:1)
+- atomic database transactions,
+- row locking,
+- conditional updates,
+- idempotency keys,
+- duplicate-submit handling,
+- transactional cleanup of purchased cart items.
 
-## Переменные окружения
+---
 
-Обязательные:
+# Security
 
-- `SECRET_KEY`
-- `DB_NAME`
-- `DB_USER`
-- `DB_PASSWORD`
-- `DB_HOST`
-- `DB_PORT`
+The project includes multiple production-oriented security controls:
 
-Рекомендуемые:
+- CSRF protection
+- Secure cookies
+- CSP with nonce-based scripts
+- Rate limiting for auth and checkout endpoints
+- Safe redirect validation
+- Image upload validation
+- Environment-driven production settings
+- Sensitive-data masking in logs
+- Docker non-root runtime
+- HSTS-ready configuration
+- Nginx request limits
+- Anti-overselling database constraints
 
-- `ALLOWED_HOSTS`
-- `CSRF_TRUSTED_ORIGINS`
-- `SITE_URL`
-- `EMAIL_CONFIRMATION_TOKEN_TTL_HOURS`
-- `DEFAULT_FROM_EMAIL`
-- `STORE_SUPPORT_EMAIL`
-- `STORE_BRAND_NAME`
-- `STORE_PICKUP_LOCATION_NAME`
-- `STORE_PICKUP_ADDRESS`
-- `STORE_PICKUP_HOURS`
-- `STORE_PICKUP_PHONE`
-- `EMAIL_HOST_USER`
-- `EMAIL_HOST_PASSWORD`
-- `STAFF_ORDER_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых заказах)
-- `SUPPORT_NOTIFICATION_EMAILS` (comma-separated email сотрудников для уведомлений о новых обращениях; если пусто, используется `STORE_SUPPORT_EMAIL`)
-- `CACHE_URL` (shared Redis cache для rate limiting между несколькими worker-процессами)
-- `RATELIMIT_*` (лимиты для login/registration/resend/checkout/support)
-- `CSP_ENFORCE` (`True` для production, `False` только для временной диагностики)
-- `METRIKA_ENABLED`, `METRIKA_COUNTER_ID` для Яндекс.Метрики в production
-- `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`
+---
 
-Для логирования:
+# Observability & Monitoring
 
-- `LOG_LEVEL` (`INFO` по умолчанию)
-- `LOG_JSON` (`True` в production, `False` в debug)
-- `GUNICORN_LOG_LEVEL` (`info` по умолчанию)
+Operational visibility was treated as a first-class concern.
 
-Для временного деплоя по HTTP/IP без TLS:
+Implemented features include:
 
-- `ALLOWED_HOSTS=37.1.80.117`
-- `CSRF_TRUSTED_ORIGINS=http://37.1.80.117`
-- `SITE_URL=http://37.1.80.117`
-- `CSRF_COOKIE_SECURE=False`
-- `SESSION_COOKIE_SECURE=False`
+- request tracing with `X-Request-ID`
+- structured JSON logging
+- audit logger for business events
+- Sentry integration for Django and Celery
+- Docker healthchecks
+- Celery task metadata logging
+- sensitive-data masking
+- ecommerce analytics events
 
-Для production за HTTPS-доменом:
+Planned improvements:
 
-- `CSRF_TRUSTED_ORIGINS=https://your-domain.example`
-- `SITE_URL=https://your-domain.example`
-- `CSRF_COOKIE_SECURE=True`
-- `SESSION_COOKIE_SECURE=True`
-- `USE_X_FORWARDED_PROTO=True`, если TLS завершается на внешнем reverse proxy
+- Prometheus metrics
+- Grafana dashboards
+- operational KPI tracking
 
-В production каждый ответ включает `X-Request-ID`; тот же идентификатор прокидывается в Celery-задачи и попадает в логи.
+---
 
-## Яндекс.Метрика
+# Background Tasks
 
-Интеграция изолирована в `analytics`: настройки читаются из env, base template вызывает один template tag, а ecommerce payload передается через безопасный JSON (`json_script`) и статический loader `static/js/metrika.js`.
+Celery uses Redis as both broker and result backend.
 
-Метрика загружается только если одновременно выполнены условия:
+Current asynchronous workflows include:
 
-- `DEBUG=False`
-- `METRIKA_ENABLED=True`
-- `METRIKA_COUNTER_ID` заполнен числовым ID счетчика
+- registration emails
+- order notifications
+- support notifications
+- scheduled order auto-cancellation
+- email retries with exponential backoff
 
-Где менять счетчик:
+Queues are separated between general tasks and email delivery tasks.
 
-- production `.env`: `METRIKA_COUNTER_ID=12345678`
-- не менять ID в шаблонах и JS вручную
+---
 
-Как отключить:
+# Testing
 
-- поставить `METRIKA_ENABLED=False`
-- или оставить `DEBUG=True` в local/dev, тогда счетчик не загрузится даже при заполненном ID
+The project currently contains 300+ automated Django tests.
 
-Что отправляется в ecommerce `dataLayer`:
+Covered areas include:
 
-- просмотр товара: `detail`
-- добавление в корзину после успешного server-side POST: `add`
-- открытие checkout: `checkout` / `begin_checkout`
-- успешный заказ: `purchase` с `order.number`, `total_amount`, SKU, category, quantity и line totals
+- checkout validation
+- stock reservation
+- cancellation flows
+- idempotent checkout
+- payment synchronization
+- concurrency handling
+- dashboard permissions
+- email retry logic
+- logging and observability
+- security validation
+- smoke end-to-end flows
 
-PII покупателя (`email`, `phone`, ФИО) в ecommerce events не передается.
+Run tests locally:
 
-Проверка:
+```bash
+poetry run python manage.py test
+```
 
-1. Включить Ecommerce в настройках счетчика Яндекс.Метрики, data container: `dataLayer`.
-2. На production открыть страницу с параметром `?_ym_debug=2`.
-3. Проверить в debug panel события `detail`, `add`, `checkout`, `purchase`.
-4. В DevTools убедиться, что есть один запрос `https://mc.yandex.ru/metrika/tag.js` и нет дублей `ym(..., "init", ...)`.
+Or inside Docker:
 
-Consent compatibility:
+```bash
+docker compose exec web python manage.py test
+```
 
-- сейчас `METRIKA_REQUIRE_CONSENT=False`, счетчик грузится сразу после server-side gating;
-- для будущего consent banner можно поставить `METRIKA_REQUIRE_CONSENT=True`, тогда loader дождется `localStorage.cookie_consent=accepted` или события `matchday:cookie-consent-changed`.
+---
 
-CSP:
+# CI/CD
 
-- при активной Метрике Django settings добавляют домены Яндекса в `script-src`, `img-src`, `connect-src`, `child-src`, `frame-src`, `frame-ancestors`;
-- WebVisor/click maps требуют возможности iframe-просмотра страниц из интерфейса Яндекса, поэтому в режиме активной Метрики проект не добавляет `X-Frame-Options: DENY` и полагается на `frame-ancestors` CSP;
-- при отключенной Метрике прежний `X-Frame-Options: DENY` остается.
+GitHub Actions pipeline includes:
 
-## Backup и restore check
+- Black
+- isort
+- flake8
+- migration validation
+- Django system checks
+- PostgreSQL + Redis test environment
+- Docker image build
+- GHCR publishing
+- SSH-based production deployment
 
-- backup script: [ops/db/backup.sh](/home/viktor-shadrin/PycharmProjects/matchday_store/ops/db/backup.sh:1)
-- restore verify: [ops/db/restore_verify.sh](/home/viktor-shadrin/PycharmProjects/matchday_store/ops/db/restore_verify.sh:1)
-- cron шаблон: [ops/db/cron.example](/home/viktor-shadrin/PycharmProjects/matchday_store/ops/db/cron.example:1)
+Deployment flow:
 
-## Проверка перед деплоем
+```text
+Push to main
+    ↓
+GitHub Actions
+    ↓
+Run tests
+    ↓
+Build Docker image
+    ↓
+Push to GHCR
+    ↓
+Deploy to production server
+```
 
-- создать суперпользователя
-- проверить `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SITE_URL`
-- проверить отправку email
-- проверить, что `nginx` отдает `/static/` и проксирует запросы в `web`
-- пройти сценарий: checkout -> ready -> paid -> issued
+---
 
-Подробный production runbook: [RUNBOOK.md](/home/viktor-shadrin/PycharmProjects/matchday_store/RUNBOOK.md:1)
+# Local Development
+
+## Clone Repository
+
+```bash
+git clone https://github.com/ViktorShadr/matchday_store.git
+cd matchday_store
+```
+
+## Configure Environment
+
+```bash
+cp .env.example .env
+```
+
+## Start Application
+
+```bash
+docker compose up --build -d
+```
+
+Application:
+
+```text
+http://localhost:8000
+```
+
+## Create Superuser
+
+```bash
+docker compose exec web python manage.py createsuperuser
+```
+
+## Run Tests
+
+```bash
+docker compose exec web python manage.py test
+```
+
+---
+
+# Deployment
+
+Local deployment:
+
+```bash
+docker compose up --build -d
+```
+
+Production deployment:
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+# Future Improvements
+
+- Online payment providers
+- DRF-based public API
+- Warehouse/ERP integrations
+- Delivery providers
+- Object storage + CDN
+- Prometheus + Grafana monitoring
+- Coverage reporting
+- Telegram/SMS notifications
+- Sales analytics dashboard
+
+---
+
+# Production-Oriented Approach
+
+This project was built not only as a feature demo, but as an operationally maintainable backend service.
+
+Special attention was paid to:
+
+- consistency under concurrency,
+- failure handling,
+- retry safety,
+- observability,
+- deployment automation,
+- secure defaults,
+- maintainable architecture.
+
+The goal was to build a compact but realistic ecommerce MVP that demonstrates backend engineering practices commonly found in production systems.
