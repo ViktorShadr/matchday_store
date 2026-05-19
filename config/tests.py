@@ -124,6 +124,44 @@ class LoggingPipelineTest(SimpleTestCase):
         self.assertEqual(extra["email"], "***")
         self.assertEqual(extra["phone"], "***")
 
+    def test_email_delivery_metadata_keys_are_not_masked(self):
+        token = set_request_id("req-email-metadata")
+        self.addCleanup(reset_request_id, token)
+        logger, stream = self._build_json_logger("config.tests.email_metadata")
+
+        logger.info(
+            "email.delivery",
+            extra={
+                "event": "email.delivery",
+                "email_type": "confirmation",
+                "email_timeout": 30,
+            },
+        )
+        payload = json.loads(stream.getvalue().strip())
+        extra = payload["extra"]
+
+        self.assertEqual(extra["email_type"], "confirmation")
+        self.assertEqual(extra["email_timeout"], 30)
+
+    def test_contact_keys_with_suffix_stay_masked(self):
+        token = set_request_id("req-contact-key")
+        self.addCleanup(reset_request_id, token)
+        logger, stream = self._build_json_logger("config.tests.contact_key")
+
+        logger.info(
+            "profile.updated",
+            extra={
+                "event": "profile.updated",
+                "user_email": "buyer@example.com",
+                "customer_phone": "+79990001122",
+            },
+        )
+        payload = json.loads(stream.getvalue().strip())
+        extra = payload["extra"]
+
+        self.assertEqual(extra["user_email"], "***")
+        self.assertEqual(extra["customer_phone"], "***")
+
     def test_json_log_contains_exception_trace(self):
         token = set_request_id("req-exception")
         self.addCleanup(reset_request_id, token)

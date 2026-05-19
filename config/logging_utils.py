@@ -11,7 +11,11 @@ from config.logging_context import get_request_id
 STANDARD_RECORD_FIELDS = set(logging.makeLogRecord({}).__dict__.keys()) | {"message", "asctime"}
 
 SENSITIVE_KEY_RE = re.compile(
-    r"(pass(word)?|secret|token|api[_-]?key|authorization|cookie|email|phone)",
+    r"(pass(word)?|secret|token|api[_-]?key|authorization|cookie)",
+    re.IGNORECASE,
+)
+SENSITIVE_CONTACT_KEY_RE = re.compile(
+    r"(?:^|[_-])(email|phone)(?:$|[_-](address|number))",
     re.IGNORECASE,
 )
 SENSITIVE_PAIR_RE = re.compile(
@@ -46,7 +50,7 @@ def _sanitize_string(value: str) -> str:
 
 
 def _sanitize_value(value: Any, key: str | None = None) -> Any:
-    if key and SENSITIVE_KEY_RE.search(key):
+    if key and (SENSITIVE_KEY_RE.search(key) or SENSITIVE_CONTACT_KEY_RE.search(key)):
         return "***"
 
     if isinstance(value, dict):
