@@ -1049,6 +1049,16 @@ class WarehouseStockManagementTest(TestCase):
         self.product.refresh_from_db()
         self.assertFalse(self.product.is_on_sale)
 
+    def test_image_create_page_has_preview_and_replace_controls(self):
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:warehouse_image_create", kwargs={"product_pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "id=\"imagePreviewContainer\"", html=False)
+        self.assertContains(response, "id=\"replaceImageButton\"", html=False)
+        self.assertContains(response, "id=\"clearImageButton\"", html=False)
+
 
 class DashboardOrdersManagementTest(TestCase):
     """Тесты вкладки заказов модераторского дашборда."""
