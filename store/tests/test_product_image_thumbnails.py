@@ -121,6 +121,19 @@ class ProductImageThumbnailFlowTest(TestCase):
         image.refresh_from_db()
         self.assertEqual(image.thumbnail.name, thumbnail_name)
 
+    def test_metadata_save_is_not_blocked_by_unexpected_thumbnail_errors(self):
+        upload = self._upload_from_image(Image.new("RGB", (1300, 1300), color=(30, 90, 200)), name="safe-save.png")
+        image = ProductImage.objects.create(product=self.product, image=upload, alt_text="before")
+
+        for error in (OSError("storage unavailable"), NotImplementedError("unsupported operation")):
+            with self.subTest(error_type=type(error).__name__):
+                updated_alt_text = f"updated-{type(error).__name__}"
+                with mock.patch.object(ProductImageThumbnailService, "ensure_thumbnail", side_effect=error):
+                    image.alt_text = updated_alt_text
+                    image.save(update_fields=["alt_text"])
+                image.refresh_from_db()
+                self.assertEqual(image.alt_text, updated_alt_text)
+
     def test_broken_image_is_rejected(self):
         broken_file = SimpleUploadedFile("broken.jpg", b"not an image", content_type="image/jpeg")
         form = ProductImageForm(data={"alt_text": "broken", "is_primary": ""}, files={"image": broken_file})

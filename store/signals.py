@@ -56,3 +56,8 @@ def ensure_product_thumbnail(sender, instance: ProductImage, raw: bool = False, 
         ProductImageThumbnailService.ensure_thumbnail(instance)
     except ProductImageProcessingError as exc:
         logger.warning("Не удалось подготовить thumbnail для ProductImage id=%s: %s", instance.pk, str(exc))
+    except Exception:
+        logger.exception(
+            "Неожиданная ошибка при подготовке thumbnail для ProductImage id=%s",
+            instance.pk,
+        )
