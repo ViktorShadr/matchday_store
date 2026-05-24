@@ -24,6 +24,25 @@
                                 {{ form.image }}
                                 {{ form.image.errors }}
                             </div>
+                            <div class="mb-3 d-none" id="imagePreviewContainer">
+                                <div class="border rounded-3 p-3 bg-light">
+                                    <div class="small text-muted mb-2">Превью</div>
+                                    <img
+                                        id="imagePreview"
+                                        class="img-fluid rounded-3"
+                                        alt="Превью выбранного изображения"
+                                    >
+                                    <div class="small text-muted mt-2" id="imagePreviewName"></div>
+                                    <div class="d-flex gap-2 mt-3 flex-wrap">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="replaceImageButton">
+                                            Заменить фото
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clearImageButton">
+                                            Убрать фото
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="mb-3">
                                 <label class="form-label" for="{{ form.alt_text.id_for_label }}">Alt-текст</label>
                                 {{ form.alt_text }}
@@ -40,4 +59,65 @@
             </div>
         </div>
     </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script>
+        (function () {
+            const imageInput = document.getElementById("{{ form.image.id_for_label }}");
+            const previewContainer = document.getElementById("imagePreviewContainer");
+            const previewImage = document.getElementById("imagePreview");
+            const previewName = document.getElementById("imagePreviewName");
+            const replaceImageButton = document.getElementById("replaceImageButton");
+            const clearImageButton = document.getElementById("clearImageButton");
+
+            if (!imageInput || !previewContainer || !previewImage || !previewName) {
+                return;
+            }
+
+            let objectUrl = null;
+
+            const resetPreview = () => {
+                if (objectUrl) {
+                    URL.revokeObjectURL(objectUrl);
+                    objectUrl = null;
+                }
+                previewImage.removeAttribute("src");
+                previewName.textContent = "";
+                previewContainer.classList.add("d-none");
+            };
+
+            const showPreview = (file) => {
+                if (!file || !file.type.startsWith("image/")) {
+                    resetPreview();
+                    return;
+                }
+                if (objectUrl) {
+                    URL.revokeObjectURL(objectUrl);
+                }
+                objectUrl = URL.createObjectURL(file);
+                previewImage.src = objectUrl;
+                previewName.textContent = file.name;
+                previewContainer.classList.remove("d-none");
+            };
+
+            imageInput.addEventListener("change", () => {
+                const [file] = imageInput.files || [];
+                showPreview(file);
+            });
+
+            if (replaceImageButton) {
+                replaceImageButton.addEventListener("click", () => {
+                    imageInput.click();
+                });
+            }
+
+            if (clearImageButton) {
+                clearImageButton.addEventListener("click", () => {
+                    imageInput.value = "";
+                    resetPreview();
+                });
+            }
+        })();
+    </script>
 {% endblock %}

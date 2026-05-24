@@ -467,3 +467,13 @@ class WarehouseImageDeleteView(ModeratorRequiredMixin, DeleteView):
 
     def get_success_url(self):
         return reverse("store:warehouse_product_manage", kwargs={"pk": self.object.product.pk})
+
+
+class WarehouseImageSetPrimaryView(ModeratorRequiredMixin, View):
+    crud_service = WarehouseCrudService()
+
+    def post(self, request, *args, **kwargs):
+        image = get_object_or_404(ProductImage, pk=self.kwargs["pk"])
+        self.crud_service.set_primary_product_image(image)
+        messages.success(request, "Основное изображение обновлено.")
+        return HttpResponseRedirect(reverse("store:warehouse_product_manage", kwargs={"pk": image.product.pk}))
