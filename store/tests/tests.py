@@ -1049,6 +1049,61 @@ class WarehouseStockManagementTest(TestCase):
         self.product.refresh_from_db()
         self.assertFalse(self.product.is_on_sale)
 
+    def test_image_set_primary_available_for_moderator(self):
+        secondary_image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("scarf-secondary.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=False,
+        )
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.post(reverse("store:warehouse_image_set_primary", kwargs={"pk": secondary_image.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.image.refresh_from_db()
+        secondary_image.refresh_from_db()
+        self.assertFalse(self.image.is_primary)
+        self.assertTrue(secondary_image.is_primary)
+
+    def test_image_set_primary_forbidden_for_regular_user(self):
+        secondary_image = ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("scarf-secondary.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=False,
+        )
+        self.client.login(email="regular@example.com", password="regularpass123")
+
+        response = self.client.post(reverse("store:warehouse_image_set_primary", kwargs={"pk": secondary_image.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        self.image.refresh_from_db()
+        secondary_image.refresh_from_db()
+        self.assertTrue(self.image.is_primary)
+        self.assertFalse(secondary_image.is_primary)
+
+    def test_product_manage_page_shows_set_primary_button_for_non_primary_images(self):
+        ProductImage.objects.create(
+            product=self.product,
+            image=SimpleUploadedFile("scarf-secondary.jpg", b"fake_image_data", content_type="image/jpeg"),
+            is_primary=False,
+        )
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Сделать основным")
+
+    def test_image_create_page_has_preview_and_replace_controls(self):
+        self.client.login(email="mod2@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:warehouse_image_create", kwargs={"product_pk": self.product.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="imagePreviewContainer"', html=False)
+        self.assertContains(response, 'id="replaceImageButton"', html=False)
+        self.assertContains(response, 'id="clearImageButton"', html=False)
+
 
 class DashboardOrdersManagementTest(TestCase):
     """Тесты вкладки заказов модераторского дашборда."""

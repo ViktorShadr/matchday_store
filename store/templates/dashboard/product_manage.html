@@ -161,7 +161,13 @@
                                         {% if image.is_primary %}
                                             <div class="badge text-bg-primary mb-2">Основное</div>
                                         {% endif %}
-                                        <div>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            {% if not image.is_primary %}
+                                                <form method="post" action="{% url 'store:warehouse_image_set_primary' image.pk %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-outline-primary btn-sm">Сделать основным</button>
+                                                </form>
+                                            {% endif %}
                                             <a class="btn btn-danger btn-sm" href="{% url 'store:warehouse_image_delete' image.pk %}">Удалить</a>
                                         </div>
                                     </div>

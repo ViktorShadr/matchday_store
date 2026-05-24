@@ -1,3 +1,5 @@
+from django.db import transaction
+
 from store.forms import ProductForm, VariantStockForm
 
 
@@ -45,3 +47,12 @@ class WarehouseCrudService:
         if form.cleaned_data.get("is_primary"):
             product.images.update(is_primary=False)
         return form.save()
+
+    @staticmethod
+    def set_primary_product_image(image):
+        with transaction.atomic():
+            image.product.images.exclude(pk=image.pk).filter(is_primary=True).update(is_primary=False)
+            if not image.is_primary:
+                image.is_primary = True
+                image.save(update_fields=["is_primary"])
+        return image
