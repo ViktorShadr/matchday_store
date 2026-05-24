@@ -219,3 +219,22 @@ class ProductImageThumbnailSignalModeTest(TestCase):
             image.save(update_fields=["alt_text"])
 
         ensure_mock.assert_not_called()
+
+    @override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="async")
+    def test_signal_clears_stale_thumbnail_before_async_enqueue_on_image_replace(self):
+        with override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="sync"):
+            image = ProductImage.objects.create(product=self.product, image=self._upload(name="before.png"))
+        image.refresh_from_db()
+        self.assertTrue(bool(image.thumbnail.name))
+
+        with mock.patch("store.signals.generate_product_thumbnail.delay") as delay_mock:
+            with self.captureOnCommitCallbacks(execute=True):
+                image.image = self._upload(name="after.png")
+                image.save(update_fields=["image"])
+
+        image.refresh_from_db()
+        self.assertEqual(image.thumbnail.name, "")
+        self.assertEqual(image.thumbnail_source_name, "")
+        self.assertIsNone(image.thumbnail_source_size)
+        self.assertEqual(image.catalog_image.name, image.image.name)
+        delay_mock.assert_called_once_with(image.pk)

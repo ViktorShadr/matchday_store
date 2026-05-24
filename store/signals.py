@@ -53,6 +53,36 @@ def _should_process_thumbnail(created: bool, update_fields) -> bool:
     return bool(set(update_fields).intersection(THUMBNAIL_RELATED_UPDATE_FIELDS))
 
 
+def _safe_image_file_size(image_field) -> int | None:
+    try:
+        return int(image_field.size)
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _is_thumbnail_stale(instance: ProductImage) -> bool:
+    if not instance.thumbnail.name:
+        return False
+    if instance.thumbnail_source_name != instance.image.name:
+        return True
+    current_size = _safe_image_file_size(instance.image)
+    return instance.thumbnail_source_size != current_size
+
+
+def _clear_stale_thumbnail_metadata(instance: ProductImage) -> None:
+    if not _is_thumbnail_stale(instance):
+        return
+
+    ProductImage.objects.filter(pk=instance.pk).update(
+        thumbnail="",
+        thumbnail_source_name="",
+        thumbnail_source_size=None,
+    )
+    instance.thumbnail.name = ""
+    instance.thumbnail_source_name = ""
+    instance.thumbnail_source_size = None
+
+
 def _enqueue_thumbnail_generation(product_image_id: int) -> None:
     def enqueue_thumbnail_task():
         try:
@@ -101,6 +131,7 @@ def ensure_product_thumbnail(
 
     generation_mode = getattr(settings, "PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE", "sync")
     if generation_mode == "async":
+        _clear_stale_thumbnail_metadata(instance)
         _enqueue_thumbnail_generation(instance.pk)
         return
 
