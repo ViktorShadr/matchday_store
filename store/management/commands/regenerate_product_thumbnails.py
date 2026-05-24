@@ -13,10 +13,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--force",
             action="store_true",
-            help=(
-                "Пересоздать thumbnail, "
-                "даже если уже есть актуальная версия."
-            ),
+            help=("Пересоздать thumbnail, " "даже если уже есть актуальная версия."),
         )
         parser.add_argument(
             "--chunk-size",

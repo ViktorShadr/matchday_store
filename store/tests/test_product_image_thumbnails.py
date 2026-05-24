@@ -152,8 +152,7 @@ class ProductImageThumbnailFlowTest(TestCase):
 
         command_output = output.getvalue()
         expected_error_line = (
-            f"[{images[2].pk}] {self.product.pk} -> failed with error: "
-            "Изображение слишком маленькое."
+            f"[{images[2].pk}] {self.product.pk} -> failed with error: " "Изображение слишком маленькое."
         )
         self.assertIn(
             expected_error_line,
