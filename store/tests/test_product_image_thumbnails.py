@@ -1,13 +1,14 @@
-from io import BytesIO
+from io import BytesIO, StringIO
 from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import TestCase
 from PIL import Image
 
 from store.forms import ProductImageForm
 from store.models import Category, Product, ProductImage
-from store.services.product_image_thumbnails import ProductImageThumbnailService
+from store.services.product_image_thumbnails import ProductImageProcessingError, ProductImageThumbnailService
 
 
 class ProductImageThumbnailFlowTest(TestCase):
@@ -113,4 +114,49 @@ class ProductImageThumbnailFlowTest(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("image", form.errors)
-        self.assertIn("Загрузите корректный файл изображения.", str(form.errors["image"]))
+        self.assertIn(
+            "Загрузите корректный файл изображения.",
+            str(form.errors["image"]),
+        )
+
+    def test_regenerate_command_uses_failed_label_for_processing_errors(self):
+        images = [
+            ProductImage.objects.create(
+                product=self.product,
+                image=self._upload_from_image(
+                    Image.new("RGB", (1300, 1300), color=(idx * 20, 80, 120)),
+                    name=f"cmd-{idx}.png",
+                ),
+            )
+            for idx in range(3)
+        ]
+        outcomes = {
+            images[0].pk: True,
+            images[1].pk: False,
+            images[2].pk: ProductImageProcessingError("Изображение слишком маленькое."),
+        }
+
+        def ensure_thumbnail_side_effect(product_image, force=False):
+            result = outcomes[product_image.pk]
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        output = StringIO()
+        with mock.patch.object(
+            ProductImageThumbnailService,
+            "ensure_thumbnail",
+            side_effect=ensure_thumbnail_side_effect,
+        ):
+            call_command("regenerate_product_thumbnails", stdout=output)
+
+        command_output = output.getvalue()
+        expected_error_line = (
+            f"[{images[2].pk}] {self.product.pk} -> failed with error: "
+            "Изображение слишком маленькое."
+        )
+        self.assertIn(
+            expected_error_line,
+            command_output,
+        )
+        self.assertIn("Done: processed=1, skipped=1, failed=1, total=3, force=False", command_output)

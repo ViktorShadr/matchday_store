@@ -13,7 +13,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "--force",
             action="store_true",
-            help="Пересоздать thumbnail, даже если уже есть актуальная версия.",
+            help=(
+                "Пересоздать thumbnail, "
+                "даже если уже есть актуальная версия."
+            ),
         )
         parser.add_argument(
             "--chunk-size",
@@ -41,8 +44,8 @@ class Command(BaseCommand):
             except ProductImageProcessingError as exc:
                 failed += 1
                 self.stdout.write(
-                    self.style.WARNING(
-                        f"[{product_image.pk}] {product_image.product_id} -> skipped with error: {str(exc)}"
+                    self.style.ERROR(
+                        f"[{product_image.pk}] {product_image.product_id} -> failed with error: {str(exc)}"
                     )
                 )
                 continue
