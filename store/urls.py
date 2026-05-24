@@ -20,6 +20,7 @@ from store.views.views_dashboard import (
     WarehouseDashboardView,
     WarehouseImageCreateView,
     WarehouseImageDeleteView,
+    WarehouseImageSetPrimaryView,
     WarehouseProductCreateView,
     WarehouseProductDeleteView,
     WarehouseProductManageView,
@@ -201,6 +202,15 @@ urlpatterns = [
     path(
         "dashboard/warehouse/images/<int:pk>/delete/",
         RedirectView.as_view(pattern_name="store:warehouse_image_delete", permanent=False),
+    ),
+    path(
+        "dashboard/images/<int:pk>/set-primary/",
+        WarehouseImageSetPrimaryView.as_view(),
+        name="warehouse_image_set_primary",
+    ),
+    path(
+        "dashboard/warehouse/images/<int:pk>/set-primary/",
+        RedirectView.as_view(pattern_name="store:warehouse_image_set_primary", permanent=False),
     ),
     path("products/", ProductListView.as_view(), name="product_list"),
     path("products/<int:pk>/", ProductDetailsView.as_view(), name="product_detail"),
