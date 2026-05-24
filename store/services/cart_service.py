@@ -385,7 +385,7 @@ class CartService:
             primary_image = next((img for img in product_images if img.is_primary), None)
             first_image = primary_image or (product_images[0] if product_images else None)
             if first_image:
-                image_url = first_image.image.url if first_image.image else None
+                image_url = first_image.catalog_image.url if first_image.catalog_image else None
 
             items.append(
                 {

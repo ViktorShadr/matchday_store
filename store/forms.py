@@ -2,9 +2,9 @@ from decimal import Decimal
 from pathlib import Path
 
 from django import forms
-from PIL import Image, UnidentifiedImageError
 
 from store.models import Category, Product, ProductImage, ProductVariant
+from store.services.product_image_thumbnails import ProductImageProcessingError, ProductImageThumbnailService
 
 
 class CategoryForm(forms.ModelForm):
@@ -83,20 +83,26 @@ class ProductVariantForm(forms.ModelForm):
 
 
 class ProductImageForm(forms.ModelForm):
-    MAX_FILE_SIZE = 5 * 1024 * 1024
+    MAX_FILE_SIZE = 2 * 1024 * 1024
     ALLOWED_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
     ALLOWED_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+    image = forms.ImageField(
+        error_messages={
+            "invalid": ProductImageThumbnailService.INVALID_IMAGE_MESSAGE,
+            "invalid_image": ProductImageThumbnailService.INVALID_IMAGE_MESSAGE,
+        },
+        widget=forms.ClearableFileInput(
+            attrs={
+                "class": "form-control",
+                "accept": "image/jpeg,image/png,image/webp,image/gif",
+            }
+        ),
+    )
 
     class Meta:
         model = ProductImage
         fields = ["image", "alt_text", "is_primary"]
         widgets = {
-            "image": forms.ClearableFileInput(
-                attrs={
-                    "class": "form-control",
-                    "accept": "image/jpeg,image/png,image/webp,image/gif",
-                }
-            ),
             "alt_text": forms.TextInput(
                 attrs={"class": "form-control", "placeholder": "Краткое описание изображения"}
             ),
@@ -109,7 +115,7 @@ class ProductImageForm(forms.ModelForm):
             return image
 
         if image.size > self.MAX_FILE_SIZE:
-            raise forms.ValidationError("Размер изображения не должен превышать 5 MB.")
+            raise forms.ValidationError("Размер изображения не должен превышать 2 MB.")
 
         extension = Path(image.name).suffix.lower()
         if extension not in self.ALLOWED_EXTENSIONS:
@@ -120,13 +126,9 @@ class ProductImageForm(forms.ModelForm):
             raise forms.ValidationError("Допустимые форматы изображений: JPEG, PNG, WebP, GIF.")
 
         try:
-            image.seek(0)
-            with Image.open(image) as opened_image:
-                opened_image.verify()
-        except (UnidentifiedImageError, OSError, ValueError) as exc:
-            raise forms.ValidationError("Загрузите корректный файл изображения.") from exc
-        finally:
-            image.seek(0)
+            ProductImageThumbnailService.validate_image_file(image)
+        except ProductImageProcessingError as exc:
+            raise forms.ValidationError(str(exc)) from exc
 
         return image
 

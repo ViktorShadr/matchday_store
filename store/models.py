@@ -191,7 +191,10 @@ class ProductImage(models.Model):
         on_delete=models.CASCADE,
         related_name="images",
     )
-    image = models.ImageField(upload_to="product_images/")
+    image = models.ImageField(upload_to="original/")
+    thumbnail = models.ImageField(upload_to="thumbnails/", blank=True)
+    thumbnail_source_name = models.CharField(max_length=500, blank=True, default="")
+    thumbnail_source_size = models.PositiveBigIntegerField(blank=True, null=True)
     alt_text = models.CharField(max_length=255, blank=True)
     is_primary = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -199,6 +202,14 @@ class ProductImage(models.Model):
     def __str__(self):
         """Возвращает строковое представление объекта."""
         return f"Изображение для {self.product.name}"
+
+    @property
+    def catalog_image(self):
+        """
+        Возвращает оптимизированное изображение для витрины
+        или оригинал, если thumbnail еще не сгенерирован.
+        """
+        return self.thumbnail or self.image
 
     class Meta:
         """Мета-настройки класса."""
