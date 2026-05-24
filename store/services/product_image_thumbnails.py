@@ -21,6 +21,8 @@ class ProductImageThumbnailService:
     THUMBNAIL_HEIGHT = 1200
     THUMBNAIL_QUALITY = 85
     THUMBNAIL_FORMAT = "WEBP"
+    THUMBNAIL_DIR = "thumbnails"
+    THUMBNAIL_NAME_FALLBACK = "product_image"
     MIN_WIDTH = 1000
     MIN_HEIGHT = 1000
     MAX_DIMENSION = 10000
@@ -136,10 +138,20 @@ class ProductImageThumbnailService:
 
     @classmethod
     def _build_thumbnail_name(cls, original_name: str, image_id: int | None) -> str:
-        stem = Path(original_name).stem or "product_image"
+        stem = Path(original_name).stem or cls.THUMBNAIL_NAME_FALLBACK
         normalized_stem = stem.replace(" ", "_")
         suffix = str(image_id) if image_id is not None else "img"
-        return f"thumbnails/{normalized_stem}_{suffix}_{cls.THUMBNAIL_WIDTH}.webp"
+        tail = f"_{suffix}_{cls.THUMBNAIL_WIDTH}.webp"
+        prefix = f"{cls.THUMBNAIL_DIR}/"
+        max_length = ProductImage._meta.get_field("thumbnail").max_length or 100
+        max_stem_length = max_length - len(prefix) - len(tail)
+
+        if max_stem_length <= 0:
+            trimmed_stem = cls.THUMBNAIL_NAME_FALLBACK
+        else:
+            trimmed_stem = normalized_stem[:max_stem_length] or cls.THUMBNAIL_NAME_FALLBACK
+
+        return f"{prefix}{trimmed_stem}{tail}"
 
     @classmethod
     def _ensure_image_integrity(cls, image_file) -> None:

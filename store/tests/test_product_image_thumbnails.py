@@ -91,6 +91,19 @@ class ProductImageThumbnailFlowTest(TestCase):
         with Image.open(image.thumbnail) as thumbnail:
             self.assertEqual(thumbnail.format, "WEBP")
 
+    def test_long_source_name_fits_thumbnail_field_length_limit(self):
+        long_name = f"{'x' * 180}.png"
+        upload = self._upload_from_image(Image.new("RGB", (1300, 1300), color=(15, 90, 200)), name=long_name)
+
+        image = ProductImage.objects.create(product=self.product, image=upload)
+        image.refresh_from_db()
+
+        max_length = ProductImage._meta.get_field("thumbnail").max_length or 100
+        self.assertTrue(bool(image.thumbnail.name))
+        self.assertLessEqual(len(image.thumbnail.name), max_length)
+        self.assertTrue(image.thumbnail.name.startswith("thumbnails/"))
+        self.assertTrue(image.thumbnail.name.endswith("_1200.webp"))
+
     def test_repeat_save_does_not_regenerate_ready_thumbnail(self):
         upload = self._upload_from_image(Image.new("RGB", (1300, 1300), color=(20, 70, 200)), name="stable.png")
         image = ProductImage.objects.create(product=self.product, image=upload)

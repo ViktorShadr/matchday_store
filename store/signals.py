@@ -6,8 +6,8 @@ from django.dispatch import receiver
 
 from store.application import CartContextResolver
 from store.models import ProductImage
-from store.services.product_image_thumbnails import ProductImageProcessingError, ProductImageThumbnailService
 from store.services.cart_service import CartService
+from store.services.product_image_thumbnails import ProductImageProcessingError, ProductImageThumbnailService
 
 # Глобальный экземпляр для обратной совместимости
 cart_service = CartService()
