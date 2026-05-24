@@ -3,7 +3,7 @@ from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from PIL import Image
 
 from store.forms import ProductImageForm
@@ -11,6 +11,7 @@ from store.models import Category, Product, ProductImage
 from store.services.product_image_thumbnails import ProductImageProcessingError, ProductImageThumbnailService
 
 
+@override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="sync")
 class ProductImageThumbnailFlowTest(TestCase):
     def setUp(self):
         self.category = Category.objects.create(name="Тестовая категория изображений")
@@ -185,3 +186,36 @@ class ProductImageThumbnailFlowTest(TestCase):
             command_output,
         )
         self.assertIn("Done: processed=1, skipped=1, failed=1, total=3, force=False", command_output)
+
+
+class ProductImageThumbnailSignalModeTest(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name="Тестовая категория сигналов")
+        self.product = Product.objects.create(name="Тестовый товар", category=self.category)
+
+    @staticmethod
+    def _upload(name: str = "signal.png", image_format: str = "PNG") -> SimpleUploadedFile:
+        buffer = BytesIO()
+        Image.new("RGB", (1300, 1300), color=(25, 85, 180)).save(buffer, format=image_format)
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+    @override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="async")
+    def test_signal_enqueues_thumbnail_generation_in_async_mode(self):
+        with mock.patch("store.signals.generate_product_thumbnail.delay") as delay_mock:
+            with mock.patch("store.signals.ProductImageThumbnailService.ensure_thumbnail") as ensure_mock:
+                with self.captureOnCommitCallbacks(execute=True):
+                    image = ProductImage.objects.create(product=self.product, image=self._upload())
+
+        delay_mock.assert_called_once_with(image.pk)
+        ensure_mock.assert_not_called()
+
+    @override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="sync")
+    def test_signal_skips_thumbnail_generation_for_alt_text_only_update(self):
+        with mock.patch("store.signals.ProductImageThumbnailService.ensure_thumbnail", return_value=True):
+            image = ProductImage.objects.create(product=self.product, image=self._upload(name="initial.png"))
+
+        with mock.patch("store.signals.ProductImageThumbnailService.ensure_thumbnail") as ensure_mock:
+            image.alt_text = "Обновили описание"
+            image.save(update_fields=["alt_text"])
+
+        ensure_mock.assert_not_called()
