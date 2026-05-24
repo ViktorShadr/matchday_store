@@ -67,7 +67,9 @@ class ProductCardPresenter:
 
         product.gallery_images = images
         product.display_image = (
-            first_image.image if first_image else getattr(getattr(first_variant, "image", None), "image", None)
+            first_image.catalog_image
+            if first_image
+            else getattr(getattr(first_variant, "image", None), "catalog_image", None)
         )
         price_source = available_variants if available_variants else variants
         if price_source:

@@ -110,9 +110,9 @@ class ProductImageFormValidationTest(TestCase):
     """Тесты ограничений загрузки изображений товара."""
 
     @staticmethod
-    def _image_upload(name="product.png", content_type="image/png", extra_bytes=b""):
+    def _image_upload(name="product.png", content_type="image/png", extra_bytes=b"", size=(1200, 1200)):
         image_buffer = BytesIO()
-        Image.new("RGB", (1, 1), color="white").save(image_buffer, format="PNG")
+        Image.new("RGB", size, color="white").save(image_buffer, format="PNG")
         return SimpleUploadedFile(name, image_buffer.getvalue() + extra_bytes, content_type=content_type)
 
     def test_accepts_valid_image(self):

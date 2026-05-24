@@ -14,7 +14,13 @@
                     <div class="swiper-wrapper">
                         {% for image in product.gallery_images %}
                             <a href="{% url 'store:product_detail' pk=product.pk %}" class="swiper-slide sf-product-card-image-link">
-                                <img src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}" loading="lazy">
+                                <img
+                                    src="{{ image.catalog_image.url }}"
+                                    alt="{{ image.alt_text|default:product.name }}"
+                                    loading="lazy"
+                                    width="1200"
+                                    height="1200"
+                                >
                             </a>
                         {% endfor %}
                     </div>
@@ -36,6 +42,8 @@
                         src="{{ product.display_image.url }}"
                         alt="{{ product.name }}"
                         loading="lazy"
+                        width="1200"
+                        height="1200"
                     >
                 </a>
             {% else %}
