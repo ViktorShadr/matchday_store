@@ -1100,9 +1100,9 @@ class WarehouseStockManagementTest(TestCase):
         response = self.client.get(reverse("store:warehouse_image_create", kwargs={"product_pk": self.product.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "id=\"imagePreviewContainer\"", html=False)
-        self.assertContains(response, "id=\"replaceImageButton\"", html=False)
-        self.assertContains(response, "id=\"clearImageButton\"", html=False)
+        self.assertContains(response, 'id="imagePreviewContainer"', html=False)
+        self.assertContains(response, 'id="replaceImageButton"', html=False)
+        self.assertContains(response, 'id="clearImageButton"', html=False)
 
 
 class DashboardOrdersManagementTest(TestCase):
