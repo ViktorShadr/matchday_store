@@ -9,6 +9,7 @@ from PIL import Image
 from store.forms import ProductImageForm
 from store.models import Category, Product, ProductImage
 from store.services.product_image_thumbnails import ProductImageProcessingError, ProductImageThumbnailService
+from store.tasks import generate_product_thumbnail
 
 
 @override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="sync")
@@ -122,6 +123,18 @@ class ProductImageThumbnailFlowTest(TestCase):
         image.refresh_from_db()
         self.assertEqual(image.thumbnail.name, thumbnail_name)
 
+    def test_catalog_image_does_not_call_storage_size(self):
+        upload = self._upload_from_image(Image.new("RGB", (1300, 1300), color=(20, 90, 210)), name="hot-path.png")
+        image = ProductImage.objects.create(product=self.product, image=upload)
+        image.refresh_from_db()
+
+        with mock.patch.object(
+            image.image.storage,
+            "size",
+            side_effect=AssertionError("catalog_image must not call storage.size"),
+        ):
+            self.assertEqual(image.catalog_image.name, image.thumbnail.name)
+
     def test_metadata_save_is_not_blocked_by_unexpected_thumbnail_errors(self):
         upload = self._upload_from_image(Image.new("RGB", (1300, 1300), color=(30, 90, 200)), name="safe-save.png")
         image = ProductImage.objects.create(product=self.product, image=upload, alt_text="before")
@@ -221,11 +234,12 @@ class ProductImageThumbnailSignalModeTest(TestCase):
         ensure_mock.assert_not_called()
 
     @override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="async")
-    def test_signal_clears_stale_thumbnail_before_async_enqueue_on_image_replace(self):
+    def test_signal_keeps_old_thumbnail_path_for_async_cleanup_on_image_replace(self):
         with override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="sync"):
             image = ProductImage.objects.create(product=self.product, image=self._upload(name="before.png"))
         image.refresh_from_db()
         self.assertTrue(bool(image.thumbnail.name))
+        old_thumbnail_name = image.thumbnail.name
 
         with mock.patch("store.signals.generate_product_thumbnail.delay") as delay_mock:
             with self.captureOnCommitCallbacks(execute=True):
@@ -233,8 +247,27 @@ class ProductImageThumbnailSignalModeTest(TestCase):
                 image.save(update_fields=["image"])
 
         image.refresh_from_db()
-        self.assertEqual(image.thumbnail.name, "")
+        self.assertEqual(image.thumbnail.name, old_thumbnail_name)
         self.assertEqual(image.thumbnail_source_name, "")
         self.assertIsNone(image.thumbnail_source_size)
         self.assertEqual(image.catalog_image.name, image.image.name)
         delay_mock.assert_called_once_with(image.pk)
+
+    @override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="async")
+    def test_async_regeneration_deletes_old_thumbnail_when_name_changes(self):
+        with override_settings(PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE="sync"):
+            image = ProductImage.objects.create(product=self.product, image=self._upload(name="before.png"))
+        image.refresh_from_db()
+        old_thumbnail_name = image.thumbnail.name
+        self.assertTrue(image.thumbnail.storage.exists(old_thumbnail_name))
+
+        with mock.patch("store.signals.generate_product_thumbnail.delay"):
+            with self.captureOnCommitCallbacks(execute=True):
+                image.image = self._upload(name="after.png")
+                image.save(update_fields=["image"])
+
+        generate_product_thumbnail(image.pk)
+
+        image.refresh_from_db()
+        self.assertNotEqual(image.thumbnail.name, old_thumbnail_name)
+        self.assertFalse(image.thumbnail.storage.exists(old_thumbnail_name))

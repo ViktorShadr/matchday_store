@@ -74,11 +74,9 @@ def _clear_stale_thumbnail_metadata(instance: ProductImage) -> None:
         return
 
     ProductImage.objects.filter(pk=instance.pk).update(
-        thumbnail="",
         thumbnail_source_name="",
         thumbnail_source_size=None,
     )
-    instance.thumbnail.name = ""
     instance.thumbnail_source_name = ""
     instance.thumbnail_source_size = None
 
