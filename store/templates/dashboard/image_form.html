@@ -1,4 +1,5 @@
 {% extends 'main_page/base.html' %}
+{% load static %}
 
 {% block title %}{{ page_title }}{% endblock %}
 
@@ -16,7 +17,7 @@
                 <div class="col-12 col-lg-8">
                     <div class="sf-surface p-4">
                         <div class="small text-muted mb-3">Товар: {{ product.name }}</div>
-                        <form method="post" enctype="multipart/form-data">
+                        <form method="post" enctype="multipart/form-data" data-image-preview-root>
                             {% csrf_token %}
                             {{ form.non_field_errors }}
                             <div class="mb-3">
@@ -24,20 +25,21 @@
                                 {{ form.image }}
                                 {{ form.image.errors }}
                             </div>
-                            <div class="mb-3 d-none" id="imagePreviewContainer">
+                            <div class="mb-3 d-none" id="imagePreviewContainer" data-image-preview-container>
                                 <div class="border rounded-3 p-3 bg-light">
                                     <div class="small text-muted mb-2">Превью</div>
                                     <img
                                         id="imagePreview"
                                         class="img-fluid rounded-3"
                                         alt="Превью выбранного изображения"
+                                        data-image-preview-image
                                     >
-                                    <div class="small text-muted mt-2" id="imagePreviewName"></div>
+                                    <div class="small text-muted mt-2" id="imagePreviewName" data-image-preview-name></div>
                                     <div class="d-flex gap-2 mt-3 flex-wrap">
-                                        <button type="button" class="btn btn-outline-primary btn-sm" id="replaceImageButton">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="replaceImageButton" data-image-preview-replace>
                                             Заменить фото
                                         </button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clearImageButton">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clearImageButton" data-image-preview-clear>
                                             Убрать фото
                                         </button>
                                     </div>
@@ -62,62 +64,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-    <script>
-        (function () {
-            const imageInput = document.getElementById("{{ form.image.id_for_label }}");
-            const previewContainer = document.getElementById("imagePreviewContainer");
-            const previewImage = document.getElementById("imagePreview");
-            const previewName = document.getElementById("imagePreviewName");
-            const replaceImageButton = document.getElementById("replaceImageButton");
-            const clearImageButton = document.getElementById("clearImageButton");
-
-            if (!imageInput || !previewContainer || !previewImage || !previewName) {
-                return;
-            }
-
-            let objectUrl = null;
-
-            const resetPreview = () => {
-                if (objectUrl) {
-                    URL.revokeObjectURL(objectUrl);
-                    objectUrl = null;
-                }
-                previewImage.removeAttribute("src");
-                previewName.textContent = "";
-                previewContainer.classList.add("d-none");
-            };
-
-            const showPreview = (file) => {
-                if (!file || !file.type.startsWith("image/")) {
-                    resetPreview();
-                    return;
-                }
-                if (objectUrl) {
-                    URL.revokeObjectURL(objectUrl);
-                }
-                objectUrl = URL.createObjectURL(file);
-                previewImage.src = objectUrl;
-                previewName.textContent = file.name;
-                previewContainer.classList.remove("d-none");
-            };
-
-            imageInput.addEventListener("change", () => {
-                const [file] = imageInput.files || [];
-                showPreview(file);
-            });
-
-            if (replaceImageButton) {
-                replaceImageButton.addEventListener("click", () => {
-                    imageInput.click();
-                });
-            }
-
-            if (clearImageButton) {
-                clearImageButton.addEventListener("click", () => {
-                    imageInput.value = "";
-                    resetPreview();
-                });
-            }
-        })();
-    </script>
+    <script src="{% static 'js/dashboard-image-preview.js' %}?v=1"></script>
 {% endblock %}
