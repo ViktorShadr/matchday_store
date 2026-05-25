@@ -278,7 +278,7 @@ _CSP_DIRECTIVES = {
     "base-uri": [SELF],
     "form-action": [SELF],
     "frame-ancestors": [SELF],
-    "img-src": [SELF, "data:"],
+    "img-src": [SELF, "data:", "blob:"],
     "font-src": [SELF, "data:"],
     "script-src": [SELF, NONCE, "https://cdn.jsdelivr.net"],
     "style-src": [SELF, "'unsafe-inline'", "https://cdn.jsdelivr.net"],
