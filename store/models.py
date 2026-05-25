@@ -209,7 +209,24 @@ class ProductImage(models.Model):
         Возвращает оптимизированное изображение для витрины
         или оригинал, если thumbnail еще не сгенерирован.
         """
-        return self.thumbnail or self.image
+        if self._is_thumbnail_current():
+            return self.thumbnail
+        return self.image
+
+    def _is_thumbnail_current(self) -> bool:
+        thumbnail_name = self.thumbnail.name
+        if not thumbnail_name:
+            return False
+        if self.thumbnail_source_name != self.image.name:
+            return False
+        return self.thumbnail_source_size == self._safe_image_file_size(self.image)
+
+    @staticmethod
+    def _safe_image_file_size(image_field) -> int | None:
+        try:
+            return int(image_field.size)
+        except (OSError, ValueError, TypeError):
+            return None
 
     class Meta:
         """Мета-настройки класса."""
