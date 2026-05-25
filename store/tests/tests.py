@@ -1103,6 +1103,8 @@ class WarehouseStockManagementTest(TestCase):
         self.assertContains(response, 'id="imagePreviewContainer"', html=False)
         self.assertContains(response, 'id="replaceImageButton"', html=False)
         self.assertContains(response, 'id="clearImageButton"', html=False)
+        self.assertContains(response, 'src="/static/js/dashboard-image-preview.js?v=1"', html=False)
+        self.assertNotContains(response, "URL.createObjectURL(", html=False)
 
 
 class DashboardOrdersManagementTest(TestCase):
