@@ -217,16 +217,7 @@ class ProductImage(models.Model):
         thumbnail_name = self.thumbnail.name
         if not thumbnail_name:
             return False
-        if self.thumbnail_source_name != self.image.name:
-            return False
-        return self.thumbnail_source_size == self._safe_image_file_size(self.image)
-
-    @staticmethod
-    def _safe_image_file_size(image_field) -> int | None:
-        try:
-            return int(image_field.size)
-        except (OSError, ValueError, TypeError):
-            return None
+        return self.thumbnail_source_name == self.image.name
 
     class Meta:
         """Мета-настройки класса."""

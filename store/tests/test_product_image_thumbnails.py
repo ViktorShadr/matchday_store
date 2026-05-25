@@ -123,6 +123,18 @@ class ProductImageThumbnailFlowTest(TestCase):
         image.refresh_from_db()
         self.assertEqual(image.thumbnail.name, thumbnail_name)
 
+    def test_catalog_image_does_not_call_storage_size(self):
+        upload = self._upload_from_image(Image.new("RGB", (1300, 1300), color=(20, 90, 210)), name="hot-path.png")
+        image = ProductImage.objects.create(product=self.product, image=upload)
+        image.refresh_from_db()
+
+        with mock.patch.object(
+            image.image.storage,
+            "size",
+            side_effect=AssertionError("catalog_image must not call storage.size"),
+        ):
+            self.assertEqual(image.catalog_image.name, image.thumbnail.name)
+
     def test_metadata_save_is_not_blocked_by_unexpected_thumbnail_errors(self):
         upload = self._upload_from_image(Image.new("RGB", (1300, 1300), color=(30, 90, 200)), name="safe-save.png")
         image = ProductImage.objects.create(product=self.product, image=upload, alt_text="before")
