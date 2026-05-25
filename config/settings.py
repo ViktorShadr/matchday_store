@@ -259,6 +259,12 @@ STOCK_RESERVE_MODE_ENABLED = env_bool("STOCK_RESERVE_MODE_ENABLED", True)
 ORDER_PICKUP_RETENTION_BUSINESS_DAYS = int(os.getenv("ORDER_PICKUP_RETENTION_BUSINESS_DAYS", "3"))
 ORDER_AUTO_CANCEL_BATCH_SIZE = int(os.getenv("ORDER_AUTO_CANCEL_BATCH_SIZE", "100"))
 ORDER_AUTO_CANCEL_INTERVAL_SECONDS = int(os.getenv("ORDER_AUTO_CANCEL_INTERVAL_SECONDS", "900"))
+default_thumbnail_generation_mode = "sync" if DEBUG else "async"
+PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE = (
+    os.getenv("PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE", default_thumbnail_generation_mode).strip().lower()
+)
+if PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE not in {"sync", "async"}:
+    raise ValueError("PRODUCT_IMAGE_THUMBNAIL_GENERATION_MODE must be 'sync' or 'async'")
 
 CELERY_BEAT_SCHEDULE = {
     "auto-cancel-expired-pickup-orders": {

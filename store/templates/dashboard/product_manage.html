@@ -155,7 +155,7 @@
                                 <div class="col-12 col-md-6">
                                     <div class="border rounded-4 p-3 h-100">
                                         {% if image.image %}
-                                            <img class="img-fluid rounded-4 mb-3" src="{{ image.image.url }}" alt="{{ image.alt_text|default:product.name }}">
+                                            <img class="img-fluid rounded-4 mb-3" src="{{ image.catalog_image.url }}" alt="{{ image.alt_text|default:product.name }}">
                                         {% endif %}
                                         <div class="small text-muted mb-2">{{ image.alt_text|default:'Без описания' }}</div>
                                         {% if image.is_primary %}

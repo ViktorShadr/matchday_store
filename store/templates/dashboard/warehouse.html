@@ -94,7 +94,7 @@
                                         <td>
                                             <div class="sf-product-thumb">
                                                 {% if product.preview_image %}
-                                                    <img src="{{ product.preview_image.image.url }}" alt="{{ product.preview_image.alt_text|default:product.name }}">
+                                                    <img src="{{ product.preview_image.catalog_image.url }}" alt="{{ product.preview_image.alt_text|default:product.name }}">
                                                 {% else %}
                                                     <span class="sf-product-thumb-placeholder">—</span>
                                                 {% endif %}
