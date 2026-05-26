@@ -85,42 +85,44 @@
             {% endwith %}
 
             <div class="sf-product-info">
-                {% if product.category %}
-                    <div class="sf-product-category">
-                        {{ product.category.name }}
-                    </div>
-                {% endif %}
-
-                <h1 class="sf-product-title">{{ product.name }}</h1>
-
-                <div class="sf-product-meta-row">
-                    {% if product.in_stock %}
-                        <span class="sf-stock-badge sf-stock-badge--success">В наличии</span>
-                    {% else %}
-                        <span class="sf-stock-badge sf-stock-badge--muted">Нет в наличии</span>
+                <div class="sf-product-primary-info">
+                    {% if product.category %}
+                        <div class="sf-product-category">
+                            {{ product.category.name }}
+                        </div>
                     {% endif %}
-                </div>
 
-                {% if product.short_description %}
-                    <p class="sf-product-short-description">
-                        {{ product.short_description }}
-                    </p>
-                {% endif %}
+                    <h1 class="sf-product-title">{{ product.name }}</h1>
 
-                <div class="sf-product-price-block">
-                    <div class="sf-price sf-price--xl">
-                        {% if product.display_price %}
-                            {{ product.display_price }} ₽
+                    <div class="sf-product-meta-row">
+                        {% if product.in_stock %}
+                            <span class="sf-stock-badge sf-stock-badge--success">В наличии</span>
                         {% else %}
-                            —
+                            <span class="sf-stock-badge sf-stock-badge--muted">Нет в наличии</span>
                         {% endif %}
                     </div>
 
-                    {% if product.old_price %}
-                        <div class="sf-price-old sf-price-old--lg">
-                            {{ product.old_price }} ₽
-                        </div>
+                    {% if product.short_description %}
+                        <p class="sf-product-short-description">
+                            {{ product.short_description }}
+                        </p>
                     {% endif %}
+
+                    <div class="sf-product-price-block">
+                        <div class="sf-price sf-price--xl">
+                            {% if product.display_price %}
+                                {{ product.display_price }} ₽
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+
+                        {% if product.old_price %}
+                            <div class="sf-price-old sf-price-old--lg">
+                                {{ product.old_price }} ₽
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
 
                 <div class="sf-product-actions">
@@ -128,8 +130,8 @@
                         <form method="post" action="{% url 'store:add_to_cart' %}" class="sf-product-buy-form" data-sf-product-buy-form>
                             {% csrf_token %}
                             {% if available_variants|length > 1 %}
-                                <div class="mb-3">
-                                    <label class="form-label" for="variantSelect">Выберите вариант</label>
+                                <div class="sf-product-variant-picker">
+                                    <label class="form-label sf-product-variant-label" for="variantSelect">Выберите вариант</label>
                                     <select id="variantSelect" name="variant_id" class="form-select" data-sf-variant-select>
                                         {% for variant in available_variants %}
                                             <option
@@ -142,7 +144,7 @@
                                         {% endfor %}
                                     </select>
                                     {% with quantity=available_variants.0.available_quantity %}
-                                        <div class="mt-2" data-sf-variant-stock-wrap aria-live="polite"{% if quantity > 5 %} hidden{% endif %}>
+                                        <div class="sf-product-variant-stock" data-sf-variant-stock-wrap aria-live="polite"{% if quantity > 5 %} hidden{% endif %}>
                                             <span
                                                 class="sf-stock-badge {% if quantity <= 0 %}sf-stock-badge--out{% else %}sf-stock-badge--low{% endif %}"
                                                 data-sf-variant-stock-badge
@@ -160,20 +162,20 @@
                                 </div>
                             {% else %}
                                 <input type="hidden" name="variant_id" value="{{ available_variants.0.id }}">
-                                <div class="small text-muted mb-2">
+                                <div class="sf-product-variant-static">
                                     Размер: {{ available_variants.0.size|default:'Без размера' }} · Цвет: {{ available_variants.0.color|default:'Без цвета' }}
                                 </div>
                                 {% with quantity=available_variants.0.available_quantity %}
                                     {% if quantity <= 0 %}
-                                        <div class="mb-3" aria-live="polite">
+                                        <div class="sf-product-variant-static-stock" aria-live="polite">
                                             <span class="sf-stock-badge sf-stock-badge--out">Нет в наличии</span>
                                         </div>
                                     {% elif quantity == 1 %}
-                                        <div class="mb-3" aria-live="polite">
+                                        <div class="sf-product-variant-static-stock" aria-live="polite">
                                             <span class="sf-stock-badge sf-stock-badge--low">Последний товар</span>
                                         </div>
                                     {% elif quantity <= 5 %}
-                                        <div class="mb-3" aria-live="polite">
+                                        <div class="sf-product-variant-static-stock" aria-live="polite">
                                             <span class="sf-stock-badge sf-stock-badge--low">Осталось мало</span>
                                         </div>
                                     {% endif %}
@@ -201,24 +203,20 @@
                             Временно недоступно
                         </button>
                     {% endif %}
-
-                    <a href="{% url 'store:product_list' %}" class="btn btn-secondary btn-lg sf-product-back-link">
-                        Вернуться в каталог
-                    </a>
                 </div>
 
                 {% if product.material or product.care_instructions or product.size_guide or variants %}
-                    <div class="sf-product-inline-description mb-3">
+                    <div class="sf-product-inline-description sf-product-inline-description--specs">
                         <h2 class="sf-product-section-title sf-product-section-title--compact">Характеристики</h2>
-                        <div class="d-grid gap-2">
+                        <div class="d-grid gap-2 sf-product-specs-grid">
                             {% if product.material %}
-                                <div class="d-flex justify-content-between gap-3">
+                                <div class="d-flex justify-content-between gap-3 sf-product-spec-row">
                                     <span class="text-muted">Материал</span>
                                     <strong class="text-end">{{ product.material }}</strong>
                                 </div>
                             {% endif %}
                             {% if variants %}
-                                <div class="d-flex justify-content-between gap-3">
+                                <div class="d-flex justify-content-between gap-3 sf-product-spec-row">
                                     <span class="text-muted">Размеры</span>
                                     <strong class="text-end">
                                         {% for variant in variants %}
@@ -228,13 +226,13 @@
                                 </div>
                             {% endif %}
                             {% if product.size_guide %}
-                                <div>
+                                <div class="sf-product-spec-block">
                                     <div class="text-muted mb-1">Размерная сетка</div>
                                     <div class="small">{{ product.size_guide|linebreaksbr }}</div>
                                 </div>
                             {% endif %}
                             {% if product.care_instructions %}
-                                <div>
+                                <div class="sf-product-spec-block">
                                     <div class="text-muted mb-1">Уход</div>
                                     <div class="small">{{ product.care_instructions|linebreaksbr }}</div>
                                 </div>
@@ -243,7 +241,7 @@
                     </div>
                 {% endif %}
 
-                <div class="sf-product-inline-description">
+                <div class="sf-product-inline-description sf-product-inline-description--about">
                     <h2 class="sf-product-section-title sf-product-section-title--compact">Описание товара</h2>
 
                     {% if product.description %}
@@ -256,6 +254,10 @@
                         </div>
                     {% endif %}
                 </div>
+
+                <a href="{% url 'store:product_list' %}" class="btn btn-secondary btn-lg sf-product-back-link">
+                    Вернуться в каталог
+                </a>
             </div>
         </div>
     </div>
