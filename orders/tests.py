@@ -2147,6 +2147,23 @@ class OrderStaffNotificationTaskTest(TestCase):
             line_total=Decimal("7000.00"),
         )
 
+    def _create_guest_order(self, *, number: str = "ORD-GUEST-1") -> Order:
+        return Order.objects.create(
+            number=number,
+            user=None,
+            recipient_name="Гость",
+            email="guest-buyer@example.com",
+            phone="+79990000002",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("3500.00"),
+            total_amount=Decimal("3500.00"),
+            confirmed_at=timezone.now(),
+        )
+
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
         STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com", "staff2@example.com"],
@@ -2216,6 +2233,144 @@ class OrderStaffNotificationTaskTest(TestCase):
         result = send_staff_new_order_notification_sync(self.order.id)
 
         self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_sends_email_for_supported_events(self, mock_send_mail):
+        expected_subject_parts = {
+            "created": "принят",
+            "cancelled": "отменен",
+            "ready": "готов к выдаче",
+            "paid": "подтверждена",
+        }
+
+        for event_key, expected_subject_part in expected_subject_parts.items():
+            with self.subTest(event_key=event_key):
+                mock_send_mail.reset_mock()
+                result = send_order_notification_sync(self.order.id, event_key)
+
+                self.assertTrue(result)
+                mock_send_mail.assert_called_once()
+                kwargs = mock_send_mail.call_args.kwargs
+                self.assertEqual(kwargs["recipient_list"], [self.order.email])
+                self.assertIn(self.order.number, kwargs["subject"])
+                self.assertIn(expected_subject_part, kwargs["subject"])
+                self.assertIn("Заказ:", kwargs["message"])
+                self.assertIn("Сумма:", kwargs["message"])
+                self.assertIn(reverse("users:order_detail", kwargs={"pk": self.order.pk}), kwargs["message"])
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_guest_created_includes_registration_hint(self, mock_send_mail):
+        guest_order = self._create_guest_order()
+
+        result = send_order_notification_sync(guest_order.id, "created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        message = mock_send_mail.call_args.kwargs["message"]
+        self.assertIn("Сохраните номер заказа для связи с магазином.", message)
+        self.assertIn(
+            "После регистрации и подтверждения почты " "заказ появится в личном кабинете.",
+            message,
+        )
+        self.assertNotIn(reverse("users:order_detail", kwargs={"pk": guest_order.pk}), message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_guest_non_created_excludes_registration_hint(self, mock_send_mail):
+        guest_order = self._create_guest_order(number="ORD-GUEST-2")
+
+        for event_key in ("cancelled", "ready", "paid"):
+            with self.subTest(event_key=event_key):
+                mock_send_mail.reset_mock()
+                result = send_order_notification_sync(guest_order.id, event_key)
+
+                self.assertTrue(result)
+                mock_send_mail.assert_called_once()
+                message = mock_send_mail.call_args.kwargs["message"]
+                self.assertIn("Сохраните номер заказа для связи с магазином.", message)
+                self.assertNotIn(
+                    "После регистрации и подтверждения почты " "заказ появится в личном кабинете.",
+                    message,
+                )
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+        STORE_SUPPORT_EMAIL=("Магазин атрибутики ФК Шинник " "[mail@shinnik-shop.ru](mailto:mail@shinnik-shop.ru)"),
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_cancelled_uses_plain_support_email(self, mock_send_mail):
+        result = send_order_notification_sync(self.order.id, "cancelled")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        message = mock_send_mail.call_args.kwargs["message"]
+        self.assertIn("Написать в поддержку: mail@shinnik-shop.ru", message)
+        self.assertNotIn("(mailto:", message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.error")
+    @patch("orders.tasks.send_mail")
+    def test_send_order_notification_sync_returns_false_on_unsupported_event_key(
+        self,
+        mock_send_mail,
+        mock_logger_error,
+    ):
+        result = send_order_notification_sync(self.order.id, "unexpected_status")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_not_called()
+        mock_logger_error.assert_called_once()
+        log_extra = mock_logger_error.call_args.kwargs["extra"]
+        self.assertEqual(log_extra["order_id"], self.order.id)
+        self.assertEqual(log_extra["event_key"], "unexpected_status")
+        self.assertEqual(log_extra["reason"], "unsupported_event_key")
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.error")
+    @patch("orders.tasks.send_mail", return_value=0)
+    def test_send_order_notification_sync_returns_false_when_send_mail_returns_zero(
+        self,
+        mock_send_mail,
+        mock_logger_error,
+    ):
+        result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_error.assert_called_once()
+        log_extra = mock_logger_error.call_args.kwargs["extra"]
+        self.assertEqual(log_extra["order_id"], self.order.id)
+        self.assertEqual(log_extra["event_key"], "created")
+        self.assertEqual(log_extra["reason"], "send_mail_returned_zero")
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=0)
+    def test_send_order_notification_sync_raises_on_zero_send_count_when_raise_on_error(self, mock_send_mail):
+        with self.assertRaises(NotificationDeliveryError):
+            send_order_notification_sync(self.order.id, "created", raise_on_error=True)
+
         mock_send_mail.assert_called_once()
 
     @override_settings(

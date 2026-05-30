@@ -1,4 +1,6 @@
 import logging
+import re
+from email.utils import parseaddr
 
 from celery import shared_task
 from django.conf import settings
@@ -16,6 +18,7 @@ from store.site_contacts import format_business_days_label
 
 logger = logging.getLogger(__name__)
 STAFF_NEW_ORDER_EVENT_KEY = "staff_created"
+EMAIL_ADDRESS_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 
 def _log_notification_error(
@@ -35,9 +38,9 @@ def _log_notification_error(
     )
     if reason == "smtp_permanent_failure":
         event_name = f"{base_event_name}.permanent"
-    elif reason == "send_mail_failed":
+    elif reason in {"send_mail_failed", "send_mail_returned_zero"}:
         event_name = f"{base_event_name}.transient"
-    elif reason == "invalid_default_from_email":
+    elif reason in {"invalid_default_from_email", "unsupported_event_key"}:
         event_name = f"{base_event_name}.configuration"
     else:
         event_name = base_event_name
@@ -64,23 +67,42 @@ def _build_dashboard_order_detail_url(order: Order) -> str:
     return f"{settings.SITE_URL}{reverse('store:dashboard_order_detail', kwargs={'pk': order.pk})}"
 
 
-def _build_order_notification_content(order: Order, event_key: str) -> tuple[str, str]:
-    order_number = order.number or str(order.pk)
-    brand_name = settings.STORE_BRAND_NAME
-    pickup_retention_label = format_business_days_label(settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS)
+def _resolve_support_email_for_notifications() -> str:
+    configured_value = (getattr(settings, "STORE_SUPPORT_EMAIL", "") or "").strip()
+    if not configured_value:
+        return (getattr(settings, "DEFAULT_FROM_EMAIL", "") or "").strip()
+
+    _, parsed_email = parseaddr(configured_value)
+    if parsed_email and "@" in parsed_email:
+        return parsed_email.strip()
+
+    match = EMAIL_ADDRESS_RE.search(configured_value)
+    if match:
+        return match.group(0)
+
+    return configured_value
+
+
+def _build_order_notification_base_lines(order: Order, event_key: str) -> list[str]:
     base_lines = [
-        f"Заказ: {order_number}",
+        f"Заказ: {order.number or order.pk}",
         f"Сумма: {order.total_amount} {order.currency}",
     ]
     if order.user_id:
         base_lines.append(f"Детали заказа: {_build_order_detail_url(order)}")
-    else:
-        base_lines.extend(
-            [
-                "Сохраните номер заказа для связи с магазином.",
-                "После регистрации и подтверждения этого email заказ появится в личном кабинете.",
-            ]
-        )
+        return base_lines
+
+    base_lines.append("Сохраните номер заказа для связи с магазином.")
+    if event_key == "created":
+        base_lines.append("После регистрации и подтверждения почты " "заказ появится в личном кабинете.")
+    return base_lines
+
+
+def _build_order_notification_content(order: Order, event_key: str) -> tuple[str, str]:
+    order_number = order.number or str(order.pk)
+    brand_name = settings.STORE_BRAND_NAME
+    pickup_retention_label = format_business_days_label(settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS)
+    base_lines = _build_order_notification_base_lines(order, event_key)
 
     if event_key == "created":
         subject = f"Заказ {order_number} принят"
@@ -98,9 +120,9 @@ def _build_order_notification_content(order: Order, event_key: str) -> tuple[str
         subject = f"Заказ {order_number} отменен"
         lines = [
             "Ваш заказ отменен.",
-            "Если отмена произошла по ошибке, оформите новый заказ или свяжитесь с магазином.",
+            "Если отмена произошла по ошибке, оформите новый заказ или свяжитесь с нами.",
             f"Телефон магазина: {settings.STORE_PICKUP_PHONE}",
-            f"Email поддержки: {settings.STORE_SUPPORT_EMAIL}",
+            f"Написать в поддержку: {_resolve_support_email_for_notifications()}",
         ]
     elif event_key == "ready":
         subject = f"Заказ {order_number} готов к выдаче"
@@ -230,16 +252,32 @@ def send_order_notification_sync(
         )
         return False
 
-    subject, message = _build_order_notification_content(order, event_key)
+    try:
+        subject, message = _build_order_notification_content(order, event_key)
+    except ValueError:
+        _log_notification_error(
+            order_id,
+            event_key,
+            "unsupported_event_key",
+            error_type="ValueError",
+            task=task,
+            retries=retries,
+        )
+        return False
 
     try:
-        send_mail(
+        sent_count = send_mail(
             subject=subject,
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[order.email],
             fail_silently=False,
         )
+        if sent_count == 0:
+            _log_notification_error(order_id, event_key, "send_mail_returned_zero", task=task, retries=retries)
+            if raise_on_error:
+                raise NotificationDeliveryError("Не удалось отправить email-уведомление по заказу")
+            return False
         logger.info(
             "order.notification_sent",
             extra=build_email_delivery_log_extra(
@@ -251,6 +289,8 @@ def send_order_notification_sync(
             ),
         )
         return True
+    except NotificationDeliveryError:
+        raise
     except Exception as exc:
         is_permanent_error = is_permanent_email_delivery_error(exc)
         _log_notification_error(
