@@ -2278,8 +2278,7 @@ class OrderStaffNotificationTaskTest(TestCase):
         message = mock_send_mail.call_args.kwargs["message"]
         self.assertIn("Сохраните номер заказа для связи с магазином.", message)
         self.assertIn(
-            "После регистрации и подтверждения этого email "
-            "заказ появится в личном кабинете.",
+            "После регистрации и подтверждения почты " "заказ появится в личном кабинете.",
             message,
         )
         self.assertNotIn(reverse("users:order_detail", kwargs={"pk": guest_order.pk}), message)
@@ -2302,18 +2301,14 @@ class OrderStaffNotificationTaskTest(TestCase):
                 message = mock_send_mail.call_args.kwargs["message"]
                 self.assertIn("Сохраните номер заказа для связи с магазином.", message)
                 self.assertNotIn(
-                    "После регистрации и подтверждения этого email "
-                    "заказ появится в личном кабинете.",
+                    "После регистрации и подтверждения почты " "заказ появится в личном кабинете.",
                     message,
                 )
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
         SITE_URL="http://localhost:8000",
-        STORE_SUPPORT_EMAIL=(
-            "Магазин атрибутики ФК Шинник "
-            "[mail@shinnik-shop.ru](mailto:mail@shinnik-shop.ru)"
-        ),
+        STORE_SUPPORT_EMAIL=("Магазин атрибутики ФК Шинник " "[mail@shinnik-shop.ru](mailto:mail@shinnik-shop.ru)"),
     )
     @patch("orders.tasks.send_mail", return_value=1)
     def test_send_order_notification_sync_cancelled_uses_plain_support_email(self, mock_send_mail):
@@ -2322,7 +2317,7 @@ class OrderStaffNotificationTaskTest(TestCase):
         self.assertTrue(result)
         mock_send_mail.assert_called_once()
         message = mock_send_mail.call_args.kwargs["message"]
-        self.assertIn("Email поддержки: mail@shinnik-shop.ru", message)
+        self.assertIn("Написать в поддержку: mail@shinnik-shop.ru", message)
         self.assertNotIn("(mailto:", message)
 
     @override_settings(

@@ -94,10 +94,7 @@ def _build_order_notification_base_lines(order: Order, event_key: str) -> list[s
 
     base_lines.append("Сохраните номер заказа для связи с магазином.")
     if event_key == "created":
-        base_lines.append(
-            "После регистрации и подтверждения почты "
-            "заказ появится в личном кабинете."
-        )
+        base_lines.append("После регистрации и подтверждения почты " "заказ появится в личном кабинете.")
     return base_lines
 
 
