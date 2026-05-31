@@ -242,6 +242,7 @@ class CheckoutFlowTest(TestCase):
         self.assertContains(success_response, "Личный кабинет")
         self.assertContains(success_response, "Зарегистрируйтесь с email guest@example.com")
         self.assertContains(success_response, reverse("users:registration"))
+        self.assertTrue(order.guest_manage_token)
 
     def test_guest_empty_cart_fallback_rechecks_idempotency_with_session_key(self):
         """Fallback гостевой корзины должен найти session-scoped payment."""
@@ -919,6 +920,204 @@ class CheckoutFlowTest(TestCase):
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.quantity, 10)
         self.assertEqual(self.variant.reserved_quantity, 3)
+
+
+class GuestOrderManagementTest(TestCase):
+    """Тесты защищённой ссылки управления гостевым заказом."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="registered@example.com",
+            password="testpass123",
+            first_name="Иван",
+            last_name="Иванов",
+            phone="+79990001122",
+            is_active=True,
+            is_email_confirmed=True,
+        )
+        self.category = Category.objects.create(name="Гостевые заказы")
+        self.product = Product.objects.create(name="Гостевой шарф", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("1500.00"),
+            quantity=5,
+        )
+
+    def _create_guest_order(
+        self,
+        *,
+        number: str = "ORD-GUEST-MANAGE-1",
+        status=Order.Status.PLACED,
+        payment_status=Order.PaymentStatus.PENDING,
+        fulfillment_status=Order.FulfillmentStatus.NEW,
+        quantity: int = 1,
+    ) -> Order:
+        order = Order.objects.create(
+            number=number,
+            user=None,
+            recipient_name="Гость Покупатель",
+            email="guest-manage@example.com",
+            phone="+79990001122",
+            status=status,
+            payment_status=payment_status,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+            subtotal_amount=self.variant.price * quantity,
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=self.variant.price * quantity,
+            confirmed_at=timezone.now(),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=quantity,
+            line_total=self.variant.price * quantity,
+        )
+        return order
+
+    def test_guest_manage_token_created_for_guest_order(self):
+        with patch("orders.models.secrets.token_urlsafe", return_value="fixed-guest-token") as mock_token_urlsafe:
+            order = self._create_guest_order(number="ORD-GUEST-TOKEN-1")
+
+        self.assertEqual(order.guest_manage_token, "fixed-guest-token")
+        mock_token_urlsafe.assert_called_once_with(32)
+
+    def test_registered_order_does_not_get_guest_manage_token(self):
+        order = Order.objects.create(
+            number="ORD-REGISTERED-TOKEN-1",
+            user=self.user,
+            recipient_name="Иван Иванов",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("1500.00"),
+        )
+
+        self.assertIsNone(order.guest_manage_token)
+
+    def test_guest_manage_link_opens_only_matching_order(self):
+        order = self._create_guest_order(number="ORD-GUEST-MANAGE-1")
+        other_order = self._create_guest_order(number="ORD-GUEST-MANAGE-2")
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": order.guest_manage_token}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ORD-GUEST-MANAGE-1")
+        self.assertContains(response, self.product.name)
+        self.assertNotContains(response, other_order.number)
+
+    def test_guest_manage_wrong_token_returns_404(self):
+        self._create_guest_order(number="ORD-GUEST-WRONG-TOKEN-1")
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "wrong-token"}))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_guest_can_cancel_order_with_allowed_status(self):
+        self.variant.reserved_quantity = 1
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        order = self._create_guest_order(number="ORD-GUEST-CANCEL-1")
+
+        response = self.client.post(
+            reverse("orders:guest_order_cancel", kwargs={"token": order.guest_manage_token}),
+            follow=True,
+        )
+
+        order.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertContains(response, "Заказ успешно отменен.")
+
+    def test_guest_cannot_cancel_completed_or_already_cancelled_order(self):
+        final_states = (
+            (
+                "ORD-GUEST-DELIVERED-1",
+                Order.Status.DELIVERED,
+                Order.PaymentStatus.SUCCEEDED,
+                Order.FulfillmentStatus.DELIVERED,
+            ),
+            (
+                "ORD-GUEST-CANCELLED-1",
+                Order.Status.CANCELLED,
+                Order.PaymentStatus.CANCELLED,
+                Order.FulfillmentStatus.CANCELLED,
+            ),
+        )
+
+        for number, status, payment_status, fulfillment_status in final_states:
+            with self.subTest(status=status):
+                self.variant.reserved_quantity = 1
+                self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+                order = self._create_guest_order(
+                    number=number,
+                    status=status,
+                    payment_status=payment_status,
+                    fulfillment_status=fulfillment_status,
+                )
+
+                response = self.client.post(
+                    reverse("orders:guest_order_cancel", kwargs={"token": order.guest_manage_token}),
+                    follow=True,
+                )
+
+                order.refresh_from_db()
+                self.variant.refresh_from_db()
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(order.status, status)
+                self.assertEqual(order.payment_status, payment_status)
+                self.assertEqual(order.fulfillment_status, fulfillment_status)
+                self.assertEqual(self.variant.reserved_quantity, 1)
+                self.assertContains(response, "Этот заказ уже нельзя отменить.")
+
+    def test_guest_cancel_releases_stock_reservation(self):
+        self.variant.reserved_quantity = 2
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        order = self._create_guest_order(number="ORD-GUEST-RELEASE-1", quantity=2)
+
+        self.client.post(reverse("orders:guest_order_cancel", kwargs={"token": order.guest_manage_token}))
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_guest_created_email_contains_manage_link(self, mock_send_mail):
+        order = self._create_guest_order(number="ORD-GUEST-EMAIL-LINK-1")
+        manage_url = (
+            f"{settings.SITE_URL}"
+            f"{reverse('orders:guest_order_detail', kwargs={'token': order.guest_manage_token})}"
+        )
+
+        result = send_order_notification_sync(order.id, "created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        message = mock_send_mail.call_args.kwargs["message"]
+        self.assertIn(manage_url, message)
+        self.assertIn(
+            "По этой ссылке можно посмотреть статус заказа или отменить заказ без регистрации. "
+            "Не передавайте ссылку третьим лицам.",
+            message,
+        )
+        self.assertNotIn(reverse("users:order_detail", kwargs={"pk": order.pk}), message)
 
 
 class OrderCancellationServiceTest(TestCase):
