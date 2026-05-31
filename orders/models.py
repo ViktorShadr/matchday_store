@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -66,6 +68,7 @@ class Order(models.Model):
         user (User): Пользователь, сделавший заказ (необязательно для гостевого заказа)
         email (str): Email заказчика
         phone (str): Номер телефона заказчика
+        guest_manage_token (str): Защищённый токен управления гостевым заказом
         status (str): Статус заказа (из Status.choices)
         payment_status (str): Статус оплаты (из PaymentStatus.choices)
         fulfillment_status (str): Статус исполнения (из FulfillmentStatus.choices)
@@ -140,6 +143,7 @@ class Order(models.Model):
     recipient_name = models.CharField(max_length=255, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=32)
+    guest_manage_token = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
     payment_status = models.CharField(
         max_length=32,
@@ -189,6 +193,32 @@ class Order(models.Model):
     def __str__(self):
         """Возвращает строковое представление объекта."""
         return f"Заказ {self.number}"
+
+    @staticmethod
+    def _include_update_field(kwargs, field_name: str) -> None:
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and field_name not in update_fields:
+            kwargs["update_fields"] = [*update_fields, field_name]
+
+    @classmethod
+    def generate_guest_manage_token(cls) -> str:
+        """Сгенерировать уникальный URL-safe токен управления гостевым заказом."""
+        for _ in range(10):
+            token = secrets.token_urlsafe(32)
+            if not cls.objects.filter(guest_manage_token=token).exists():
+                return token
+        raise RuntimeError("Failed to generate unique guest order manage token.")
+
+    def save(self, *args, **kwargs):
+        if self.user_id is None:
+            if not self.guest_manage_token:
+                self.guest_manage_token = self.generate_guest_manage_token()
+                self._include_update_field(kwargs, "guest_manage_token")
+        elif self.guest_manage_token:
+            self.guest_manage_token = None
+            self._include_update_field(kwargs, "guest_manage_token")
+
+        super().save(*args, **kwargs)
 
 
 class OrderStatusTransition(models.Model):
