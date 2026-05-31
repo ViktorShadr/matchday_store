@@ -23,7 +23,14 @@
                         Дата: {{ order.created_at|date:"d.m.Y H:i" }}
                     </p>
                 </div>
-                <a class="btn btn-outline-primary" href="{% url 'store:dashboard_orders' %}">Назад к заказам</a>
+                <div class="d-flex gap-2 flex-wrap sf-no-print">
+                    {% if perms.orders.view_order %}
+                        <a class="btn btn-primary" href="{% url 'store:dashboard_order_print' order.pk %}">
+                            Распечатать заказ
+                        </a>
+                    {% endif %}
+                    <a class="btn btn-outline-primary" href="{% url 'store:dashboard_orders' %}">Назад к заказам</a>
+                </div>
             </div>
 
             {% include 'dashboard/_tabs.html' %}

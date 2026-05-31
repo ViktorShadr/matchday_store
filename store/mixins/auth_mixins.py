@@ -34,3 +34,13 @@ class ModeratorRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         """Проверяет доступ пользователя к представлению."""
         return is_moderator_user(self.request.user)
+
+
+class StaffOrderViewPermissionMixin(LoginRequiredMixin, UserPassesTestMixin):
+    """Доступ для сотрудников с правом просмотра заказов."""
+
+    permission_required = "orders.view_order"
+
+    def test_func(self):
+        user = self.request.user
+        return user.is_authenticated and user.is_staff and user.has_perm(self.permission_required)

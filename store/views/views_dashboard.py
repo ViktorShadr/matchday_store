@@ -12,7 +12,7 @@ from orders.models import Order
 from orders.services import OrderAutoCancellationService
 from store.application import WarehouseCrudService
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm
-from store.mixins import ModeratorRequiredMixin
+from store.mixins import ModeratorRequiredMixin, StaffOrderViewPermissionMixin
 from store.models import Category, Product, ProductImage, ProductVariant
 from store.presenters import DashboardOrderPresenter, WarehouseProductPresenter, WarehouseUiPresenter
 from store.queries import DashboardOrderQueryService, WarehouseManagementQueryService, WarehouseQueryService
@@ -150,9 +150,8 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
         return context
 
 
-class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
+class DashboardOrderContextMixin:
     model = Order
-    template_name = "dashboard/order_detail.html"
     context_object_name = "order"
 
     def get_queryset(self):
@@ -181,6 +180,14 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
             "-id",
         )
         return context
+
+
+class DashboardOrderDetailView(ModeratorRequiredMixin, DashboardOrderContextMixin, DetailView):
+    template_name = "dashboard/order_detail.html"
+
+
+class DashboardOrderPrintView(StaffOrderViewPermissionMixin, DashboardOrderContextMixin, DetailView):
+    template_name = "dashboard/order_print.html"
 
 
 class DashboardOrderStatusUpdateView(ModeratorRequiredMixin, View):

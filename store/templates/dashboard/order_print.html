@@ -1,0 +1,190 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Печать заказа #{{ order.number|default:order.pk }}{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block header %}{% endblock %}
+{% block menu %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block content %}
+    <section class="sf-print-page">
+        <div class="sf-print-sheet">
+            <div class="sf-print-actions">
+                <a class="btn btn-outline-primary" href="{% url 'store:dashboard_order_detail' order.pk %}">
+                    К заказу
+                </a>
+                <button type="button" class="btn btn-primary" data-print-order-button>Печать</button>
+            </div>
+
+            <header class="sf-print-header">
+                <div>
+                    <p class="sf-print-kicker">Лист сборки и выдачи</p>
+                    <h1>Заказ #{{ order.number|default:order.pk }}</h1>
+                </div>
+                <div class="sf-print-header-meta">
+                    <div>Создан: {{ order.created_at|date:"d.m.Y H:i" }}</div>
+                    <div>Статус: {{ current_status_label }}</div>
+                </div>
+            </header>
+
+            <section class="sf-print-section">
+                <h2>Данные заказа</h2>
+                <dl class="sf-print-meta-grid">
+                    <div>
+                        <dt>Номер заказа</dt>
+                        <dd>#{{ order.number|default:order.pk }}</dd>
+                    </div>
+                    <div>
+                        <dt>Дата создания</dt>
+                        <dd>{{ order.created_at|date:"d.m.Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Статус заказа</dt>
+                        <dd>{{ current_status_label }}</dd>
+                    </div>
+                    <div>
+                        <dt>Статус оплаты</dt>
+                        <dd>{{ current_payment_status_label }}</dd>
+                    </div>
+                    <div>
+                        <dt>ФИО покупателя</dt>
+                        <dd>
+                            {% if order.recipient_name %}
+                                {{ order.recipient_name }}
+                            {% elif order.user %}
+                                {{ order.user.get_full_name|default:order.user.email }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Телефон</dt>
+                        <dd>{{ order.phone|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt>Email</dt>
+                        <dd>
+                            {% if order.email %}
+                                {{ order.email }}
+                            {% elif order.user %}
+                                {{ order.user.email }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Способ получения</dt>
+                        <dd>
+                            {{ order.get_delivery_method_display|default:"Самовывоз" }}
+                            {% if order.delivery_method == order.DeliveryMethod.PICKUP and store_contacts.pickup_location.name %}
+                                <br>{{ store_contacts.pickup_location.name }}
+                            {% endif %}
+                            {% if order.pickup_point_code %}
+                                <br>Код: {{ order.pickup_point_code }}
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Срок хранения</dt>
+                        <dd>
+                            {% if pickup_deadline %}
+                                до {{ pickup_deadline|date:"d.m.Y H:i" }}
+                                {% if store_contacts.pickup_retention_label %}
+                                    <br>{{ store_contacts.pickup_retention_label }}
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="sf-print-section">
+                <h2>Товары</h2>
+                <table class="sf-print-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">Название</th>
+                        <th scope="col">Вариант/размер</th>
+                        <th scope="col" class="sf-print-table-number">Кол-во</th>
+                        <th scope="col" class="sf-print-table-number">Цена</th>
+                        <th scope="col" class="sf-print-table-number">Сумма</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in items %}
+                        <tr>
+                            <td>{{ item.product_name_snapshot }}</td>
+                            <td>
+                                {% if item.size_snapshot or item.color_snapshot or item.sku_snapshot %}
+                                    {% if item.size_snapshot %}Размер: {{ item.size_snapshot }}{% endif %}
+                                    {% if item.color_snapshot %}<br>Цвет: {{ item.color_snapshot }}{% endif %}
+                                    {% if item.sku_snapshot %}<br>SKU: {{ item.sku_snapshot }}{% endif %}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td class="sf-print-table-number">{{ item.quantity }}</td>
+                            <td class="sf-print-table-number">{{ item.unit_price|floatformat:"-2" }} ₽</td>
+                            <td class="sf-print-table-number">{{ item.line_total|floatformat:"-2" }} ₽</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5">Состав заказа пока недоступен.</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                    <tfoot>
+                    <tr>
+                        <th scope="row" colspan="4">Итого</th>
+                        <td class="sf-print-table-number">{{ order.total_amount|floatformat:"-2" }} ₽</td>
+                    </tr>
+                    </tfoot>
+                </table>
+            </section>
+
+            {% if order.staff_note %}
+                <section class="sf-print-section">
+                    <h2>Комментарий менеджера</h2>
+                    <p class="sf-print-note">{{ order.staff_note }}</p>
+                </section>
+            {% endif %}
+
+            {% if current_status_key == "cancelled" %}
+                <section class="sf-print-section">
+                    <h2>Причина отмены</h2>
+                    <p class="sf-print-note">{{ order.cancellation_reason|default:"Не указана" }}</p>
+                </section>
+            {% endif %}
+
+            <section class="sf-print-section sf-print-service">
+                <h2>Служебные отметки</h2>
+                <div class="sf-print-checklist">
+                    <label class="sf-print-check">
+                        <input type="checkbox">
+                        <span>Товар собран</span>
+                    </label>
+                    <label class="sf-print-check">
+                        <input type="checkbox">
+                        <span>Покупатель уведомлён</span>
+                    </label>
+                    <label class="sf-print-check">
+                        <input type="checkbox">
+                        <span>Заказ выдан</span>
+                    </label>
+                </div>
+            </section>
+        </div>
+    </section>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script nonce="{{ request.csp_nonce }}">
+        document.querySelector("[data-print-order-button]")?.addEventListener("click", () => window.print());
+    </script>
+{% endblock %}

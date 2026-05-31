@@ -3,7 +3,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 from io import BytesIO
 
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -1118,7 +1118,14 @@ class DashboardOrdersManagementTest(TestCase):
             is_staff=True,
             is_active=True,
         )
-        self.moderator.groups.add(Group.objects.create(name="Модераторы"))
+        self.order_view_permission = Permission.objects.get(
+            content_type__app_label="orders",
+            content_type__model="order",
+            codename="view_order",
+        )
+        moderator_group = Group.objects.create(name="Модераторы")
+        moderator_group.permissions.add(self.order_view_permission)
+        self.moderator.groups.add(moderator_group)
         self.regular_user = User.objects.create_user(
             email="dashboard-user@example.com",
             password="userpass123",
@@ -1161,6 +1168,8 @@ class DashboardOrdersManagementTest(TestCase):
             product_variant=self.variant,
             product_name_snapshot=self.product.name,
             sku_snapshot=str(self.variant.pk),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
             unit_price=Decimal("1500.00"),
             quantity=1,
             line_total=Decimal("1500.00"),
@@ -1246,6 +1255,85 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertContains(response, "Комментарий клиента")
         self.assertContains(response, "Позвонить перед выдачей")
         self.assertContains(response, "Забрать до")
+        self.assertContains(response, "Распечатать заказ")
+        self.assertContains(response, reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))
+
+    def test_order_print_view_requires_login(self):
+        response = self.client.get(reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_order_print_view_forbidden_without_order_view_permission(self):
+        staff_without_permission = User.objects.create_user(
+            email="staff-print-no-perm@example.com",
+            password="staffpass123",
+            is_staff=True,
+            is_active=True,
+        )
+        self.client.login(email=staff_without_permission.email, password="staffpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_order_print_view_forbidden_for_regular_user(self):
+        self.client.login(email="dashboard-user@example.com", password="userpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_order_print_view_displays_order_data_for_staff_with_view_permission(self):
+        self.order.staff_note = "Клиент просил пакет к заказу"
+        self.order.save(update_fields=["staff_note", "updated_at"])
+        order_viewer = User.objects.create_user(
+            email="staff-print-view@example.com",
+            password="staffpass123",
+            is_staff=True,
+            is_active=True,
+        )
+        order_viewer.user_permissions.add(self.order_view_permission)
+        self.client.login(email=order_viewer.email, password="staffpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "dashboard/order_print.html")
+        self.assertContains(response, "Лист сборки и выдачи")
+        self.assertContains(response, f"Заказ #{self.order.number}")
+        self.assertContains(response, "Создан:")
+        self.assertContains(response, "Новый")
+        self.assertContains(response, "Ожидает оплаты")
+        self.assertContains(response, "Покупатель")
+        self.assertContains(response, "+79001112233")
+        self.assertContains(response, self.customer.email)
+        self.assertContains(response, "Шарф ФК Шинник")
+        self.assertContains(response, "Размер: One Size")
+        self.assertContains(response, "Цвет: Синий")
+        self.assertContains(response, "Итого")
+        self.assertContains(response, "Самовывоз")
+        self.assertContains(response, "Срок хранения")
+        self.assertContains(response, "Комментарий менеджера")
+        self.assertContains(response, "Клиент просил пакет к заказу")
+        self.assertContains(response, "Товар собран")
+        self.assertContains(response, "Покупатель уведомлён")
+        self.assertContains(response, "Заказ выдан")
+        self.assertContains(response, "window.print()")
+
+    def test_order_print_view_displays_cancellation_reason_block_for_cancelled_order(self):
+        self.order.status = Order.Status.CANCELLED
+        self.order.fulfillment_status = Order.FulfillmentStatus.CANCELLED
+        self.order.payment_status = Order.PaymentStatus.CANCELLED
+        self.order.cancelled_at = timezone.now()
+        self.order.save(update_fields=["status", "fulfillment_status", "payment_status", "cancelled_at", "updated_at"])
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Отменен")
+        self.assertContains(response, "Причина отмены")
+        self.assertContains(response, "Не указана")
 
     def test_guest_order_without_user_renders_dashboard_pages(self):
         guest_order = Order.objects.create(

@@ -4618,6 +4618,296 @@ textarea.form-control:focus {
     background: #f8fafc;
 }
 
+.sf-print-page {
+    padding: 32px 0 56px;
+    background: #eef2f7;
+}
+
+.sf-print-sheet {
+    width: min(960px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 32px;
+    background: #fff;
+    border: 1px solid var(--sf-border);
+    border-radius: 8px;
+    box-shadow: var(--sf-shadow-md);
+}
+
+.sf-print-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.sf-print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 18px;
+    border-bottom: 2px solid var(--sf-dark);
+}
+
+.sf-print-kicker {
+    margin: 0 0 6px;
+    color: var(--sf-text-soft);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.sf-print-header h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 850;
+    color: var(--sf-dark);
+}
+
+.sf-print-header-meta {
+    min-width: 220px;
+    color: var(--sf-text-soft);
+    font-size: 0.94rem;
+    line-height: 1.7;
+    text-align: right;
+}
+
+.sf-print-section {
+    margin-top: 26px;
+}
+
+.sf-print-section h2 {
+    margin: 0 0 12px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--sf-dark);
+}
+
+.sf-print-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+}
+
+.sf-print-meta-grid > div {
+    padding: 10px 12px;
+    border: 1px solid var(--sf-border);
+    border-radius: 6px;
+    background: #f8fafc;
+}
+
+.sf-print-meta-grid dt {
+    margin: 0 0 4px;
+    color: var(--sf-text-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.sf-print-meta-grid dd {
+    margin: 0;
+    color: var(--sf-text);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.sf-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.sf-print-table th,
+.sf-print-table td {
+    padding: 8px 10px;
+    border: 1px solid var(--sf-border);
+    vertical-align: top;
+}
+
+.sf-print-table th {
+    background: #f1f5f9;
+    color: var(--sf-text-soft);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.sf-print-table tfoot th,
+.sf-print-table tfoot td {
+    background: #f8fafc;
+    font-weight: 900;
+}
+
+.sf-print-table-number {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.sf-print-note {
+    margin: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--sf-border);
+    border-radius: 6px;
+    background: #f8fafc;
+    white-space: pre-wrap;
+}
+
+.sf-print-checklist {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sf-print-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--sf-border);
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+.sf-print-check input {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+}
+
+@media print {
+    @page {
+        margin: 14mm;
+    }
+
+    html,
+    body,
+    body.sf-body {
+        background: #fff !important;
+        color: #000 !important;
+        font-size: 12pt;
+    }
+
+    a {
+        color: #000 !important;
+        text-decoration: none !important;
+    }
+
+    .sf-header,
+    .sf-nav,
+    .sf-footer,
+    .sf-flash-wrapper,
+    .sf-cookie-banner,
+    .sf-scroll-top,
+    .sf-print-actions,
+    .sf-no-print {
+        display: none !important;
+    }
+
+    .sf-site-shell,
+    .sf-main {
+        display: block !important;
+        min-height: auto !important;
+    }
+
+    .sf-print-page {
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    .sf-print-sheet {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .sf-print-header {
+        padding-bottom: 8mm;
+        border-bottom: 1.5pt solid #000;
+        break-after: avoid;
+    }
+
+    .sf-print-kicker {
+        color: #444 !important;
+        font-size: 9pt;
+    }
+
+    .sf-print-header h1 {
+        color: #000 !important;
+        font-size: 20pt;
+    }
+
+    .sf-print-header-meta {
+        color: #000 !important;
+        font-size: 10pt;
+    }
+
+    .sf-print-section {
+        margin-top: 7mm;
+        break-inside: avoid;
+    }
+
+    .sf-print-section h2 {
+        color: #000 !important;
+        font-size: 13pt;
+        margin-bottom: 3mm;
+    }
+
+    .sf-print-meta-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2.5mm;
+    }
+
+    .sf-print-meta-grid > div,
+    .sf-print-note,
+    .sf-print-check {
+        background: #fff !important;
+        border: 1pt solid #bbb;
+    }
+
+    .sf-print-meta-grid > div {
+        padding: 3mm;
+    }
+
+    .sf-print-meta-grid dt {
+        color: #555 !important;
+        font-size: 8pt;
+    }
+
+    .sf-print-meta-grid dd {
+        color: #000 !important;
+        font-size: 10pt;
+    }
+
+    .sf-print-table {
+        font-size: 9.5pt;
+    }
+
+    .sf-print-table th,
+    .sf-print-table td {
+        padding: 2mm 2.5mm;
+        border: 1pt solid #bbb;
+    }
+
+    .sf-print-table th,
+    .sf-print-table tfoot th,
+    .sf-print-table tfoot td {
+        background: #f3f3f3 !important;
+        color: #000 !important;
+    }
+
+    .sf-print-checklist {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 3mm;
+    }
+}
+
 @media (max-width: 1199.98px) {
     .sf-admin-layout {
         grid-template-columns: 1fr;
@@ -4642,6 +4932,27 @@ textarea.form-control:focus {
     .sf-order-item-row {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .sf-print-sheet {
+        width: min(100% - 20px, 960px);
+        padding: 20px;
+    }
+
+    .sf-print-header,
+    .sf-print-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .sf-print-header-meta {
+        min-width: 0;
+        text-align: left;
+    }
+
+    .sf-print-meta-grid,
+    .sf-print-checklist {
+        grid-template-columns: 1fr;
     }
 }
 
