@@ -1948,10 +1948,10 @@ class LegalPagesCartCounterTest(TestCase):
         cart = Cart.objects.create(session_key=session.session_key)
         CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=3)
         for slug, title in (
-                ("privacy-policy", "Политика конфиденциальности"),
-                ("terms-of-service", "Пользовательское соглашение"),
-                ("return-policy", "Условия возврата"),
-                ("offer", "Договор оферты"),
+            ("privacy-policy", "Политика конфиденциальности"),
+            ("terms-of-service", "Пользовательское соглашение"),
+            ("return-policy", "Условия возврата"),
+            ("offer", "Договор оферты"),
         ):
             Page.objects.update_or_create(
                 slug=slug,
