@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.db.models import Prefetch
-from django.http import Http404
-from django.shortcuts import get_object_or_404, redirect
+from django.http import Http404, HttpResponseNotFound
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -17,6 +17,7 @@ from orders.models import Order, OrderItem
 from orders.services import (
     CheckoutError,
     CheckoutService,
+    GuestOrderAccessTokenService,
     OrderAutoCancellationService,
     OrderCancellationError,
     OrderCancellationService,
@@ -190,20 +191,33 @@ class CheckoutSuccessView(CartContextMixin, TemplateView):
 class GuestOrderAccessMixin:
     """Поиск гостевого заказа строго по защищённому токену."""
 
+    access_token_service = GuestOrderAccessTokenService()
     cancellation_service = OrderCancellationService()
 
-    def get_guest_order(self):
+    def get_guest_token(self):
         token = (self.kwargs.get("token") or "").strip()
         if not token:
             raise Http404
+        return token
 
+    def get_guest_order(self):
+        token = self.get_guest_token()
         queryset = Order.objects.filter(user__isnull=True).prefetch_related(
             Prefetch(
                 "items",
                 queryset=OrderItem.objects.select_related("product_variant__product__category").order_by("pk"),
             )
         )
-        return get_object_or_404(queryset, guest_manage_token=token)
+        order = self.access_token_service.get_order_by_raw_token(token, order_queryset=queryset)
+        if order is None:
+            raise Http404
+        return order
+
+    @staticmethod
+    def guest_not_found_response():
+        response = HttpResponseNotFound()
+        response._has_been_logged = True
+        return response
 
 
 class GuestOrderDetailView(GuestOrderAccessMixin, CartContextMixin, TemplateView):
@@ -212,7 +226,10 @@ class GuestOrderDetailView(GuestOrderAccessMixin, CartContextMixin, TemplateView
     template_name = "orders/guest_order_detail.html"
 
     def dispatch(self, request, *args, **kwargs):
-        self.order = self.get_guest_order()
+        try:
+            self.order = self.get_guest_order()
+        except Http404:
+            return self.guest_not_found_response()
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -223,6 +240,7 @@ class GuestOrderDetailView(GuestOrderAccessMixin, CartContextMixin, TemplateView
         context["status_label"] = GUEST_ORDER_STATUS_LABELS[status_key]
         context["payment_status_label"] = self.order.get_payment_status_display()
         context["can_cancel"] = OrderCancellationService.can_be_cancelled(self.order)
+        context["guest_token"] = self.get_guest_token()
         if self.order.delivery_method == Order.DeliveryMethod.PICKUP:
             context["pickup_location"] = CheckoutSessionService.build_pickup_location()
             context["pickup_deadline"] = OrderAutoCancellationService.get_pickup_deadline(self.order)
@@ -233,10 +251,15 @@ class GuestOrderCancelView(GuestOrderAccessMixin, View):
     """Отмена гостевого заказа по защищённому токену."""
 
     def post(self, request, *args, **kwargs):
-        order = self.get_guest_order()
+        try:
+            token = self.get_guest_token()
+            order = self.get_guest_order()
+        except Http404:
+            return self.guest_not_found_response()
+
         if not OrderCancellationService.can_be_cancelled(order):
             messages.error(request, "Этот заказ уже нельзя отменить.")
-            return redirect("orders:guest_order_detail", token=order.guest_manage_token)
+            return redirect("orders:guest_order_detail", token=token)
 
         try:
             self.cancellation_service.cancel_order(order_id=order.pk)
@@ -244,4 +267,4 @@ class GuestOrderCancelView(GuestOrderAccessMixin, View):
             messages.error(request, str(exc))
         else:
             messages.success(request, "Заказ успешно отменен.")
-        return redirect("orders:guest_order_detail", token=order.guest_manage_token)
+        return redirect("orders:guest_order_detail", token=token)

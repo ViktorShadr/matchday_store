@@ -200,7 +200,7 @@
                 {% if can_cancel %}
                     <div class="sf-profile-card">
                         <h2 class="sf-profile-section-title">Действия</h2>
-                        <form method="post" action="{% url 'orders:guest_order_cancel' token=order.guest_manage_token %}">
+                        <form method="post" action="{% url 'orders:guest_order_cancel' token=guest_token %}">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-danger w-100">Отменить заказ</button>
                         </form>

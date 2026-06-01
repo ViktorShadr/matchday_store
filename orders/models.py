@@ -1,5 +1,3 @@
-import secrets
-
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -68,7 +66,7 @@ class Order(models.Model):
         user (User): Пользователь, сделавший заказ (необязательно для гостевого заказа)
         email (str): Email заказчика
         phone (str): Номер телефона заказчика
-        guest_manage_token (str): Защищённый токен управления гостевым заказом
+        guest_manage_token (str): Устаревший raw-токен управления гостевым заказом
         status (str): Статус заказа (из Status.choices)
         payment_status (str): Статус оплаты (из PaymentStatus.choices)
         fulfillment_status (str): Статус исполнения (из FulfillmentStatus.choices)
@@ -143,7 +141,17 @@ class Order(models.Model):
     recipient_name = models.CharField(max_length=255, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=32)
-    guest_manage_token = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
+    guest_manage_token = models.CharField(
+        max_length=128,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            "Deprecated legacy raw token. New guest management access is stored in "
+            "GuestOrderAccessToken.token_hash."
+        ),
+    )
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
     payment_status = models.CharField(
         max_length=32,
@@ -200,25 +208,38 @@ class Order(models.Model):
         if update_fields is not None and field_name not in update_fields:
             kwargs["update_fields"] = [*update_fields, field_name]
 
-    @classmethod
-    def generate_guest_manage_token(cls) -> str:
-        """Сгенерировать уникальный URL-safe токен управления гостевым заказом."""
-        for _ in range(10):
-            token = secrets.token_urlsafe(32)
-            if not cls.objects.filter(guest_manage_token=token).exists():
-                return token
-        raise RuntimeError("Failed to generate unique guest order manage token.")
-
     def save(self, *args, **kwargs):
-        if self.user_id is None:
-            if not self.guest_manage_token:
-                self.guest_manage_token = self.generate_guest_manage_token()
-                self._include_update_field(kwargs, "guest_manage_token")
-        elif self.guest_manage_token:
+        if self.user_id is not None and self.guest_manage_token:
             self.guest_manage_token = None
             self._include_update_field(kwargs, "guest_manage_token")
 
         super().save(*args, **kwargs)
+
+
+class GuestOrderAccessToken(models.Model):
+    """Хэшированный токен доступа к управлению гостевым заказом."""
+
+    class Purpose(models.TextChoices):
+        GUEST_MANAGE = "guest_manage", "Guest order management"
+
+    order = models.ForeignKey("orders.Order", on_delete=models.CASCADE, related_name="guest_access_tokens")
+    token_hash = models.CharField(max_length=64, unique=True)
+    purpose = models.CharField(max_length=32, choices=Purpose.choices, default=Purpose.GUEST_MANAGE, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Токен гостевого доступа к заказу"
+        verbose_name_plural = "Токены гостевого доступа к заказам"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["order", "purpose", "revoked_at", "expires_at"], name="guest_token_lookup_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.order_id}: {self.purpose}"
 
 
 class OrderStatusTransition(models.Model):

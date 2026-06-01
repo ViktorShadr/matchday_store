@@ -64,7 +64,10 @@ def _build_order_detail_url(order: Order) -> str:
 
 
 def _build_guest_order_manage_url(order: Order) -> str:
-    return f"{settings.SITE_URL}{reverse('orders:guest_order_detail', kwargs={'token': order.guest_manage_token})}"
+    from orders.services import GuestOrderAccessTokenService
+
+    issued_token = GuestOrderAccessTokenService.create_token_for_order(order)
+    return f"{settings.SITE_URL}{reverse('orders:guest_order_detail', kwargs={'token': issued_token.raw_token})}"
 
 
 def _build_dashboard_order_detail_url(order: Order) -> str:
@@ -98,13 +101,12 @@ def _build_order_notification_base_lines(order: Order, event_key: str) -> list[s
 
     base_lines.append("Сохраните номер заказа для связи с магазином.")
     if event_key == "created":
-        if order.guest_manage_token:
-            guest_order_manage_url = _build_guest_order_manage_url(order)
-            base_lines.append(f"Ссылка для просмотра и управления заказом: {guest_order_manage_url}")
-            base_lines.append(
-                "По этой ссылке можно посмотреть статус заказа или отменить заказ без регистрации. "
-                "Не передавайте ссылку третьим лицам."
-            )
+        guest_order_manage_url = _build_guest_order_manage_url(order)
+        base_lines.append(f"Ссылка для просмотра и управления заказом: {guest_order_manage_url}")
+        base_lines.append(
+            "По этой ссылке можно посмотреть статус заказа или отменить заказ без регистрации. "
+            "Не передавайте ссылку третьим лицам."
+        )
         base_lines.append("После регистрации и подтверждения почты " "заказ появится в личном кабинете.")
     return base_lines
 

@@ -1,7 +1,9 @@
 import logging
+import secrets
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
+from hashlib import sha256
 from typing import Optional
 from uuid import uuid4
 
@@ -11,10 +13,11 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
-from orders.models import Order, OrderItem, OrderStatusTransition
+from orders.models import GuestOrderAccessToken, Order, OrderItem, OrderStatusTransition
 from orders.repositories import IOrderRepository, IPaymentRepository, OrderRepository, PaymentRepository
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
@@ -41,6 +44,117 @@ class OrderIssueError(Exception):
 
 class ManualPaymentUpdateError(Exception):
     """Бизнес-ошибка обновления оплаты заказа."""
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedGuestOrderAccessToken:
+    raw_token: str
+    access_token: GuestOrderAccessToken
+
+
+class GuestOrderAccessTokenService:
+    """Сервис жизненного цикла bearer-токенов гостевого управления заказом."""
+
+    token_model = GuestOrderAccessToken
+    default_purpose = GuestOrderAccessToken.Purpose.GUEST_MANAGE
+
+    @staticmethod
+    def hash_token(raw_token: str) -> str:
+        return sha256(raw_token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def get_token_ttl() -> timedelta:
+        return timedelta(days=getattr(settings, "GUEST_ORDER_TOKEN_TTL_DAYS", 30))
+
+    @classmethod
+    def _active_tokens_for_order(cls, order: Order, purpose: str):
+        return cls.token_model.objects.filter(order=order, purpose=purpose, revoked_at__isnull=True)
+
+    @classmethod
+    def revoke_tokens_for_order(cls, order: Order, purpose: str | None = None) -> int:
+        """Отозвать все неотозванные гостевые токены заказа."""
+        token_purpose = purpose or cls.default_purpose
+        return cls._active_tokens_for_order(order, token_purpose).update(revoked_at=timezone.now())
+
+    @classmethod
+    def rotate_token_for_order(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
+        """
+        Выпустить новый raw-токен и оставить для заказа только один активный токен.
+
+        Raw-токены не хранятся, поэтому при повторной отправке ссылки мы не можем безопасно
+        восстановить старое значение и вместо этого ротируем активный доступ.
+        """
+        if not order.pk:
+            raise ValueError("Guest order access token can only be created for a saved order.")
+
+        token_purpose = purpose or cls.default_purpose
+        for _ in range(10):
+            raw_token = secrets.token_urlsafe(32)
+            token_hash = cls.hash_token(raw_token)
+            expires_at = timezone.now() + cls.get_token_ttl()
+
+            try:
+                with transaction.atomic():
+                    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+                    if locked_order.user_id is not None:
+                        raise ValueError("Guest order access token can only be created for guest orders.")
+
+                    cls.revoke_tokens_for_order(locked_order, token_purpose)
+                    access_token = cls.token_model.objects.create(
+                        order=locked_order,
+                        token_hash=token_hash,
+                        purpose=token_purpose,
+                        expires_at=expires_at,
+                    )
+            except IntegrityError:
+                continue
+
+            return IssuedGuestOrderAccessToken(raw_token=raw_token, access_token=access_token)
+
+        raise RuntimeError("Failed to generate unique guest order access token.")
+
+    @classmethod
+    def create_token_for_order(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
+        return cls.rotate_token_for_order(order, purpose)
+
+    @classmethod
+    def get_order_by_raw_token(
+        cls, raw_token: str, *, order_queryset=None, purpose: str | None = None
+    ) -> Order | None:
+        token = (raw_token or "").strip()
+        if not token:
+            return None
+
+        token_hash = cls.hash_token(token)
+        token_purpose = purpose or cls.default_purpose
+        access_token = (
+            cls.token_model.objects.select_related("order")
+            .filter(token_hash=token_hash, purpose=token_purpose)
+            .first()
+        )
+        if access_token is None or not constant_time_compare(access_token.token_hash, token_hash):
+            return None
+
+        now = timezone.now()
+        if access_token.revoked_at is not None or access_token.expires_at <= now:
+            return None
+        if access_token.order.user_id is not None:
+            return None
+
+        queryset = order_queryset if order_queryset is not None else Order.objects.all()
+        try:
+            order = queryset.get(pk=access_token.order_id, user__isnull=True)
+        except Order.DoesNotExist:
+            return None
+
+        updated = cls.token_model.objects.filter(
+            pk=access_token.pk,
+            revoked_at__isnull=True,
+            expires_at__gt=now,
+        ).update(last_used_at=now)
+        if updated != 1:
+            return None
+        return order
 
 
 @dataclass(slots=True)
