@@ -989,7 +989,7 @@ class GuestOrderManagementTest(TestCase):
         return order
 
     def _issue_guest_token(self, order: Order):
-        return GuestOrderAccessTokenService.create_token_for_order(order)
+        return GuestOrderAccessTokenService.issue_token_for_email(order)
 
     def test_guest_access_token_created_for_guest_order_with_only_hash_stored(self):
         order = self._create_guest_order(number="ORD-GUEST-TOKEN-1")
@@ -1027,6 +1027,18 @@ class GuestOrderManagementTest(TestCase):
         self.assertFalse(GuestOrderAccessToken.objects.filter(order=order).exists())
         with self.assertRaises(ValueError):
             self._issue_guest_token(order)
+
+    def test_get_or_create_active_token_returns_existing_hash_only_token_without_raw_value(self):
+        order = self._create_guest_order(number="ORD-GUEST-GET-EXISTING-1")
+        issued_token = self._issue_guest_token(order)
+
+        with patch("orders.services.secrets.token_urlsafe") as mock_token_urlsafe:
+            active_token = GuestOrderAccessTokenService.get_or_create_active_token_for_order(order)
+
+        self.assertFalse(active_token.created)
+        self.assertIsNone(active_token.raw_token)
+        self.assertEqual(active_token.access_token.pk, issued_token.access_token.pk)
+        mock_token_urlsafe.assert_not_called()
 
     def test_guest_manage_link_opens_only_matching_order(self):
         order = self._create_guest_order(number="ORD-GUEST-MANAGE-1")
@@ -1070,7 +1082,7 @@ class GuestOrderManagementTest(TestCase):
     def test_guest_manage_token_rotation_keeps_only_latest_token_active(self):
         order = self._create_guest_order(number="ORD-GUEST-ROTATE-TOKEN-1")
         first_token = self._issue_guest_token(order)
-        second_token = self._issue_guest_token(order)
+        second_token = GuestOrderAccessTokenService.rotate_token_for_order(order)
 
         first_token.access_token.refresh_from_db()
         first_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": first_token.raw_token}))
@@ -1085,6 +1097,28 @@ class GuestOrderManagementTest(TestCase):
         )
         self.assertEqual(first_response.status_code, 404)
         self.assertEqual(second_response.status_code, 200)
+
+    def test_expired_guest_manage_token_is_not_reused_for_new_email_token(self):
+        order = self._create_guest_order(number="ORD-GUEST-EXPIRED-NEW-EMAIL-1")
+        with patch("orders.services.secrets.token_urlsafe", return_value="expired-email-token"):
+            expired_token = self._issue_guest_token(order)
+        GuestOrderAccessToken.objects.filter(pk=expired_token.access_token.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+
+        with patch("orders.services.secrets.token_urlsafe", return_value="fresh-email-token"):
+            fresh_token = GuestOrderAccessTokenService.issue_token_for_email(order)
+
+        expired_token.access_token.refresh_from_db()
+        expired_response = self.client.get(
+            reverse("orders:guest_order_detail", kwargs={"token": expired_token.raw_token})
+        )
+        fresh_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": fresh_token.raw_token}))
+
+        self.assertIsNone(expired_token.access_token.revoked_at)
+        self.assertNotEqual(expired_token.access_token.pk, fresh_token.access_token.pk)
+        self.assertEqual(expired_response.status_code, 404)
+        self.assertEqual(fresh_response.status_code, 200)
 
     def test_guest_manage_updates_last_used_at_on_successful_access(self):
         order = self._create_guest_order(number="ORD-GUEST-LAST-USED-1")
@@ -1239,6 +1273,77 @@ class GuestOrderManagementTest(TestCase):
             message,
         )
         self.assertNotIn(reverse("users:order_detail", kwargs={"pk": order.pk}), message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    def test_notification_retry_does_not_revoke_already_active_guest_token(self):
+        order = self._create_guest_order(number="ORD-GUEST-RETRY-TOKEN-1")
+
+        with (
+            patch(
+                "orders.services.secrets.token_urlsafe",
+                side_effect=["first-email-token", "retry-email-token"],
+            ),
+            patch("orders.tasks.send_mail", side_effect=[1, RuntimeError("smtp unavailable")]),
+            patch("orders.tasks.logger.exception"),
+        ):
+            self.assertTrue(send_order_notification_sync(order.id, "created"))
+            with self.assertRaises(NotificationDeliveryError):
+                send_order_notification_sync(order.id, "created", raise_on_error=True)
+
+        first_access_token = GuestOrderAccessToken.objects.get(
+            token_hash=GuestOrderAccessTokenService.hash_token("first-email-token")
+        )
+        retry_access_token = GuestOrderAccessToken.objects.get(
+            token_hash=GuestOrderAccessTokenService.hash_token("retry-email-token")
+        )
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "first-email-token"}))
+
+        self.assertIsNone(first_access_token.revoked_at)
+        self.assertIsNone(retry_access_token.revoked_at)
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    def test_two_guest_created_notifications_leave_first_emailed_link_valid(self):
+        order = self._create_guest_order(number="ORD-GUEST-DUPLICATE-TOKEN-1")
+        first_url = (
+            f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'first-email-token'})}"
+        )
+        second_url = (
+            f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'second-email-token'})}"
+        )
+
+        with (
+            patch(
+                "orders.services.secrets.token_urlsafe",
+                side_effect=["first-email-token", "second-email-token"],
+            ) as mock_token_urlsafe,
+            patch("orders.tasks.send_mail", return_value=1) as mock_send_mail,
+        ):
+            first_result = send_order_notification_sync(order.id, "created")
+            second_result = send_order_notification_sync(order.id, "created")
+
+        first_message = mock_send_mail.call_args_list[0].kwargs["message"]
+        second_message = mock_send_mail.call_args_list[1].kwargs["message"]
+        first_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "first-email-token"}))
+        second_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "second-email-token"}))
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        self.assertIn(first_url, first_message)
+        self.assertIn(second_url, second_message)
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
+            2,
+        )
+        self.assertEqual(mock_token_urlsafe.call_count, 2)
 
 
 class OrderCancellationServiceTest(TestCase):

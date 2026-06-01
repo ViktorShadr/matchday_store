@@ -66,7 +66,7 @@ def _build_order_detail_url(order: Order) -> str:
 def _build_guest_order_manage_url(order: Order) -> str:
     from orders.services import GuestOrderAccessTokenService
 
-    issued_token = GuestOrderAccessTokenService.create_token_for_order(order)
+    issued_token = GuestOrderAccessTokenService.issue_token_for_email(order)
     return f"{settings.SITE_URL}{reverse('orders:guest_order_detail', kwargs={'token': issued_token.raw_token})}"
 
 

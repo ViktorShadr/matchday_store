@@ -52,6 +52,13 @@ class IssuedGuestOrderAccessToken:
     access_token: GuestOrderAccessToken
 
 
+@dataclass(frozen=True, slots=True)
+class GuestOrderAccessTokenResult:
+    access_token: GuestOrderAccessToken
+    raw_token: str | None
+    created: bool
+
+
 class GuestOrderAccessTokenService:
     """Сервис жизненного цикла bearer-токенов гостевого управления заказом."""
 
@@ -71,19 +78,35 @@ class GuestOrderAccessTokenService:
         return cls.token_model.objects.filter(order=order, purpose=purpose, revoked_at__isnull=True)
 
     @classmethod
+    def _valid_active_tokens_for_order(cls, order: Order, purpose: str, now):
+        return cls._active_tokens_for_order(order, purpose).filter(expires_at__gt=now)
+
+    @classmethod
+    def _recover_raw_token_for_access_token(
+        cls, order: Order, access_token: GuestOrderAccessToken
+    ) -> str | None:
+        legacy_raw_token = (order.guest_manage_token or "").strip()
+        if legacy_raw_token and constant_time_compare(
+            cls.hash_token(legacy_raw_token),
+            access_token.token_hash,
+        ):
+            return legacy_raw_token
+        return None
+
+    @classmethod
     def revoke_tokens_for_order(cls, order: Order, purpose: str | None = None) -> int:
         """Отозвать все неотозванные гостевые токены заказа."""
         token_purpose = purpose or cls.default_purpose
         return cls._active_tokens_for_order(order, token_purpose).update(revoked_at=timezone.now())
 
     @classmethod
-    def rotate_token_for_order(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
-        """
-        Выпустить новый raw-токен и оставить для заказа только один активный токен.
-
-        Raw-токены не хранятся, поэтому при повторной отправке ссылки мы не можем безопасно
-        восстановить старое значение и вместо этого ротируем активный доступ.
-        """
+    def _create_token_for_order(
+        cls,
+        order: Order,
+        purpose: str | None = None,
+        *,
+        revoke_existing: bool,
+    ) -> IssuedGuestOrderAccessToken:
         if not order.pk:
             raise ValueError("Guest order access token can only be created for a saved order.")
 
@@ -99,7 +122,8 @@ class GuestOrderAccessTokenService:
                     if locked_order.user_id is not None:
                         raise ValueError("Guest order access token can only be created for guest orders.")
 
-                    cls.revoke_tokens_for_order(locked_order, token_purpose)
+                    if revoke_existing:
+                        cls.revoke_tokens_for_order(locked_order, token_purpose)
                     access_token = cls.token_model.objects.create(
                         order=locked_order,
                         token_hash=token_hash,
@@ -114,8 +138,117 @@ class GuestOrderAccessTokenService:
         raise RuntimeError("Failed to generate unique guest order access token.")
 
     @classmethod
+    def get_or_create_active_token_for_order(
+        cls, order: Order, purpose: str | None = None
+    ) -> GuestOrderAccessTokenResult:
+        """
+        Return a valid active token for a guest order, creating one only when none exists.
+
+        Raw token values are not stored for new tokens. Existing raw values are returned only
+        when they are safely recoverable from the legacy guest_manage_token field.
+        """
+        if not order.pk:
+            raise ValueError("Guest order access token can only be created for a saved order.")
+
+        token_purpose = purpose or cls.default_purpose
+        for _ in range(10):
+            try:
+                with transaction.atomic():
+                    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+                    if locked_order.user_id is not None:
+                        raise ValueError("Guest order access token can only be created for guest orders.")
+
+                    now = timezone.now()
+                    active_token = (
+                        cls._valid_active_tokens_for_order(locked_order, token_purpose, now)
+                        .order_by("-created_at", "-id")
+                        .first()
+                    )
+                    if active_token is not None:
+                        return GuestOrderAccessTokenResult(
+                            access_token=active_token,
+                            raw_token=cls._recover_raw_token_for_access_token(locked_order, active_token),
+                            created=False,
+                        )
+
+                    raw_token = secrets.token_urlsafe(32)
+                    access_token = cls.token_model.objects.create(
+                        order=locked_order,
+                        token_hash=cls.hash_token(raw_token),
+                        purpose=token_purpose,
+                        expires_at=now + cls.get_token_ttl(),
+                    )
+            except IntegrityError:
+                continue
+
+            return GuestOrderAccessTokenResult(
+                access_token=access_token,
+                raw_token=raw_token,
+                created=True,
+            )
+
+        raise RuntimeError("Failed to generate unique guest order access token.")
+
+    @classmethod
+    def issue_token_for_email(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
+        """
+        Return a raw token suitable for email without revoking existing valid links.
+
+        When an existing active token has no safely recoverable raw value, create an additional
+        active token so notification retries cannot invalidate a previously delivered link.
+        """
+        if not order.pk:
+            raise ValueError("Guest order access token can only be created for a saved order.")
+
+        token_purpose = purpose or cls.default_purpose
+        for _ in range(10):
+            try:
+                with transaction.atomic():
+                    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+                    if locked_order.user_id is not None:
+                        raise ValueError("Guest order access token can only be created for guest orders.")
+
+                    now = timezone.now()
+                    active_token = (
+                        cls._valid_active_tokens_for_order(locked_order, token_purpose, now)
+                        .order_by("-created_at", "-id")
+                        .first()
+                    )
+                    if active_token is not None:
+                        raw_token = cls._recover_raw_token_for_access_token(locked_order, active_token)
+                        if raw_token is not None:
+                            return IssuedGuestOrderAccessToken(
+                                raw_token=raw_token,
+                                access_token=active_token,
+                            )
+
+                    raw_token = secrets.token_urlsafe(32)
+                    access_token = cls.token_model.objects.create(
+                        order=locked_order,
+                        token_hash=cls.hash_token(raw_token),
+                        purpose=token_purpose,
+                        expires_at=now + cls.get_token_ttl(),
+                    )
+            except IntegrityError:
+                continue
+
+            return IssuedGuestOrderAccessToken(raw_token=raw_token, access_token=access_token)
+
+        raise RuntimeError("Failed to generate unique guest order access token.")
+
+    @classmethod
+    def rotate_token_for_order(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
+        """
+        Выпустить новый raw-токен и оставить для заказа только один активный токен.
+
+        Используется только для явной ротации/отзыва доступа,
+        а не для обычных email-уведомлений.
+        """
+        return cls._create_token_for_order(order, purpose, revoke_existing=True)
+
+    @classmethod
     def create_token_for_order(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
-        return cls.rotate_token_for_order(order, purpose)
+        return cls.issue_token_for_email(order, purpose)
 
     @classmethod
     def get_order_by_raw_token(
