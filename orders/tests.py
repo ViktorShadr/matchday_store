@@ -6,7 +6,7 @@ from io import StringIO
 from smtplib import SMTPDataError
 from threading import Event
 from time import sleep
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -29,7 +29,7 @@ from django.utils import timezone
 from config.email_delivery import NotificationDeliveryError
 from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService, OrderStatusPolicy
 from orders.forms import CheckoutForm
-from orders.models import GuestOrderAccessToken, Order, OrderItem, OrderStatusTransition
+from orders.models import GuestOrderAccessToken, Order, OrderItem, OrderNotificationLog, OrderStatusTransition
 from orders.services import (
     CheckoutError,
     CheckoutService,
@@ -1678,6 +1678,62 @@ class GuestOrderManagementTest(TestCase):
         )
         self.assertEqual(mock_token_urlsafe.call_count, 2)
 
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    def test_guest_manual_resend_does_not_revoke_link_or_store_raw_token(self):
+        order = self._create_guest_order(number="ORD-GUEST-MANUAL-RESEND-TOKEN-1")
+
+        with patch("orders.services.secrets.token_urlsafe", return_value="first-email-token"):
+            first_token = self._issue_guest_token(order)
+
+        notification_log = OrderNotificationLog.objects.create(
+            order=order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=order.email,
+            status=OrderNotificationLog.Status.PENDING,
+            triggered_by=self.user,
+        )
+
+        with (
+            patch("orders.services.secrets.token_urlsafe", return_value="manual-resend-token"),
+            patch("orders.tasks.send_mail", return_value=1) as mock_send_mail,
+        ):
+            result = send_order_notification_sync(
+                order.id,
+                "created",
+                notification_log_id=notification_log.pk,
+            )
+
+        notification_log.refresh_from_db()
+        first_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": first_token.raw_token}))
+        resend_response = self.client.get(
+            reverse("orders:guest_order_detail", kwargs={"token": "manual-resend-token"})
+        )
+        stored_log_payload = " ".join(
+            str(value or "")
+            for value in (
+                notification_log.notification_type,
+                notification_log.recipient_email,
+                notification_log.status,
+                notification_log.error_message,
+                notification_log.task_id,
+            )
+        )
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(resend_response.status_code, 200)
+        self.assertEqual(
+            GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
+            2,
+        )
+        self.assertNotIn(first_token.raw_token, stored_log_payload)
+        self.assertNotIn("manual-resend-token", stored_log_payload)
+
 
 class OrderCancellationServiceTest(TestCase):
     """Тесты доменной отмены заказа."""
@@ -2763,8 +2819,16 @@ class OrderNotificationServiceIntegrationTest(TestCase):
                 checkout_token="notify-created",
             )
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "created")
+        mock_send_order_notification.delay.assert_called_once_with(
+            order.id,
+            "created",
+            notification_log_id=ANY,
+        )
         mock_send_staff_new_order_notification.delay.assert_called_once_with(order.id)
+        notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
+        self.assertEqual(notification_log.recipient_email, self.user.email)
+        self.assertIsNone(notification_log.triggered_by_id)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_cancellation_schedules_cancelled_notification(self, mock_send_order_notification):
@@ -2800,7 +2864,11 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             OrderCancellationService().cancel_order(order_id=order.id, user_id=self.user.id)
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "cancelled")
+        mock_send_order_notification.delay.assert_called_once_with(
+            order.id,
+            "cancelled",
+            notification_log_id=ANY,
+        )
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_ready_status_schedules_ready_notification(self, mock_send_order_notification):
@@ -2823,7 +2891,11 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             DashboardOrderFlowService().update_order_status(order, "ready")
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "ready")
+        mock_send_order_notification.delay.assert_called_once_with(
+            order.id,
+            "ready",
+            notification_log_id=ANY,
+        )
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_successful_manual_payment_schedules_paid_notification(self, mock_send_order_notification):
@@ -2846,7 +2918,11 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             ManualPaymentUpdateService().update_order_payment_status(order.id, Order.PaymentStatus.SUCCEEDED)
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "paid")
+        mock_send_order_notification.delay.assert_called_once_with(
+            order.id,
+            "paid",
+            notification_log_id=ANY,
+        )
 
 
 class OrderStaffNotificationTaskTest(TestCase):
@@ -3026,6 +3102,118 @@ class OrderStaffNotificationTaskTest(TestCase):
         SITE_URL="http://localhost:8000",
     )
     @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_creates_sent_notification_log(self, mock_send_mail):
+        result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.recipient_email, self.order.email)
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertIsNotNone(notification_log.sent_at)
+        self.assertIsNone(notification_log.error_message)
+        self.assertIsNone(notification_log.triggered_by_id)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.exception")
+    @patch(
+        "orders.tasks.send_mail",
+        side_effect=RuntimeError(
+            "smtp unavailable token=raw-guest-token buyer@example.com "
+            "https://shop.example.test/orders/guest/raw-guest-token/ "
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ),
+    )
+    def test_send_order_notification_sync_creates_failed_notification_log(
+        self,
+        mock_send_mail,
+        mock_logger_exception,
+    ):
+        result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_exception.assert_called_once()
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIsNone(notification_log.sent_at)
+        self.assertLessEqual(len(notification_log.error_message), 240)
+        self.assertIn("smtp unavailable", notification_log.error_message)
+        self.assertNotIn("raw-guest-token", notification_log.error_message)
+        self.assertNotIn("buyer@example.com", notification_log.error_message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_manual_resend_log_updates_to_sent_after_successful_task_execution(self, mock_send_mail):
+        manager = User.objects.create_user(email="manager-resend@example.com", password="managerpass123")
+        notification_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.PENDING,
+            triggered_by=manager,
+        )
+
+        result = send_order_notification_sync(
+            self.order.id,
+            "created",
+            notification_log_id=notification_log.pk,
+        )
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        notification_log.refresh_from_db()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertIsNotNone(notification_log.sent_at)
+        self.assertIsNone(notification_log.error_message)
+        self.assertEqual(notification_log.triggered_by_id, manager.id)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.exception")
+    @patch("orders.tasks.send_mail", side_effect=RuntimeError("smtp unavailable"))
+    def test_manual_resend_failure_updates_log_to_failed(
+        self,
+        mock_send_mail,
+        mock_logger_exception,
+    ):
+        manager = User.objects.create_user(email="manager-resend-failed@example.com", password="managerpass123")
+        notification_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.PENDING,
+            triggered_by=manager,
+        )
+
+        result = send_order_notification_sync(
+            self.order.id,
+            "created",
+            notification_log_id=notification_log.pk,
+        )
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_exception.assert_called_once()
+        notification_log.refresh_from_db()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIn("smtp unavailable", notification_log.error_message)
+        self.assertEqual(notification_log.triggered_by_id, manager.id)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
     def test_send_order_notification_sync_guest_created_includes_registration_hint(self, mock_send_mail):
         guest_order = self._create_guest_order()
 
@@ -3186,7 +3374,7 @@ class OrderNotificationTaskRetryConfigurationTest(SimpleTestCase):
         self._assert_retry_settings(send_staff_new_order_notification)
 
 
-class OrderNotificationServiceQueueDispatchTest(SimpleTestCase):
+class OrderNotificationServiceQueueDispatchTest(TestCase):
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_enqueue_returns_false_when_celery_dispatch_fails(
         self,
@@ -3194,9 +3382,24 @@ class OrderNotificationServiceQueueDispatchTest(SimpleTestCase):
     ):
         from orders.application.order_notification_service import OrderNotificationService
 
+        order = Order.objects.create(
+            number="ORD-QUEUE-FAIL-1",
+            user=None,
+            recipient_name="Покупатель",
+            email="queue-fail@example.com",
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("1500.00"),
+        )
         mock_async_task.delay.side_effect = RuntimeError("broker down")
 
-        result = OrderNotificationService.enqueue(order_id=42, event_key="created")
+        result = OrderNotificationService.enqueue(order_id=order.pk, event_key="created")
 
         self.assertFalse(result)
-        mock_async_task.delay.assert_called_once_with(42, "created")
+        mock_async_task.delay.assert_called_once_with(order.pk, "created", notification_log_id=ANY)
+        notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIn("broker down", notification_log.error_message)

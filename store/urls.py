@@ -10,6 +10,7 @@ from store.views.views_category import (
 from store.views.views_dashboard import (
     DashboardHomeView,
     DashboardOrderDetailView,
+    DashboardOrderNotificationResendView,
     DashboardOrderPaymentStatusUpdateView,
     DashboardOrderPrintView,
     DashboardOrderStaffNoteUpdateView,
@@ -73,6 +74,11 @@ urlpatterns = [
         "dashboard/orders/<int:pk>/staff-note/",
         DashboardOrderStaffNoteUpdateView.as_view(),
         name="dashboard_order_staff_note_update",
+    ),
+    path(
+        "dashboard/orders/<int:pk>/notifications/resend/",
+        DashboardOrderNotificationResendView.as_view(),
+        name="dashboard_order_notification_resend",
     ),
     path("dashboard/products/create/", WarehouseProductCreateView.as_view(), name="warehouse_product_create"),
     path(

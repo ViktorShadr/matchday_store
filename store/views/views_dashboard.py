@@ -7,7 +7,7 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, RedirectView, TemplateView, UpdateView
 
-from orders.application import DashboardOrderFlowError, DashboardOrderFlowService
+from orders.application import DashboardOrderFlowError, DashboardOrderFlowService, OrderNotificationService
 from orders.models import Order
 from orders.services import OrderAutoCancellationService
 from store.application import WarehouseCrudService
@@ -179,6 +179,9 @@ class DashboardOrderContextMixin:
             "-created_at",
             "-id",
         )
+        context["notification_logs"] = list(
+            self.object.notification_logs.select_related("triggered_by").order_by("-created_at", "-id")[:8]
+        )
         return context
 
 
@@ -239,6 +242,19 @@ class DashboardOrderStaffNoteUpdateView(ModeratorRequiredMixin, View):
         order.staff_note = request.POST.get("staff_note", "").strip()
         order.save(update_fields=["staff_note", "updated_at"])
         messages.success(request, "Внутренняя заметка сохранена.")
+        return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
+
+class DashboardOrderNotificationResendView(ModeratorRequiredMixin, View):
+    notification_service = OrderNotificationService
+
+    def post(self, request, *args, **kwargs):
+        order = get_object_or_404(Order, pk=self.kwargs["pk"])
+        is_enqueued = self.notification_service.enqueue_manual_resend(order, triggered_by=request.user)
+        if is_enqueued:
+            messages.info(request, "Письмо поставлено в очередь на отправку.")
+        else:
+            messages.error(request, "Не удалось поставить письмо в очередь на отправку. Проверьте настройки email.")
         return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
 

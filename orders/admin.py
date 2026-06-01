@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from orders.models import Address, Order, OrderItem, OrderStatusTransition
+from orders.models import Address, Order, OrderItem, OrderNotificationLog, OrderStatusTransition
 
 
 class OrderItemInline(admin.TabularInline):
@@ -16,6 +16,28 @@ class OrderStatusTransitionInline(admin.TabularInline):
     extra = 0
     can_delete = False
     fields = ("transition_type", "from_value", "to_value", "changed_by", "created_at")
+    readonly_fields = fields
+    ordering = ("-created_at", "-id")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class OrderNotificationLogInline(admin.TabularInline):
+    model = OrderNotificationLog
+    extra = 0
+    can_delete = False
+    fields = (
+        "notification_type",
+        "recipient_email",
+        "status",
+        "error_message",
+        "task_id",
+        "triggered_by",
+        "created_at",
+        "sent_at",
+        "updated_at",
+    )
     readonly_fields = fields
     ordering = ("-created_at", "-id")
 
@@ -48,7 +70,7 @@ class AddressAdmin(admin.ModelAdmin):
 class OrderAdmin(admin.ModelAdmin):
     """Настройки админ-интерфейса для Order."""
 
-    inlines = (OrderItemInline, OrderStatusTransitionInline)
+    inlines = (OrderItemInline, OrderNotificationLogInline, OrderStatusTransitionInline)
     list_display = (
         "id",
         "number",
@@ -105,3 +127,33 @@ class OrderStatusTransitionAdmin(admin.ModelAdmin):
     search_fields = ("order__number", "from_value", "to_value", "changed_by__email")
     ordering = ("-created_at", "-id")
     readonly_fields = ("order", "transition_type", "from_value", "to_value", "changed_by", "created_at")
+
+
+@admin.register(OrderNotificationLog)
+class OrderNotificationLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order",
+        "notification_type",
+        "recipient_email",
+        "status",
+        "triggered_by",
+        "task_id",
+        "created_at",
+        "sent_at",
+    )
+    list_filter = ("notification_type", "status", "created_at", "sent_at")
+    search_fields = ("order__number", "recipient_email", "task_id", "triggered_by__email", "error_message")
+    ordering = ("-created_at", "-id")
+    readonly_fields = (
+        "order",
+        "notification_type",
+        "recipient_email",
+        "status",
+        "error_message",
+        "task_id",
+        "triggered_by",
+        "created_at",
+        "sent_at",
+        "updated_at",
+    )

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 class Address(models.Model):
@@ -254,6 +255,82 @@ class GuestOrderAccessToken(models.Model):
 
     def __str__(self):
         return f"{self.order_id}: {self.purpose}"
+
+
+class OrderNotificationLog(models.Model):
+    """Журнал попыток отправки клиентских email-уведомлений по заказу."""
+
+    class NotificationType(models.TextChoices):
+        CREATED = "created", "Заказ принят"
+        CANCELLED = "cancelled", "Заказ отменен"
+        READY = "ready", "Готов к выдаче"
+        PAID = "paid", "Оплата подтверждена"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ожидает отправки"
+        SENT = "sent", "Отправлено"
+        FAILED = "failed", "Ошибка"
+
+    order = models.ForeignKey("orders.Order", on_delete=models.CASCADE, related_name="notification_logs")
+    notification_type = models.CharField(max_length=32, choices=NotificationType.choices, db_index=True)
+    recipient_email = models.EmailField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    error_message = models.TextField(null=True, blank=True)
+    task_id = models.CharField(max_length=255, null=True, blank=True)
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="triggered_order_notification_logs",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Журнал уведомления заказа"
+        verbose_name_plural = "Журнал уведомлений заказов"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["order", "-created_at"], name="order_notif_order_created_idx"),
+            models.Index(fields=["order", "status"], name="order_notif_order_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.order_id}: {self.notification_type} -> {self.recipient_email} ({self.status})"
+
+    @property
+    def status_badge_class(self) -> str:
+        badge_modifiers = {
+            self.Status.SENT: "sf-status-badge--success",
+            self.Status.PENDING: "sf-status-badge--warning",
+            self.Status.FAILED: "sf-status-badge--danger",
+        }
+        return f"sf-status-badge {badge_modifiers.get(self.status, 'sf-status-badge--dark')}"
+
+    @property
+    def trigger_display(self) -> str:
+        return "Вручную" if self.triggered_by_id else "Автоматически"
+
+    def mark_pending(self, *, task_id: str | None = None) -> None:
+        self.status = self.Status.PENDING
+        self.error_message = None
+        self.sent_at = None
+        if task_id:
+            self.task_id = task_id
+        self.save(update_fields=["status", "error_message", "sent_at", "task_id", "updated_at"])
+
+    def mark_sent(self) -> None:
+        self.status = self.Status.SENT
+        self.error_message = None
+        self.sent_at = timezone.now()
+        self.save(update_fields=["status", "error_message", "sent_at", "updated_at"])
+
+    def mark_failed(self, error_message: str) -> None:
+        self.status = self.Status.FAILED
+        self.error_message = error_message
+        self.save(update_fields=["status", "error_message", "updated_at"])
 
 
 class OrderStatusTransition(models.Model):

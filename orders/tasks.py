@@ -14,6 +14,7 @@ from config.email_delivery import (
     is_permanent_email_delivery_error,
 )
 from orders.models import Order
+from orders.notification_logs import OrderNotificationLogService
 from store.site_contacts import format_business_days_label
 
 logger = logging.getLogger(__name__)
@@ -232,11 +233,8 @@ def send_order_notification_sync(
     raise_on_error: bool = False,
     task=None,
     retries: int | None = None,
+    notification_log_id: int | None = None,
 ) -> bool:
-    if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
-        _log_notification_error(order_id, event_key, "invalid_default_from_email", task=task, retries=retries)
-        return False
-
     try:
         order = Order.objects.select_related("user").get(pk=order_id)
     except Order.DoesNotExist:
@@ -252,7 +250,20 @@ def send_order_notification_sync(
         )
         return False
 
+    notification_log = OrderNotificationLogService.prepare_attempt(
+        order=order,
+        event_key=event_key,
+        notification_log_id=notification_log_id,
+        task=task,
+    )
+
+    if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
+        notification_log.mark_failed("DEFAULT_FROM_EMAIL не настроен.")
+        _log_notification_error(order_id, event_key, "invalid_default_from_email", task=task, retries=retries)
+        return False
+
     if not order.email:
+        notification_log.mark_failed("Email получателя не указан.")
         logger.warning(
             "order.notification_skipped_recipient_missing",
             extra=build_email_delivery_log_extra(
@@ -267,7 +278,8 @@ def send_order_notification_sync(
 
     try:
         subject, message = _build_order_notification_content(order, event_key)
-    except ValueError:
+    except ValueError as exc:
+        OrderNotificationLogService.mark_failed(notification_log, exc)
         _log_notification_error(
             order_id,
             event_key,
@@ -287,10 +299,12 @@ def send_order_notification_sync(
             fail_silently=False,
         )
         if sent_count == 0:
+            notification_log.mark_failed("Почтовый сервер не принял письмо к отправке.")
             _log_notification_error(order_id, event_key, "send_mail_returned_zero", task=task, retries=retries)
             if raise_on_error:
                 raise NotificationDeliveryError("Не удалось отправить email-уведомление по заказу")
             return False
+        notification_log.mark_sent()
         logger.info(
             "order.notification_sent",
             extra=build_email_delivery_log_extra(
@@ -306,6 +320,7 @@ def send_order_notification_sync(
         raise
     except Exception as exc:
         is_permanent_error = is_permanent_email_delivery_error(exc)
+        OrderNotificationLogService.mark_failed(notification_log, exc)
         _log_notification_error(
             order_id,
             event_key,
@@ -404,8 +419,14 @@ def send_staff_new_order_notification_sync(
 
 
 @shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
-def send_order_notification(self, order_id: int, event_key: str) -> bool:
-    return send_order_notification_sync(order_id, event_key, raise_on_error=True, task=self)
+def send_order_notification(self, order_id: int, event_key: str, notification_log_id: int | None = None) -> bool:
+    return send_order_notification_sync(
+        order_id,
+        event_key,
+        raise_on_error=True,
+        task=self,
+        notification_log_id=notification_log_id,
+    )
 
 
 @shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
