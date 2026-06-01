@@ -82,9 +82,7 @@ class GuestOrderAccessTokenService:
         return cls._active_tokens_for_order(order, purpose).filter(expires_at__gt=now)
 
     @classmethod
-    def _recover_raw_token_for_access_token(
-        cls, order: Order, access_token: GuestOrderAccessToken
-    ) -> str | None:
+    def _recover_raw_token_for_access_token(cls, order: Order, access_token: GuestOrderAccessToken) -> str | None:
         legacy_raw_token = (order.guest_manage_token or "").strip()
         if legacy_raw_token and constant_time_compare(
             cls.hash_token(legacy_raw_token),
