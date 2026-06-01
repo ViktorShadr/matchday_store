@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from io import BytesIO
+from unittest.mock import ANY, patch
 
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import ValidationError
@@ -13,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from orders.models import Order, OrderItem, OrderStatusTransition
+from orders.models import Order, OrderItem, OrderNotificationLog, OrderStatusTransition
 from payments.models import Payment
 from store.application import CartContext, CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
@@ -1257,6 +1258,110 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertContains(response, "Забрать до")
         self.assertContains(response, "Распечатать заказ")
         self.assertContains(response, reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))
+
+    def test_order_detail_displays_notification_block_without_attempts(self):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Уведомления")
+        self.assertContains(response, "Уведомления по заказу еще не отправлялись.")
+        self.assertContains(response, "Повторно отправить письмо")
+
+    def test_order_detail_displays_notification_attempts(self):
+        manager_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.SENT,
+            sent_at=timezone.now(),
+        )
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.READY,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.FAILED,
+            error_message="smtp unavailable",
+            triggered_by=self.moderator,
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Заказ принят")
+        self.assertContains(response, "Готов к выдаче")
+        self.assertContains(response, self.order.email)
+        self.assertContains(response, "Отправлено")
+        self.assertContains(response, "Ошибка")
+        self.assertContains(response, "Автоматически")
+        self.assertContains(response, "Вручную")
+        self.assertContains(response, "smtp unavailable")
+        self.assertContains(response, manager_log.sent_at.strftime("%d.%m.%Y"))
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_manager_can_manually_resend_notification_and_create_pending_log(self, mock_send_order_notification):
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_notification_resend", kwargs={"pk": self.order.pk}),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.assertContains(response, "Письмо поставлено в очередь на отправку.")
+        mock_send_order_notification.delay.assert_called_once_with(
+            self.order.pk,
+            "created",
+            notification_log_id=ANY,
+        )
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
+        self.assertEqual(notification_log.recipient_email, self.order.email)
+        self.assertEqual(notification_log.triggered_by_id, self.moderator.id)
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_manual_resend_enqueue_failure_marks_log_failed(self, mock_send_order_notification):
+        mock_send_order_notification.delay.side_effect = RuntimeError("broker down")
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_notification_resend", kwargs={"pk": self.order.pk}),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.assertContains(response, "Не удалось поставить письмо в очередь на отправку.")
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIn("broker down", notification_log.error_message)
+        self.assertEqual(notification_log.triggered_by_id, self.moderator.id)
+
+    def test_unauthorized_user_cannot_access_resend_action(self):
+        self.client.login(email="dashboard-user@example.com", password="userpass123")
+
+        response = self.client.post(reverse("store:dashboard_order_notification_resend", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(OrderNotificationLog.objects.filter(order=self.order).exists())
+
+    def test_customer_cannot_see_notification_logs(self):
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.FAILED,
+            error_message="smtp unavailable",
+        )
+        self.client.login(email=self.customer.email, password="customerpass123")
+
+        response = self.client.get(reverse("users:order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Уведомления")
+        self.assertNotContains(response, "Повторно отправить письмо")
+        self.assertNotContains(response, "smtp unavailable")
 
     def test_order_print_view_requires_login(self):
         response = self.client.get(reverse("store:dashboard_order_print", kwargs={"pk": self.order.pk}))

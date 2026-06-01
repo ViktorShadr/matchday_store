@@ -144,7 +144,10 @@ class SalesFlowSmokeE2ETest(TestCase):
             self.assertEqual(customer_cart.items.count(), 0)
 
             mock_send_staff_new_order_notification.delay.assert_called_once_with(order.id)
-            self.assertIn(call(order.id, "created"), mock_send_order_notification.delay.call_args_list)
+            self.assertIn(
+                call(order.id, "created", notification_log_id=ANY),
+                mock_send_order_notification.delay.call_args_list,
+            )
 
             self.dashboard_client.force_login(self.dashboard_user)
 
@@ -187,8 +190,14 @@ class SalesFlowSmokeE2ETest(TestCase):
             self.assertEqual(self.variant.quantity, 8)
             self.assertEqual(self.variant.reserved_quantity, 0)
 
-            self.assertIn(call(order.id, "paid"), mock_send_order_notification.delay.call_args_list)
-            self.assertIn(call(order.id, "ready"), mock_send_order_notification.delay.call_args_list)
+            self.assertIn(
+                call(order.id, "paid", notification_log_id=ANY),
+                mock_send_order_notification.delay.call_args_list,
+            )
+            self.assertIn(
+                call(order.id, "ready", notification_log_id=ANY),
+                mock_send_order_notification.delay.call_args_list,
+            )
             self.assertTrue(
                 OrderStatusTransition.objects.filter(
                     order=order,

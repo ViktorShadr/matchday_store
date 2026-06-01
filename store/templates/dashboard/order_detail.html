@@ -166,6 +166,51 @@
                     </div>
 
                     <div class="sf-surface p-4 mb-4">
+                        <h2 class="h4 mb-3">Уведомления</h2>
+                        <form method="post" action="{% url 'store:dashboard_order_notification_resend' order.pk %}" class="mb-3">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-primary w-100">Повторно отправить письмо</button>
+                        </form>
+
+                        {% if notification_logs %}
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Тип</th>
+                                            <th scope="col">Статус</th>
+                                            <th scope="col">Когда</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for log in notification_logs %}
+                                            <tr>
+                                                <td class="text-break">
+                                                    <div class="fw-semibold">{{ log.get_notification_type_display }}</div>
+                                                    <div class="small text-muted">{{ log.recipient_email }}</div>
+                                                    <div class="small text-muted">{{ log.trigger_display }}</div>
+                                                    {% if log.status == "failed" and log.error_message %}
+                                                        <div class="small text-danger mt-1">{{ log.error_message }}</div>
+                                                    {% endif %}
+                                                </td>
+                                                <td><span class="{{ log.status_badge_class }}">{{ log.get_status_display }}</span></td>
+                                                <td class="small text-muted">
+                                                    <div>{{ log.created_at|date:"d.m.Y H:i" }}</div>
+                                                    {% if log.sent_at %}
+                                                        <div>Отправлено: {{ log.sent_at|date:"d.m.Y H:i" }}</div>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-muted">Уведомления по заказу еще не отправлялись.</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="sf-surface p-4 mb-4">
                         <h2 class="h4 mb-3">Следующий шаг</h2>
                         <div class="d-grid gap-2">
                             {% for note in staff_guidance %}
