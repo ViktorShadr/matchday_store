@@ -1298,7 +1298,10 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertContains(response, "Автоматически")
         self.assertContains(response, "Вручную")
         self.assertContains(response, "smtp unavailable")
-        self.assertContains(response, manager_log.sent_at.strftime("%d.%m.%Y"))
+        self.assertContains(
+            response,
+            timezone.localtime(manager_log.sent_at).strftime("%d.%m.%Y"),
+        )
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_manager_can_manually_resend_notification_and_create_pending_log(self, mock_send_order_notification):
