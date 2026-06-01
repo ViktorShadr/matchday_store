@@ -81,6 +81,8 @@ class Order(models.Model):
         customer_comment (str): Комментарий заказчика
         staff_note (str): Внутренняя заметка сотрудников
         source_cart_id (int): ID корзины-источника
+        checkout_session_key (str): Снимок session key гостевого checkout
+        checkout_ip_address (str): Снимок IP гостевого checkout
         confirmed_at (datetime): Дата подтверждения
         paid_at (datetime): Дата оплаты
         issued_at (datetime): Дата выдачи заказа
@@ -184,6 +186,18 @@ class Order(models.Model):
     customer_comment = models.TextField(blank=True)
     staff_note = models.TextField(blank=True)
     source_cart_id = models.PositiveBigIntegerField(null=True, blank=True)
+    checkout_session_key = models.CharField(
+        max_length=40,
+        blank=True,
+        db_index=True,
+        help_text="Guest checkout session snapshot for stock reservation abuse limits.",
+    )
+    checkout_ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Guest checkout IP snapshot for stock reservation abuse limits.",
+    )
     confirmed_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     issued_at = models.DateTimeField(null=True, blank=True)

@@ -33,6 +33,7 @@ from orders.models import GuestOrderAccessToken, Order, OrderItem, OrderStatusTr
 from orders.services import (
     CheckoutError,
     CheckoutService,
+    GuestCheckoutAbuseLimitService,
     GuestOrderAccessTokenService,
     ManualPaymentUpdateService,
     OrderAutoCancellationService,
@@ -202,6 +203,93 @@ class CheckoutFlowTest(TestCase):
         CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=quantity)
         return cart
 
+    def _ensure_client_session_key(self):
+        session = self.client.session
+        if not session.session_key:
+            session.save()
+        return session.session_key
+
+    def _create_guest_order(
+        self,
+        *,
+        number,
+        email="guest@example.com",
+        phone="+79990001122",
+        session_key="guest-session",
+        ip_address="127.0.0.1",
+        status=Order.Status.PLACED,
+        payment_status=Order.PaymentStatus.PENDING,
+        fulfillment_status=Order.FulfillmentStatus.NEW,
+        reserve_quantity=1,
+    ):
+        order = Order.objects.create(
+            number=number,
+            user=None,
+            recipient_name="Гость Покупатель",
+            email=email,
+            phone=phone,
+            status=status,
+            payment_status=payment_status,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+            subtotal_amount=Decimal("100.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("100.00"),
+            checkout_session_key=session_key,
+            checkout_ip_address=ip_address,
+            confirmed_at=timezone.now(),
+            issued_at=timezone.now() if fulfillment_status == Order.FulfillmentStatus.DELIVERED else None,
+            cancelled_at=timezone.now() if status == Order.Status.CANCELLED else None,
+        )
+        item_quantity = max(reserve_quantity, 1)
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=self.variant.sku or str(self.variant.pk),
+            size_snapshot=self.variant.size or "",
+            color_snapshot=self.variant.color or "",
+            unit_price=Decimal("100.00"),
+            quantity=item_quantity,
+            line_total=Decimal("100.00") * item_quantity,
+        )
+        if fulfillment_status not in {
+            Order.FulfillmentStatus.CANCELLED,
+            Order.FulfillmentStatus.DELIVERED,
+            Order.FulfillmentStatus.RETURNED,
+        } and status not in {Order.Status.CANCELLED, Order.Status.DELIVERED, Order.Status.REFUNDED}:
+            self.variant.reserved_quantity += reserve_quantity
+            self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        return order
+
+    def _post_guest_checkout(self, *, email="guest@example.com", phone="+79990001122", remote_addr="127.0.0.1"):
+        return self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Гость Покупатель",
+                "email": email,
+                "phone": phone,
+                "customer_comment": "",
+            },
+            REMOTE_ADDR=remote_addr,
+        )
+
+    def _assert_guest_checkout_blocked(self, response, guest_cart, *, expected_reserved_quantity):
+        self.assertEqual(response.status_code, 200)
+        errors = [str(error) for error in response.context["form"].non_field_errors()]
+        self.assertEqual(errors, [GuestCheckoutAbuseLimitService.limit_error_message])
+
+        error_text = " ".join(errors).lower()
+        for forbidden_fragment in ("email", "phone", "ip", "телефон", "почт", "сесс"):
+            self.assertNotIn(forbidden_fragment, error_text)
+
+        self.variant.refresh_from_db()
+        guest_cart.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, expected_reserved_quantity)
+        self.assertEqual(guest_cart.items.count(), 1)
+
     def test_guest_checkout_page_is_available(self):
         """Гость может открыть оформление заказа с session-cart."""
         self._prepare_guest_cart()
@@ -247,6 +335,251 @@ class CheckoutFlowTest(TestCase):
         self.assertContains(success_response, reverse("users:registration"))
         self.assertIsNone(order.guest_manage_token)
         self.assertFalse(GuestOrderAccessToken.objects.filter(order=order).exists())
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=2,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=2,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=2,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=2,
+    )
+    def test_guest_checkout_succeeds_below_active_guest_limits(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        session_key = self._ensure_client_session_key()
+        self._create_guest_order(
+            number="ORD-GUEST-BELOW-LIMIT",
+            email="Guest@Example.com",
+            phone="+7 (999) 000-11-22",
+            session_key=session_key,
+            ip_address="127.0.0.1",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        order = Order.objects.get(user__isnull=True, source_cart_id=guest_cart.pk)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        guest_cart.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 3)
+        self.assertEqual(guest_cart.items.count(), 0)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_is_blocked_by_email_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-EMAIL-LIMIT",
+            email="Guest@Example.com",
+            phone="+79990000000",
+            session_key="other-session",
+            ip_address="198.51.100.10",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_is_blocked_by_phone_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-PHONE-LIMIT",
+            email="other@example.com",
+            phone="+7 (999) 000-11-22",
+            session_key="other-session",
+            ip_address="198.51.100.10",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_is_blocked_by_session_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        session_key = self._ensure_client_session_key()
+        self._create_guest_order(
+            number="ORD-GUEST-SESSION-LIMIT",
+            email="other@example.com",
+            phone="+79990000000",
+            session_key=session_key,
+            ip_address="198.51.100.10",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=1,
+    )
+    def test_guest_checkout_is_blocked_by_ip_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        ip_address = "203.0.113.10"
+        self._create_guest_order(
+            number="ORD-GUEST-IP-LIMIT",
+            email="other@example.com",
+            phone="+79990000000",
+            session_key="other-session",
+            ip_address=ip_address,
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(
+            email="guest@example.com",
+            phone="+79990001122",
+            remote_addr=ip_address,
+        )
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_cancelled_guest_orders_do_not_count_as_active_guest_orders(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-CANCELLED",
+            email="guest@example.com",
+            status=Order.Status.CANCELLED,
+            payment_status=Order.PaymentStatus.CANCELLED,
+            fulfillment_status=Order.FulfillmentStatus.CANCELLED,
+            reserve_quantity=0,
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        order = Order.objects.get(user__isnull=True, source_cart_id=guest_cart.pk)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_issued_guest_orders_do_not_count_as_active_guest_orders(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-ISSUED",
+            email="guest@example.com",
+            status=Order.Status.DELIVERED,
+            payment_status=Order.PaymentStatus.SUCCEEDED,
+            fulfillment_status=Order.FulfillmentStatus.DELIVERED,
+            reserve_quantity=0,
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        order = Order.objects.get(user__isnull=True, source_cart_id=guest_cart.pk)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=1,
+    )
+    def test_registered_checkout_is_unchanged_by_guest_active_order_limits(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-REGISTERED-UNCHANGED",
+            email=self.user.email,
+            phone=self.user.phone,
+            session_key="registered-other-session",
+            ip_address="127.0.0.1",
+        )
+        self.client.login(email="buyer@example.com", password="testpass123")
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user=self.user)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 3)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_limit_error_message_is_generic(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(number="ORD-GUEST-GENERIC-ERROR", email="guest@example.com")
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_block_does_not_reserve_stock(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(number="ORD-GUEST-NO-STOCK-RESERVE", email="guest@example.com")
+        guest_cart = self._prepare_guest_cart()
+        reserved_before = self.variant.reserved_quantity
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=reserved_before)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
 
     def test_guest_empty_cart_fallback_rechecks_idempotency_with_session_key(self):
         """Fallback гостевой корзины должен найти session-scoped payment."""

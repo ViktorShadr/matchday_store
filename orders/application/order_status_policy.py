@@ -8,6 +8,20 @@ class OrderStatusPolicy:
 
     STATUS_KEYS = ("new", "processing", "ready", "issued", "cancelled")
     FINAL_STATUS_KEYS = frozenset({"issued", "cancelled"})
+    RESERVE_TERMINAL_ORDER_STATUSES = frozenset(
+        {
+            Order.Status.CANCELLED,
+            Order.Status.DELIVERED,
+            Order.Status.REFUNDED,
+        }
+    )
+    RESERVE_TERMINAL_FULFILLMENT_STATUSES = frozenset(
+        {
+            Order.FulfillmentStatus.CANCELLED,
+            Order.FulfillmentStatus.DELIVERED,
+            Order.FulfillmentStatus.RETURNED,
+        }
+    )
     STATUS_TRANSITIONS = {
         "new": frozenset({"new", "processing", "ready", "cancelled"}),
         "processing": frozenset({"processing", "ready", "cancelled"}),
@@ -39,6 +53,12 @@ class OrderStatusPolicy:
     @classmethod
     def is_final_status_key(cls, status_key: str) -> bool:
         return status_key in cls.FINAL_STATUS_KEYS
+
+    @classmethod
+    def reserve_relevant_queryset(cls, queryset):
+        return queryset.exclude(status__in=cls.RESERVE_TERMINAL_ORDER_STATUSES).exclude(
+            fulfillment_status__in=cls.RESERVE_TERMINAL_FULFILLMENT_STATUSES
+        )
 
     @classmethod
     def can_transition(cls, current_status: str, next_status: str) -> bool:

@@ -10,6 +10,7 @@ from django_ratelimit.decorators import ratelimit
 
 from analytics.metrika import build_checkout_event, build_purchase_event, is_metrika_enabled, queue_ecommerce_event
 from config.rate_limits import setting_rate
+from config.request_ip import get_safe_request_ip
 from orders.application import CheckoutContext, CheckoutSessionService
 from orders.application.order_status_policy import OrderStatusPolicy
 from orders.forms import CheckoutForm
@@ -137,6 +138,7 @@ class CheckoutView(CartContextMixin, FormView):
                 CheckoutContext(
                     user=self.request.user if self.request.user.is_authenticated else None,
                     cart_context=self.cart_context,
+                    ip_address=get_safe_request_ip(self.request),
                 ),
                 form.cleaned_data,
                 checkout_token=submitted_token,

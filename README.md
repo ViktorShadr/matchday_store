@@ -314,6 +314,7 @@ Critical checkout protections include:
 - conditional updates,
 - idempotency keys,
 - duplicate-submit handling,
+- guest active-order limits by email, phone, session, and IP to protect stock reservations,
 - transactional cleanup of purchased cart items.
 
 ---
