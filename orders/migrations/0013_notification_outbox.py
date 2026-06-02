@@ -1,6 +1,7 @@
 # Generated for notification outbox migration.
 
 from django.db import migrations, models
+from django.db.models import Case, IntegerField, Value, When
 
 
 def backfill_notification_outbox_fields(apps, schema_editor):
@@ -11,10 +12,17 @@ def backfill_notification_outbox_fields(apps, schema_editor):
         .values_list("idempotency_key", flat=True)
     )
 
-    for notification_log in OrderNotificationLog.objects.order_by(
+    for notification_log in OrderNotificationLog.objects.annotate(
+        sent_priority=Case(
+            When(status="sent", then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        )
+    ).order_by(
         "order_id",
         "notification_type",
         "recipient_type",
+        "sent_priority",
         "-sent_at",
         "-created_at",
         "-id",
@@ -41,7 +49,6 @@ def backfill_notification_outbox_fields(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("orders", "0012_ordernotificationlog"),
     ]
