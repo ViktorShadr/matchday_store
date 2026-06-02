@@ -28,10 +28,13 @@ class OrderNotificationLogInline(admin.TabularInline):
     extra = 0
     can_delete = False
     fields = (
-        "notification_type",
+        "event_key",
+        "recipient_type",
         "recipient_email",
+        "recipient_list_snapshot",
         "status",
-        "error_message",
+        "attempts_count",
+        "last_error",
         "task_id",
         "triggered_by",
         "created_at",
@@ -134,24 +137,41 @@ class OrderNotificationLogAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "order",
-        "notification_type",
+        "event_key",
+        "recipient_type",
         "recipient_email",
         "status",
+        "attempts_count",
         "triggered_by",
         "task_id",
         "created_at",
         "sent_at",
     )
-    list_filter = ("notification_type", "status", "created_at", "sent_at")
-    search_fields = ("order__number", "recipient_email", "task_id", "triggered_by__email", "error_message")
+    list_filter = ("event_key", "recipient_type", "status", "created_at", "sent_at")
+    search_fields = (
+        "order__number",
+        "recipient_email",
+        "recipient_list_snapshot",
+        "task_id",
+        "triggered_by__email",
+        "last_error",
+    )
     ordering = ("-created_at", "-id")
     readonly_fields = (
         "order",
         "notification_type",
+        "event_key",
+        "recipient_type",
         "recipient_email",
+        "recipient_list_snapshot",
+        "subject",
+        "message",
         "status",
+        "attempts_count",
+        "last_error",
         "error_message",
         "task_id",
+        "idempotency_key",
         "triggered_by",
         "created_at",
         "sent_at",

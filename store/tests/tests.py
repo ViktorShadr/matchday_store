@@ -1314,15 +1314,65 @@ class DashboardOrdersManagementTest(TestCase):
 
         self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
         self.assertContains(response, "Письмо поставлено в очередь на отправку.")
-        mock_send_order_notification.delay.assert_called_once_with(
-            self.order.pk,
-            "created",
-            notification_log_id=ANY,
-        )
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
         notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
         self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
         self.assertEqual(notification_log.recipient_email, self.order.email)
         self.assertEqual(notification_log.triggered_by_id, self.moderator.id)
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_manual_resend_ignores_staff_log_when_resolving_customer_event(self, mock_send_order_notification):
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            event_key=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+            recipient_list_snapshot=["staff@example.com"],
+            subject="Новый заказ",
+            message="Новый заказ для сотрудников.",
+            status=OrderNotificationLog.Status.SENT,
+            sent_at=timezone.now(),
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_notification_resend", kwargs={"pk": self.order.pk}),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
+        notification_log = OrderNotificationLog.objects.get(
+            order=self.order,
+            event_key=OrderNotificationLog.NotificationType.CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+        )
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
+        self.assertEqual(notification_log.recipient_email, self.order.email)
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_manager_can_retry_failed_notification_log(self, mock_send_order_notification):
+        notification_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.FAILED,
+            error_message="smtp unavailable",
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_notification_resend", kwargs={"pk": self.order.pk}),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.assertContains(response, "Письмо поставлено в очередь на отправку.")
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=notification_log.pk)
+        notification_log.refresh_from_db()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
+        self.assertEqual(notification_log.triggered_by_id, self.moderator.id)
+        self.assertIsNone(notification_log.last_error)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_manual_resend_enqueue_failure_marks_log_failed(self, mock_send_order_notification):

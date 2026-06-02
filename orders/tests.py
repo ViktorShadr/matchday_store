@@ -1613,42 +1613,52 @@ class GuestOrderManagementTest(TestCase):
     )
     def test_notification_retry_does_not_revoke_already_active_guest_token(self):
         order = self._create_guest_order(number="ORD-GUEST-RETRY-TOKEN-1")
+        first_url = (
+            f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'first-email-token'})}"
+        )
 
         with (
-            patch(
-                "orders.services.secrets.token_urlsafe",
-                side_effect=["first-email-token", "retry-email-token"],
-            ),
-            patch("orders.tasks.send_mail", side_effect=[1, RuntimeError("smtp unavailable")]),
+            patch("orders.services.secrets.token_urlsafe", return_value="first-email-token") as mock_token_urlsafe,
+            patch("orders.tasks.send_mail", side_effect=[RuntimeError("smtp unavailable"), 1]) as mock_send_mail,
             patch("orders.tasks.logger.exception"),
         ):
-            self.assertTrue(send_order_notification_sync(order.id, "created"))
             with self.assertRaises(NotificationDeliveryError):
                 send_order_notification_sync(order.id, "created", raise_on_error=True)
+            notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
+            self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+
+            self.assertTrue(
+                send_order_notification_sync(
+                    order.id,
+                    "created",
+                    notification_log_id=notification_log.pk,
+                )
+            )
 
         first_access_token = GuestOrderAccessToken.objects.get(
             token_hash=GuestOrderAccessTokenService.hash_token("first-email-token")
         )
-        retry_access_token = GuestOrderAccessToken.objects.get(
-            token_hash=GuestOrderAccessTokenService.hash_token("retry-email-token")
-        )
         response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "first-email-token"}))
+        retry_message = mock_send_mail.call_args_list[1].kwargs["message"]
 
         self.assertIsNone(first_access_token.revoked_at)
-        self.assertIsNone(retry_access_token.revoked_at)
         self.assertEqual(response.status_code, 200)
+        self.assertIn(first_url, retry_message)
+        self.assertEqual(mock_send_mail.call_count, 2)
+        self.assertEqual(mock_token_urlsafe.call_count, 1)
+        self.assertEqual(
+            GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
+            1,
+        )
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
         SITE_URL="https://shop.example.test",
     )
-    def test_two_guest_created_notifications_leave_first_emailed_link_valid(self):
+    def test_repeated_guest_created_notification_skips_second_send(self):
         order = self._create_guest_order(number="ORD-GUEST-DUPLICATE-TOKEN-1")
         first_url = (
             f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'first-email-token'})}"
-        )
-        second_url = (
-            f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'second-email-token'})}"
         )
 
         with (
@@ -1659,24 +1669,22 @@ class GuestOrderManagementTest(TestCase):
             patch("orders.tasks.send_mail", return_value=1) as mock_send_mail,
         ):
             first_result = send_order_notification_sync(order.id, "created")
+            first_message = mock_send_mail.call_args.kwargs["message"]
+            mock_send_mail.reset_mock()
             second_result = send_order_notification_sync(order.id, "created")
 
-        first_message = mock_send_mail.call_args_list[0].kwargs["message"]
-        second_message = mock_send_mail.call_args_list[1].kwargs["message"]
         first_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "first-email-token"}))
-        second_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "second-email-token"}))
 
         self.assertTrue(first_result)
         self.assertTrue(second_result)
         self.assertIn(first_url, first_message)
-        self.assertIn(second_url, second_message)
+        mock_send_mail.assert_not_called()
         self.assertEqual(first_response.status_code, 200)
-        self.assertEqual(second_response.status_code, 200)
         self.assertEqual(
             GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
-            2,
+            1,
         )
-        self.assertEqual(mock_token_urlsafe.call_count, 2)
+        self.assertEqual(mock_token_urlsafe.call_count, 1)
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
@@ -2793,6 +2801,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
 
     @patch("orders.application.order_notification_service.send_staff_new_order_notification")
     @patch("orders.application.order_notification_service.send_order_notification")
+    @override_settings(STAFF_ORDER_NOTIFICATION_EMAILS=["staff@example.com"])
     def test_checkout_schedules_created_notification(
         self,
         mock_send_order_notification,
@@ -2819,12 +2828,8 @@ class OrderNotificationServiceIntegrationTest(TestCase):
                 checkout_token="notify-created",
             )
 
-        mock_send_order_notification.delay.assert_called_once_with(
-            order.id,
-            "created",
-            notification_log_id=ANY,
-        )
-        mock_send_staff_new_order_notification.delay.assert_called_once_with(order.id)
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
+        mock_send_staff_new_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
         notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
         self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
         self.assertEqual(notification_log.recipient_email, self.user.email)
@@ -2864,11 +2869,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             OrderCancellationService().cancel_order(order_id=order.id, user_id=self.user.id)
 
-        mock_send_order_notification.delay.assert_called_once_with(
-            order.id,
-            "cancelled",
-            notification_log_id=ANY,
-        )
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_ready_status_schedules_ready_notification(self, mock_send_order_notification):
@@ -2891,11 +2892,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             DashboardOrderFlowService().update_order_status(order, "ready")
 
-        mock_send_order_notification.delay.assert_called_once_with(
-            order.id,
-            "ready",
-            notification_log_id=ANY,
-        )
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_successful_manual_payment_schedules_paid_notification(self, mock_send_order_notification):
@@ -2918,11 +2915,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             ManualPaymentUpdateService().update_order_payment_status(order.id, Order.PaymentStatus.SUCCEEDED)
 
-        mock_send_order_notification.delay.assert_called_once_with(
-            order.id,
-            "paid",
-            notification_log_id=ANY,
-        )
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
 
 
 class OrderStaffNotificationTaskTest(TestCase):
@@ -3003,7 +2996,7 @@ class OrderStaffNotificationTaskTest(TestCase):
         STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com", "staff2@example.com"],
         SITE_URL="http://localhost:8000",
     )
-    @patch("orders.tasks.send_mail")
+    @patch("orders.tasks.send_mail", return_value=1)
     def test_send_staff_new_order_notification_sync_sends_detailed_email(self, mock_send_mail):
         result = send_staff_new_order_notification_sync(self.order.id)
 
@@ -3018,6 +3011,41 @@ class OrderStaffNotificationTaskTest(TestCase):
         self.assertIn(self.order.phone, kwargs["message"])
         self.assertIn(self.product.name, kwargs["message"])
         self.assertIn(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}), kwargs["message"])
+        notification_log = OrderNotificationLog.objects.get(
+            order=self.order,
+            event_key=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+        )
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.recipient_list_snapshot, ["staff1@example.com", "staff2@example.com"])
+        self.assertEqual(notification_log.subject, kwargs["subject"])
+        self.assertEqual(notification_log.message, kwargs["message"])
+        self.assertEqual(notification_log.attempts_count, 1)
+        self.assertIsNotNone(notification_log.sent_at)
+        self.assertIsNone(notification_log.last_error)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com", "staff2@example.com"],
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_repeated_staff_notification_does_not_call_send_mail(self, mock_send_mail):
+        first_result = send_staff_new_order_notification_sync(self.order.id)
+        mock_send_mail.reset_mock()
+
+        second_result = send_staff_new_order_notification_sync(self.order.id)
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        mock_send_mail.assert_not_called()
+        notification_log = OrderNotificationLog.objects.get(
+            order=self.order,
+            event_key=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+        )
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
@@ -3029,6 +3057,13 @@ class OrderStaffNotificationTaskTest(TestCase):
 
         self.assertFalse(result)
         mock_send_mail.assert_not_called()
+        notification_log = OrderNotificationLog.objects.get(
+            order=self.order,
+            event_key=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+        )
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIn("Email получателей", notification_log.last_error)
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
@@ -3109,10 +3144,61 @@ class OrderStaffNotificationTaskTest(TestCase):
         mock_send_mail.assert_called_once()
         notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
         self.assertEqual(notification_log.recipient_email, self.order.email)
+        self.assertEqual(notification_log.event_key, "created")
+        self.assertEqual(notification_log.recipient_type, OrderNotificationLog.RecipientType.CUSTOMER)
+        self.assertEqual(notification_log.recipient_list_snapshot, [self.order.email])
+        self.assertEqual(notification_log.subject, mock_send_mail.call_args.kwargs["subject"])
+        self.assertEqual(notification_log.message, mock_send_mail.call_args.kwargs["message"])
         self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
         self.assertIsNotNone(notification_log.sent_at)
         self.assertIsNone(notification_log.error_message)
+        self.assertIsNone(notification_log.last_error)
         self.assertIsNone(notification_log.triggered_by_id)
+        self.assertTrue(notification_log.idempotency_key)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_repeated_customer_notification_does_not_call_send_mail(self, mock_send_mail):
+        first_result = send_order_notification_sync(self.order.id, "created")
+        mock_send_mail.reset_mock()
+
+        second_result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        mock_send_mail.assert_not_called()
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_already_sent_notification_is_not_retried_by_automatic_task(self, mock_send_mail):
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            event_key=OrderNotificationLog.NotificationType.CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+            recipient_email=self.order.email,
+            recipient_list_snapshot=[self.order.email],
+            subject="Заказ уже отправлен",
+            message="Письмо уже было доставлено.",
+            status=OrderNotificationLog.Status.SENT,
+            attempts_count=1,
+            sent_at=timezone.now(),
+        )
+
+        result = send_order_notification.run(order_id=self.order.id, event_key="created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_not_called()
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
@@ -3141,23 +3227,28 @@ class OrderStaffNotificationTaskTest(TestCase):
         notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
         self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
         self.assertIsNone(notification_log.sent_at)
+        self.assertEqual(notification_log.attempts_count, 1)
         self.assertLessEqual(len(notification_log.error_message), 240)
         self.assertIn("smtp unavailable", notification_log.error_message)
+        self.assertIn("smtp unavailable", notification_log.last_error)
         self.assertNotIn("raw-guest-token", notification_log.error_message)
         self.assertNotIn("buyer@example.com", notification_log.error_message)
+        self.assertTrue(notification_log.subject)
+        self.assertTrue(notification_log.message)
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
         SITE_URL="http://localhost:8000",
     )
     @patch("orders.tasks.send_mail", return_value=1)
-    def test_manual_resend_log_updates_to_sent_after_successful_task_execution(self, mock_send_mail):
+    def test_failed_notification_can_be_retried_manually(self, mock_send_mail):
         manager = User.objects.create_user(email="manager-resend@example.com", password="managerpass123")
         notification_log = OrderNotificationLog.objects.create(
             order=self.order,
             notification_type=OrderNotificationLog.NotificationType.CREATED,
             recipient_email=self.order.email,
-            status=OrderNotificationLog.Status.PENDING,
+            status=OrderNotificationLog.Status.FAILED,
+            error_message="smtp unavailable",
             triggered_by=manager,
         )
 
@@ -3171,8 +3262,10 @@ class OrderStaffNotificationTaskTest(TestCase):
         mock_send_mail.assert_called_once()
         notification_log.refresh_from_db()
         self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
         self.assertIsNotNone(notification_log.sent_at)
         self.assertIsNone(notification_log.error_message)
+        self.assertIsNone(notification_log.last_error)
         self.assertEqual(notification_log.triggered_by_id, manager.id)
 
     @override_settings(
@@ -3399,7 +3492,7 @@ class OrderNotificationServiceQueueDispatchTest(TestCase):
         result = OrderNotificationService.enqueue(order_id=order.pk, event_key="created")
 
         self.assertFalse(result)
-        mock_async_task.delay.assert_called_once_with(order.pk, "created", notification_log_id=ANY)
+        mock_async_task.delay.assert_called_once_with(notification_log_id=ANY)
         notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
         self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
         self.assertIn("broker down", notification_log.error_message)
