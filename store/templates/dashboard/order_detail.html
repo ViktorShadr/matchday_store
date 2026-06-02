@@ -317,38 +317,22 @@
 
                 <div class="sf-surface p-3 p-lg-4">
                     <h2 class="h4 mb-3">История изменений</h2>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0 sf-dashboard-table">
-                            <thead>
-                            <tr>
-                                <th scope="col">Когда</th>
-                                <th scope="col">Тип</th>
-                                <th scope="col">Переход</th>
-                                <th scope="col">Кто</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {% for transition in status_transitions %}
-                                <tr>
-                                    <td>{{ transition.created_at|date:"d.m.Y H:i" }}</td>
-                                    <td>{{ transition.get_transition_type_display }}</td>
-                                    <td><code>{{ transition.from_value }}</code> &rarr;
-                                        <code>{{ transition.to_value }}</code></td>
-                                    <td>
-                                        {% if transition.changed_by %}
-                                            {{ transition.changed_by.email|default:"Система" }}
-                                        {% else %}
-                                            Система
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            {% empty %}
-                                <tr>
-                                    <td colspan="4" class="text-muted">История переходов пока пуста.</td>
-                                </tr>
-                            {% endfor %}
-                            </tbody>
-                        </table>
+                    <div class="d-grid gap-3">
+                        {% for transition in status_transitions %}
+                            <article class="border rounded-3 p-3">
+                                <div class="d-flex flex-column flex-md-row justify-content-md-between gap-2 mb-2">
+                                    <time class="text-muted small" datetime="{{ transition.created_at|date:'c' }}">
+                                        {{ transition.created_at|date:"d.m.Y H:i" }}
+                                    </time>
+                                    <div class="text-muted small">Изменил: {{ transition.changed_by_label }}</div>
+                                </div>
+                                <div class="fw-semibold">
+                                    {{ transition.type_label }}: {{ transition.from_label }} → {{ transition.to_label }}
+                                </div>
+                            </article>
+                        {% empty %}
+                            <div class="text-muted">История переходов пока пуста.</div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>

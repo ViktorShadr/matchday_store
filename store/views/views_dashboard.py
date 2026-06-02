@@ -14,7 +14,12 @@ from store.application import WarehouseCrudService
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm
 from store.mixins import ModeratorRequiredMixin, StaffOrderViewPermissionMixin
 from store.models import Category, Product, ProductImage, ProductVariant
-from store.presenters import DashboardOrderPresenter, WarehouseProductPresenter, WarehouseUiPresenter
+from store.presenters import (
+    DashboardOrderPresenter,
+    StatusTransitionPresenter,
+    WarehouseProductPresenter,
+    WarehouseUiPresenter,
+)
 from store.queries import DashboardOrderQueryService, WarehouseManagementQueryService, WarehouseQueryService
 
 DASHBOARD_ORDER_FILTERS = DashboardOrderPresenter.STATUS_FILTERS
@@ -175,10 +180,8 @@ class DashboardOrderContextMixin:
         context["staff_guidance"] = DashboardOrderPresenter.build_staff_guidance(self.object)
         if self.object.delivery_method == Order.DeliveryMethod.PICKUP:
             context["pickup_deadline"] = OrderAutoCancellationService.get_pickup_deadline(self.object)
-        context["status_transitions"] = self.object.status_transitions.select_related("changed_by").order_by(
-            "-created_at",
-            "-id",
-        )
+        status_transitions = self.object.status_transitions.select_related("changed_by").order_by("-created_at", "-id")
+        context["status_transitions"] = StatusTransitionPresenter.present_many(status_transitions)
         context["notification_logs"] = list(
             self.object.notification_logs.select_related("triggered_by").order_by("-created_at", "-id")[:8]
         )

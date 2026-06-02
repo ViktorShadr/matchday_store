@@ -19,6 +19,7 @@ from payments.models import Payment
 from store.application import CartContext, CartContextResolver
 from store.forms import ProductImageForm, ProductVariantForm
 from store.models import Cart, CartItem, Category, Page, Product, ProductImage, ProductVariant
+from store.presenters import StatusTransitionPresenter
 from store.presenters.catalog_presenters import ProductCardPresenter
 from store.services import InsufficientStockError, ProductNotOnSaleError
 from store.services.cart_service import CartService
@@ -1697,10 +1698,56 @@ class DashboardOrdersManagementTest(TestCase):
         )
         detail_response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
         self.assertContains(detail_response, "История изменений")
-        self.assertContains(detail_response, "Статус dashboard")
-        self.assertContains(detail_response, "new")
-        self.assertContains(detail_response, "processing")
+        self.assertContains(detail_response, "Статус dashboard: Новый → В обработке")
+        self.assertContains(detail_response, "Статус заказа: Оформлен → В обработке")
         self.assertContains(detail_response, self.moderator.email)
+
+    def test_status_transition_presenter_translates_status_values(self):
+        self.assertEqual(
+            StatusTransitionPresenter.display_value(
+                OrderStatusTransition.TransitionType.ORDER_STATUS,
+                Order.Status.PLACED,
+            ),
+            "Оформлен",
+        )
+        self.assertEqual(
+            StatusTransitionPresenter.display_value(
+                OrderStatusTransition.TransitionType.FULFILLMENT_STATUS,
+                Order.FulfillmentStatus.RESERVED,
+            ),
+            "Зарезервирован",
+        )
+        self.assertEqual(
+            StatusTransitionPresenter.display_value(
+                OrderStatusTransition.TransitionType.DASHBOARD_STATUS,
+                "ready",
+            ),
+            "Готов к выдаче",
+        )
+
+    def test_status_transition_presenter_falls_back_to_raw_value(self):
+        self.assertEqual(
+            StatusTransitionPresenter.display_value(
+                OrderStatusTransition.TransitionType.DASHBOARD_STATUS,
+                "unexpected_status",
+            ),
+            "unexpected_status",
+        )
+
+    def test_order_detail_displays_unknown_status_transition_without_errors(self):
+        OrderStatusTransition.objects.create(
+            order=self.order,
+            transition_type=OrderStatusTransition.TransitionType.DASHBOARD_STATUS,
+            from_value="new",
+            to_value="unexpected_status",
+            changed_by=self.moderator,
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Статус dashboard: Новый → unexpected_status")
 
     def test_orders_dashboard_forbidden_for_regular_user(self):
         self.client.login(email="dashboard-user@example.com", password="userpass123")
