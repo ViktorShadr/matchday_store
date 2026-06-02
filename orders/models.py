@@ -258,25 +258,44 @@ class GuestOrderAccessToken(models.Model):
 
 
 class OrderNotificationLog(models.Model):
-    """Журнал попыток отправки клиентских email-уведомлений по заказу."""
+    """DB-backed outbox record for order email notifications."""
 
     class NotificationType(models.TextChoices):
         CREATED = "created", "Заказ принят"
         CANCELLED = "cancelled", "Заказ отменен"
         READY = "ready", "Готов к выдаче"
         PAID = "paid", "Оплата подтверждена"
+        STAFF_CREATED = "staff_created", "Новый заказ для сотрудников"
+
+    class RecipientType(models.TextChoices):
+        CUSTOMER = "customer", "Покупатель"
+        STAFF = "staff", "Сотрудники"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Ожидает отправки"
+        SENDING = "sending", "Отправляется"
         SENT = "sent", "Отправлено"
         FAILED = "failed", "Ошибка"
 
     order = models.ForeignKey("orders.Order", on_delete=models.CASCADE, related_name="notification_logs")
     notification_type = models.CharField(max_length=32, choices=NotificationType.choices, db_index=True)
-    recipient_email = models.EmailField()
+    event_key = models.CharField(max_length=32, choices=NotificationType.choices, db_index=True)
+    recipient_type = models.CharField(
+        max_length=16,
+        choices=RecipientType.choices,
+        default=RecipientType.CUSTOMER,
+        db_index=True,
+    )
+    recipient_email = models.EmailField(blank=True)
+    recipient_list_snapshot = models.JSONField(default=list, blank=True)
+    subject = models.CharField(max_length=255, blank=True)
+    message = models.TextField(blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    attempts_count = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(null=True, blank=True)
     error_message = models.TextField(null=True, blank=True)
     task_id = models.CharField(max_length=255, null=True, blank=True)
+    idempotency_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
     triggered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -295,15 +314,53 @@ class OrderNotificationLog(models.Model):
         indexes = [
             models.Index(fields=["order", "-created_at"], name="order_notif_order_created_idx"),
             models.Index(fields=["order", "status"], name="order_notif_order_status_idx"),
+            models.Index(fields=["order", "event_key", "recipient_type"], name="order_notif_outbox_lookup_idx"),
         ]
 
     def __str__(self):
-        return f"{self.order_id}: {self.notification_type} -> {self.recipient_email} ({self.status})"
+        recipient = self.recipient_email or ", ".join(self.recipient_list_snapshot or [])
+        return f"{self.order_id}: {self.event_key} -> {recipient} ({self.status})"
+
+    @staticmethod
+    def _include_update_field(kwargs, field_name: str) -> None:
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and field_name not in update_fields:
+            kwargs["update_fields"] = [*update_fields, field_name]
+
+    @classmethod
+    def build_idempotency_key(cls, *, order_id: int, event_key: str, recipient_type: str) -> str:
+        return f"order-notification:{order_id}:{event_key}:{recipient_type}"
+
+    def save(self, *args, **kwargs):
+        if self.event_key and not self.notification_type:
+            self.notification_type = self.event_key
+            self._include_update_field(kwargs, "notification_type")
+        elif self.notification_type and not self.event_key:
+            self.event_key = self.notification_type
+            self._include_update_field(kwargs, "event_key")
+
+        if self.last_error and not self.error_message:
+            self.error_message = self.last_error
+            self._include_update_field(kwargs, "error_message")
+        elif self.error_message and not self.last_error:
+            self.last_error = self.error_message
+            self._include_update_field(kwargs, "last_error")
+
+        if self.order_id and self.event_key and self.recipient_type and not self.idempotency_key:
+            self.idempotency_key = self.build_idempotency_key(
+                order_id=self.order_id,
+                event_key=self.event_key,
+                recipient_type=self.recipient_type,
+            )
+            self._include_update_field(kwargs, "idempotency_key")
+
+        super().save(*args, **kwargs)
 
     @property
     def status_badge_class(self) -> str:
         badge_modifiers = {
             self.Status.SENT: "sf-status-badge--success",
+            self.Status.SENDING: "sf-status-badge--warning",
             self.Status.PENDING: "sf-status-badge--warning",
             self.Status.FAILED: "sf-status-badge--danger",
         }
@@ -313,24 +370,34 @@ class OrderNotificationLog(models.Model):
     def trigger_display(self) -> str:
         return "Вручную" if self.triggered_by_id else "Автоматически"
 
+    @property
+    def recipient_display(self) -> str:
+        if self.recipient_email:
+            return self.recipient_email
+        recipients = [email for email in (self.recipient_list_snapshot or []) if isinstance(email, str) and email]
+        return ", ".join(recipients) if recipients else "—"
+
     def mark_pending(self, *, task_id: str | None = None) -> None:
         self.status = self.Status.PENDING
+        self.last_error = None
         self.error_message = None
         self.sent_at = None
         if task_id:
             self.task_id = task_id
-        self.save(update_fields=["status", "error_message", "sent_at", "task_id", "updated_at"])
+        self.save(update_fields=["status", "last_error", "error_message", "sent_at", "task_id", "updated_at"])
 
     def mark_sent(self) -> None:
         self.status = self.Status.SENT
+        self.last_error = None
         self.error_message = None
         self.sent_at = timezone.now()
-        self.save(update_fields=["status", "error_message", "sent_at", "updated_at"])
+        self.save(update_fields=["status", "last_error", "error_message", "sent_at", "updated_at"])
 
     def mark_failed(self, error_message: str) -> None:
         self.status = self.Status.FAILED
+        self.last_error = error_message
         self.error_message = error_message
-        self.save(update_fields=["status", "error_message", "updated_at"])
+        self.save(update_fields=["status", "last_error", "error_message", "updated_at"])
 
 
 class OrderStatusTransition(models.Model):

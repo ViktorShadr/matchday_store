@@ -15,7 +15,7 @@
 
 Matchday Store is a production-oriented Django MVP for a football club merchandise store.
 
-The project models a realistic ecommerce workflow with transactional checkout, stock reservation, asynchronous processing, staff tooling, operational monitoring, and production-style deployment infrastructure.
+The project models a realistic ecommerce workflow with transactional checkout, stock reservation, persistent notification delivery, staff tooling, operational monitoring, and production-style deployment infrastructure.
 
 The main engineering focus is not CRUD functionality, but consistency, reliability, observability, security, and maintainability under real operational conditions.
 
@@ -26,13 +26,13 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - Transaction-safe checkout with stock reservation
 - Idempotent order processing
 - Concurrency protection with `select_for_update`
-- Async email pipeline with Celery
+- Async email pipeline with Celery and a persistent notification outbox
 - Structured JSON logging with request tracing
 - Dockerized production deployment
 - GitHub Actions CI/CD pipeline
 - Background job processing with retries
-- Staff dashboard for operational workflows
-- 300+ automated tests including concurrency scenarios
+- Staff dashboard with notification logs, manual resend, and printable order views
+- 370+ automated tests including concurrency and email-delivery scenarios
 
 ---
 
@@ -54,6 +54,9 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - Warehouse/staff dashboard
 - Order filtering and moderation workflows
 - Payment status management
+- Order detail workspace with staff guidance, transition history, and notification timeline
+- Manual notification resend/retry workflow for managers
+- Printable staff order view for pickup operations
 - Internal order notes and transition history
 - Role-based staff access with Django permissions
 
@@ -63,6 +66,8 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - Nginx reverse proxy + Gunicorn application server
 - Redis + Celery background processing
 - Dedicated email worker queue
+- DB-backed order notification outbox
+- Idempotent email delivery with deduplication and attempts tracking
 - Healthchecks and operational scripts
 - GitHub Actions CI/CD pipeline
 - Automated Docker image publishing to GHCR
@@ -74,6 +79,7 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - Rate limiting for critical endpoints
 - CSP and secure cookie configuration
 - CSRF protection
+- Expiring hashed guest order access tokens
 - Safe redirect validation
 - Sensitive-data masking in logs
 - Environment-based production settings
@@ -85,6 +91,7 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - Sentry integration
 - Audit logging
 - Celery request propagation
+- Order notification delivery logs with task IDs, attempts, recipient snapshots, and sanitized errors
 - Health endpoints
 - Ecommerce analytics integration
 
@@ -173,13 +180,16 @@ The final workflow uses scoped idempotency keys and transaction-aware reservatio
 
 Email delivery and scheduled maintenance tasks run asynchronously through Celery.
 
+Order notification events are persisted as `OrderNotificationLog` outbox records before Celery delivery. Delivery tasks claim records with database locking, skip already sent or already sending records, persist task IDs, attempts and sanitized errors, and support manager-triggered retries from the dashboard.
+
 Special attention was paid to:
 
 - retry safety,
 - exponential backoff,
 - transient SMTP handling,
 - queue isolation,
-- failure visibility through logging and Sentry.
+- idempotent notification delivery,
+- failure visibility through logs, dashboard status, and Sentry.
 
 ---
 
@@ -205,6 +215,7 @@ Special attention was paid to:
 .
 ├── analytics/
 ├── config/
+├── docs/
 ├── docker/
 ├── ops/
 ├── orders/
@@ -213,7 +224,7 @@ Special attention was paid to:
 ├── support/
 ├── users/
 ├── .github/workflows/
-├── docker-compose.yml
+├── docker-compose.yaml
 ├── docker-compose.prod.yml
 ├── Dockerfile
 └── pyproject.toml
@@ -278,6 +289,23 @@ The Compose stack separates workloads into:
 - `beat`
 
 This avoids email delivery slowing down application processing and makes operational troubleshooting simpler.
+
+---
+
+## Persistent Notification Outbox
+
+Order emails are not treated as fire-and-forget side effects.
+
+The notification pipeline stores delivery intent and status in `OrderNotificationLog` records:
+
+- customer events: `created`, `cancelled`, `ready`, `paid`,
+- staff event: `staff_created`,
+- recipient snapshots and message snapshots,
+- delivery status: `pending`, `sending`, `sent`, `failed`,
+- Celery task ID, attempts count, sanitized error message,
+- idempotency key per order, event, and recipient type.
+
+This gives staff visibility into email delivery and allows manual retry without duplicating already delivered notifications.
 
 ---
 
@@ -350,6 +378,7 @@ Implemented features include:
 - Sentry integration for Django and Celery
 - Docker healthchecks
 - Celery task metadata logging
+- dashboard-visible order notification attempts
 - sensitive-data masking
 - ecommerce analytics events
 
@@ -368,9 +397,13 @@ Celery uses Redis as both broker and result backend.
 Current asynchronous workflows include:
 
 - registration emails
-- order notifications
+- customer order notifications
+- staff new-order notifications
+- persistent notification outbox delivery
+- manager-triggered notification resend
 - support notifications
 - scheduled order auto-cancellation
+- configurable product thumbnail generation
 - email retries with exponential backoff
 
 Queues are separated between general tasks and email delivery tasks.
@@ -379,7 +412,7 @@ Queues are separated between general tasks and email delivery tasks.
 
 # Testing
 
-The project currently contains 300+ automated Django tests.
+The project currently contains 370+ automated Django tests.
 
 Covered areas include:
 
@@ -390,6 +423,8 @@ Covered areas include:
 - payment synchronization
 - concurrency handling
 - dashboard permissions
+- notification outbox, deduplication, retry, and manual resend
+- printable staff order views
 - email retry logic
 - logging and observability
 - security validation

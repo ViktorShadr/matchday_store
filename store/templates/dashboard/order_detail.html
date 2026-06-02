@@ -270,10 +270,11 @@
                                     <tr>
                                         <td class="text-break">
                                             <div class="fw-semibold">{{ log.get_notification_type_display }}</div>
-                                            <div class="small text-muted">{{ log.recipient_email }}</div>
+                                            <div class="small text-muted">{{ log.get_recipient_type_display }}: {{ log.recipient_display }}</div>
                                             <div class="small text-muted">{{ log.trigger_display }}</div>
-                                            {% if log.status == "failed" and log.error_message %}
-                                                <div class="small text-danger mt-1">{{ log.error_message }}</div>
+                                            <div class="small text-muted">Попыток: {{ log.attempts_count }}</div>
+                                            {% if log.status == "failed" and log.last_error %}
+                                                <div class="small text-danger mt-1">{{ log.last_error }}</div>
                                             {% endif %}
                                         </td>
                                         <td><span

@@ -6,7 +6,7 @@ from unittest.mock import ANY, call, patch
 from uuid import uuid4
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase, TransactionTestCase, tag
+from django.test import Client, TestCase, TransactionTestCase, override_settings, tag
 from django.urls import reverse
 
 from orders.models import Order, OrderStatusTransition
@@ -49,6 +49,7 @@ class SalesFlowSmokeE2ETest(TestCase):
             image=self.image,
         )
 
+    @override_settings(STAFF_ORDER_NOTIFICATION_EMAILS=["smoke-staff@example.com"])
     def test_full_sales_flow_smoke_e2e(self):
         user_email = f"smoke-user-{uuid4().hex[:8]}@example.com"
         user_password = "smokeuserpass123"
@@ -143,9 +144,9 @@ class SalesFlowSmokeE2ETest(TestCase):
             customer_cart = Cart.objects.get(user=customer_user)
             self.assertEqual(customer_cart.items.count(), 0)
 
-            mock_send_staff_new_order_notification.delay.assert_called_once_with(order.id)
+            mock_send_staff_new_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
             self.assertIn(
-                call(order.id, "created", notification_log_id=ANY),
+                call(notification_log_id=ANY),
                 mock_send_order_notification.delay.call_args_list,
             )
 
@@ -191,11 +192,11 @@ class SalesFlowSmokeE2ETest(TestCase):
             self.assertEqual(self.variant.reserved_quantity, 0)
 
             self.assertIn(
-                call(order.id, "paid", notification_log_id=ANY),
+                call(notification_log_id=ANY),
                 mock_send_order_notification.delay.call_args_list,
             )
             self.assertIn(
-                call(order.id, "ready", notification_log_id=ANY),
+                call(notification_log_id=ANY),
                 mock_send_order_notification.delay.call_args_list,
             )
             self.assertTrue(
