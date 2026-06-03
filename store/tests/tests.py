@@ -1304,6 +1304,52 @@ class DashboardOrdersManagementTest(TestCase):
             timezone.localtime(manager_log.sent_at).strftime("%d.%m.%Y"),
         )
 
+    def test_order_detail_displays_sent_notification_resend_as_disabled(self):
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.SENT,
+            sent_at=timezone.now(),
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Письмо уже отправлено. Повторная отправка не требуется.")
+        self.assertNotContains(response, "Повторно отправить письмо")
+
+    def test_order_detail_displays_pending_notification_resend_as_disabled(self):
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.PENDING,
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Письмо уже ожидает отправки. Дублирующая задача не создана.")
+        self.assertNotContains(response, "Повторно отправить письмо")
+
+    def test_order_detail_displays_failed_notification_resend_as_available(self):
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.FAILED,
+            error_message="smtp unavailable",
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.get(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Повторно отправить письмо")
+
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_manager_can_manually_resend_notification_and_create_pending_log(self, mock_send_order_notification):
         self.client.login(email="dashboard-mod@example.com", password="modpass123")
@@ -1374,6 +1420,51 @@ class DashboardOrdersManagementTest(TestCase):
         self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
         self.assertEqual(notification_log.triggered_by_id, self.moderator.id)
         self.assertIsNone(notification_log.last_error)
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_manual_resend_rejects_sent_notification_log(self, mock_send_order_notification):
+        notification_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.SENT,
+            sent_at=timezone.now(),
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_notification_resend", kwargs={"pk": self.order.pk}),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.assertContains(response, "Письмо уже отправлено. Повторная отправка не требуется.")
+        mock_send_order_notification.delay.assert_not_called()
+        notification_log.refresh_from_db()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertIsNone(notification_log.triggered_by_id)
+
+    @patch("orders.application.order_notification_service.send_order_notification")
+    def test_manual_resend_rejects_pending_notification_log(self, mock_send_order_notification):
+        notification_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.PENDING,
+        )
+        self.client.login(email="dashboard-mod@example.com", password="modpass123")
+
+        response = self.client.post(
+            reverse("store:dashboard_order_notification_resend", kwargs={"pk": self.order.pk}),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}))
+        self.assertContains(response, "Письмо уже ожидает отправки. Дублирующая задача не создана.")
+        mock_send_order_notification.delay.assert_not_called()
+        notification_log.refresh_from_db()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
+        self.assertIsNone(notification_log.triggered_by_id)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_manual_resend_enqueue_failure_marks_log_failed(self, mock_send_order_notification):

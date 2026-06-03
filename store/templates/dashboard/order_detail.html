@@ -288,14 +288,20 @@
                                         </td>
                                         {% if forloop.first %}
                                             <td class="align-top text-end" rowspan="{{ notification_logs|length }}">
-                                                <form method="post"
-                                                      action="{% url 'store:dashboard_order_notification_resend' order.pk %}"
-                                                      class="m-0">
-                                                    {% csrf_token %}
-                                                    <button type="submit" class="btn btn-outline-primary btn-sm">
-                                                        Повторно отправить письмо
+                                                {% if manual_resend.is_available %}
+                                                    <form method="post"
+                                                          action="{% url 'store:dashboard_order_notification_resend' order.pk %}"
+                                                          class="m-0">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                                                            {{ manual_resend.label }}
+                                                        </button>
+                                                    </form>
+                                                {% else %}
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
+                                                        {{ manual_resend.label }}
                                                     </button>
-                                                </form>
+                                                {% endif %}
                                             </td>
                                         {% endif %}
                                     </tr>
@@ -309,7 +315,7 @@
                               class="m-0">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-outline-primary">
-                                Повторно отправить письмо
+                                {{ manual_resend.label }}
                             </button>
                         </form>
                     {% endif %}
