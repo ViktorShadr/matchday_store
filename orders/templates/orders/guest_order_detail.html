@@ -1,0 +1,213 @@
+{% extends 'main_page/base.html' %}
+
+{% block title %}Заказ {{ order.number|default:order.pk }} — ФК «Шинник»{% endblock %}
+{% block meta_description %}Статус и состав гостевого заказа в официальном магазине атрибутики ФК «Шинник».{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="sf-profile-page">
+    <div class="container">
+        <div class="sf-profile-hero">
+            <div>
+                <h1 class="sf-profile-title">Заказ {{ order.number|default:order.pk }}</h1>
+                <p class="sf-profile-lead">
+                    Статус, состав и условия самовывоза по заказу без регистрации.
+                </p>
+            </div>
+
+            <div class="sf-profile-hero-actions">
+                <a href="{% url 'store:product_list' %}" class="btn btn-primary">
+                    В каталог
+                </a>
+            </div>
+        </div>
+
+        <div class="sf-order-detail-layout">
+            <div class="sf-order-detail-main">
+                <div class="sf-profile-card">
+                    <div class="sf-order-detail-top">
+                        <div>
+                            <div class="sf-order-number">Заказ {{ order.number|default:order.pk }}</div>
+                            <div class="sf-order-date">
+                                {% if order.created_at %}
+                                    Оформлен {{ order.created_at|date:"d.m.Y H:i" }}
+                                {% else %}
+                                    Дата не указана
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="sf-order-status-wrap">
+                            <div class="sf-order-badges">
+                                <span class="sf-order-status sf-order-status--compact
+                                    {% if status_label == 'Выдан' or status_label == 'Готов к выдаче' %}
+                                        sf-order-status--success
+                                    {% elif status_label == 'Отменен' %}
+                                        sf-order-status--danger
+                                    {% else %}
+                                        sf-order-status--neutral
+                                    {% endif %}
+                                ">
+                                    {{ status_label }}
+                                </span>
+                                <span class="sf-order-status sf-order-status--compact sf-order-status--warning">
+                                    {{ payment_status_label }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Состав заказа</h2>
+
+                    {% if order_items %}
+                        <div class="sf-order-detail-items">
+                            {% for item in order_items %}
+                                <div class="sf-order-detail-item">
+                                    <div class="sf-order-detail-item-main">
+                                        <div class="sf-order-detail-item-name">
+                                            {{ item.product_name_snapshot }}
+                                        </div>
+                                        <div class="sf-order-detail-item-meta">
+                                            {{ item.quantity }} шт.
+                                            {% if item.unit_price %}
+                                                · {{ item.unit_price }} ₽ за шт.
+                                            {% endif %}
+                                            {% if item.size_snapshot or item.color_snapshot %}
+                                                · {{ item.size_snapshot|default:"—" }} / {{ item.color_snapshot|default:"—" }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="sf-order-detail-item-price">
+                                        {% if item.line_total %}
+                                            {{ item.line_total }} ₽
+                                        {% elif item.unit_price %}
+                                            {{ item.unit_price }} ₽
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="sf-empty-state text-start">
+                            Состав заказа пока недоступен.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <aside class="sf-order-detail-sidebar">
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Сводка</h2>
+
+                    <div class="sf-order-detail-summary">
+                        <div class="sf-order-detail-summary-row">
+                            <span>Номер заказа</span>
+                            <strong>{{ order.number|default:order.pk }}</strong>
+                        </div>
+
+                        <div class="sf-order-detail-summary-row">
+                            <span>Статус</span>
+                            <strong>{{ status_label }}</strong>
+                        </div>
+
+                        <div class="sf-order-detail-summary-row">
+                            <span>Оплата</span>
+                            <strong>{{ payment_status_label }}</strong>
+                        </div>
+
+                        <div class="sf-order-detail-summary-row">
+                            <span>Итого</span>
+                            <strong>
+                                {% if order.total_amount %}
+                                    {{ order.total_amount }} ₽
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </strong>
+                        </div>
+                    </div>
+                </div>
+
+                {% if pickup_location %}
+                    <div class="sf-profile-card">
+                        <h2 class="sf-profile-section-title">Самовывоз</h2>
+
+                        <div class="sf-order-detail-summary">
+                            <div class="sf-order-detail-summary-row">
+                                <span>Магазин</span>
+                                <strong>{{ pickup_location.name }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Адрес</span>
+                                <strong>{{ pickup_location.address }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Часы работы</span>
+                                <strong>{{ pickup_location.hours|linebreaksbr }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Телефон</span>
+                                <strong>{{ pickup_location.phone }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Срок хранения резерва</span>
+                                <strong>{{ store_contacts.pickup_retention_label }}</strong>
+                            </div>
+                            <div class="sf-order-detail-summary-row">
+                                <span>Забрать до</span>
+                                <strong>
+                                    {% if pickup_deadline %}
+                                        {{ pickup_deadline|date:"d.m.Y H:i" }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </strong>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div class="sf-profile-card">
+                    <h2 class="sf-profile-section-title">Данные получателя</h2>
+
+                    <div class="sf-order-detail-recipient">
+                        <div class="sf-order-detail-recipient-item">
+                            <div class="sf-order-detail-recipient-label">Имя</div>
+                            <div class="sf-order-detail-recipient-value">{{ order.recipient_name|default:"—" }}</div>
+                        </div>
+
+                        {% if order.email %}
+                            <div class="sf-order-detail-recipient-item">
+                                <div class="sf-order-detail-recipient-label">Email</div>
+                                <div class="sf-order-detail-recipient-value">{{ order.email }}</div>
+                            </div>
+                        {% endif %}
+
+                        {% if order.phone %}
+                            <div class="sf-order-detail-recipient-item">
+                                <div class="sf-order-detail-recipient-label">Телефон</div>
+                                <div class="sf-order-detail-recipient-value">{{ order.phone }}</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if can_cancel %}
+                    <div class="sf-profile-card">
+                        <h2 class="sf-profile-section-title">Действия</h2>
+                        <form method="post" action="{% url 'orders:guest_order_cancel' token=guest_token %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger w-100">Отменить заказ</button>
+                        </form>
+                    </div>
+                {% endif %}
+            </aside>
+        </div>
+    </div>
+</section>
+{% endblock %}

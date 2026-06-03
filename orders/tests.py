@@ -1,12 +1,14 @@
+import importlib
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 from smtplib import SMTPDataError
 from threading import Event
 from time import sleep
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.cache import cache
@@ -27,10 +29,12 @@ from django.utils import timezone
 from config.email_delivery import NotificationDeliveryError
 from orders.application import CheckoutContext, DashboardOrderFlowError, DashboardOrderFlowService, OrderStatusPolicy
 from orders.forms import CheckoutForm
-from orders.models import Order, OrderItem, OrderStatusTransition
+from orders.models import GuestOrderAccessToken, Order, OrderItem, OrderNotificationLog, OrderStatusTransition
 from orders.services import (
     CheckoutError,
     CheckoutService,
+    GuestCheckoutAbuseLimitService,
+    GuestOrderAccessTokenService,
     ManualPaymentUpdateService,
     OrderAutoCancellationService,
     OrderCancellationError,
@@ -199,6 +203,93 @@ class CheckoutFlowTest(TestCase):
         CartItem.objects.create(cart=cart, product_variant=self.variant, quantity=quantity)
         return cart
 
+    def _ensure_client_session_key(self):
+        session = self.client.session
+        if not session.session_key:
+            session.save()
+        return session.session_key
+
+    def _create_guest_order(
+        self,
+        *,
+        number,
+        email="guest@example.com",
+        phone="+79990001122",
+        session_key="guest-session",
+        ip_address="127.0.0.1",
+        status=Order.Status.PLACED,
+        payment_status=Order.PaymentStatus.PENDING,
+        fulfillment_status=Order.FulfillmentStatus.NEW,
+        reserve_quantity=1,
+    ):
+        order = Order.objects.create(
+            number=number,
+            user=None,
+            recipient_name="Гость Покупатель",
+            email=email,
+            phone=phone,
+            status=status,
+            payment_status=payment_status,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+            subtotal_amount=Decimal("100.00"),
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=Decimal("100.00"),
+            checkout_session_key=session_key,
+            checkout_ip_address=ip_address,
+            confirmed_at=timezone.now(),
+            issued_at=timezone.now() if fulfillment_status == Order.FulfillmentStatus.DELIVERED else None,
+            cancelled_at=timezone.now() if status == Order.Status.CANCELLED else None,
+        )
+        item_quantity = max(reserve_quantity, 1)
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=self.variant.sku or str(self.variant.pk),
+            size_snapshot=self.variant.size or "",
+            color_snapshot=self.variant.color or "",
+            unit_price=Decimal("100.00"),
+            quantity=item_quantity,
+            line_total=Decimal("100.00") * item_quantity,
+        )
+        if fulfillment_status not in {
+            Order.FulfillmentStatus.CANCELLED,
+            Order.FulfillmentStatus.DELIVERED,
+            Order.FulfillmentStatus.RETURNED,
+        } and status not in {Order.Status.CANCELLED, Order.Status.DELIVERED, Order.Status.REFUNDED}:
+            self.variant.reserved_quantity += reserve_quantity
+            self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        return order
+
+    def _post_guest_checkout(self, *, email="guest@example.com", phone="+79990001122", remote_addr="127.0.0.1"):
+        return self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Гость Покупатель",
+                "email": email,
+                "phone": phone,
+                "customer_comment": "",
+            },
+            REMOTE_ADDR=remote_addr,
+        )
+
+    def _assert_guest_checkout_blocked(self, response, guest_cart, *, expected_reserved_quantity):
+        self.assertEqual(response.status_code, 200)
+        errors = [str(error) for error in response.context["form"].non_field_errors()]
+        self.assertEqual(errors, [GuestCheckoutAbuseLimitService.limit_error_message])
+
+        error_text = " ".join(errors).lower()
+        for forbidden_fragment in ("email", "phone", "ip", "телефон", "почт", "сесс"):
+            self.assertNotIn(forbidden_fragment, error_text)
+
+        self.variant.refresh_from_db()
+        guest_cart.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, expected_reserved_quantity)
+        self.assertEqual(guest_cart.items.count(), 1)
+
     def test_guest_checkout_page_is_available(self):
         """Гость может открыть оформление заказа с session-cart."""
         self._prepare_guest_cart()
@@ -242,6 +333,253 @@ class CheckoutFlowTest(TestCase):
         self.assertContains(success_response, "Личный кабинет")
         self.assertContains(success_response, "Зарегистрируйтесь с email guest@example.com")
         self.assertContains(success_response, reverse("users:registration"))
+        self.assertIsNone(order.guest_manage_token)
+        self.assertFalse(GuestOrderAccessToken.objects.filter(order=order).exists())
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=2,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=2,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=2,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=2,
+    )
+    def test_guest_checkout_succeeds_below_active_guest_limits(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        session_key = self._ensure_client_session_key()
+        self._create_guest_order(
+            number="ORD-GUEST-BELOW-LIMIT",
+            email="Guest@Example.com",
+            phone="+7 (999) 000-11-22",
+            session_key=session_key,
+            ip_address="127.0.0.1",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        order = Order.objects.get(user__isnull=True, source_cart_id=guest_cart.pk)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        guest_cart.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 3)
+        self.assertEqual(guest_cart.items.count(), 0)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_is_blocked_by_email_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-EMAIL-LIMIT",
+            email="Guest@Example.com",
+            phone="+79990000000",
+            session_key="other-session",
+            ip_address="198.51.100.10",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_is_blocked_by_phone_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-PHONE-LIMIT",
+            email="other@example.com",
+            phone="+7 (999) 000-11-22",
+            session_key="other-session",
+            ip_address="198.51.100.10",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_is_blocked_by_session_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        session_key = self._ensure_client_session_key()
+        self._create_guest_order(
+            number="ORD-GUEST-SESSION-LIMIT",
+            email="other@example.com",
+            phone="+79990000000",
+            session_key=session_key,
+            ip_address="198.51.100.10",
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com", phone="+79990001122")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=1,
+    )
+    def test_guest_checkout_is_blocked_by_ip_active_order_limit(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        ip_address = "203.0.113.10"
+        self._create_guest_order(
+            number="ORD-GUEST-IP-LIMIT",
+            email="other@example.com",
+            phone="+79990000000",
+            session_key="other-session",
+            ip_address=ip_address,
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(
+            email="guest@example.com",
+            phone="+79990001122",
+            remote_addr=ip_address,
+        )
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_cancelled_guest_orders_do_not_count_as_active_guest_orders(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-CANCELLED",
+            email="guest@example.com",
+            status=Order.Status.CANCELLED,
+            payment_status=Order.PaymentStatus.CANCELLED,
+            fulfillment_status=Order.FulfillmentStatus.CANCELLED,
+            reserve_quantity=0,
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        order = Order.objects.get(user__isnull=True, source_cart_id=guest_cart.pk)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_issued_guest_orders_do_not_count_as_active_guest_orders(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-ISSUED",
+            email="guest@example.com",
+            status=Order.Status.DELIVERED,
+            payment_status=Order.PaymentStatus.SUCCEEDED,
+            fulfillment_status=Order.FulfillmentStatus.DELIVERED,
+            reserve_quantity=0,
+        )
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        order = Order.objects.get(user__isnull=True, source_cart_id=guest_cart.pk)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 2)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=1,
+    )
+    def test_registered_checkout_is_unchanged_by_guest_active_order_limits(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(
+            number="ORD-GUEST-REGISTERED-UNCHANGED",
+            email=self.user.email,
+            phone=self.user.phone,
+            session_key="registered-other-session",
+            ip_address="127.0.0.1",
+        )
+        self.client.login(email="buyer@example.com", password="testpass123")
+
+        response = self.client.post(
+            reverse("orders:checkout"),
+            data={
+                "recipient_name": "Иван Иванов",
+                "email": "buyer@example.com",
+                "phone": "+79990001122",
+                "customer_comment": "",
+            },
+        )
+
+        order = Order.objects.get(user=self.user)
+        self.assertRedirects(response, reverse("orders:checkout_success", kwargs={"pk": order.pk}))
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.reserved_quantity, 3)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_limit_error_message_is_generic(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(number="ORD-GUEST-GENERIC-ERROR", email="guest@example.com")
+        guest_cart = self._prepare_guest_cart()
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=1)
+
+    @override_settings(
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL=1,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION=99,
+        CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP=99,
+    )
+    def test_guest_checkout_block_does_not_reserve_stock(self):
+        self.variant.quantity = 20
+        self.variant.save(update_fields=["quantity", "updated_at"])
+        self._create_guest_order(number="ORD-GUEST-NO-STOCK-RESERVE", email="guest@example.com")
+        guest_cart = self._prepare_guest_cart()
+        reserved_before = self.variant.reserved_quantity
+
+        response = self._post_guest_checkout(email="guest@example.com")
+
+        self._assert_guest_checkout_blocked(response, guest_cart, expected_reserved_quantity=reserved_before)
+        self.assertEqual(Order.objects.filter(user__isnull=True).count(), 1)
 
     def test_guest_empty_cart_fallback_rechecks_idempotency_with_session_key(self):
         """Fallback гостевой корзины должен найти session-scoped payment."""
@@ -919,6 +1257,490 @@ class CheckoutFlowTest(TestCase):
         self.variant.refresh_from_db()
         self.assertEqual(self.variant.quantity, 10)
         self.assertEqual(self.variant.reserved_quantity, 3)
+
+
+class GuestOrderManagementTest(TestCase):
+    """Тесты защищённой ссылки управления гостевым заказом."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="registered@example.com",
+            password="testpass123",
+            first_name="Иван",
+            last_name="Иванов",
+            phone="+79990001122",
+            is_active=True,
+            is_email_confirmed=True,
+        )
+        self.category = Category.objects.create(name="Гостевые заказы")
+        self.product = Product.objects.create(name="Гостевой шарф", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            size="One Size",
+            color="Синий",
+            price=Decimal("1500.00"),
+            quantity=5,
+        )
+
+    def _create_guest_order(
+        self,
+        *,
+        number: str = "ORD-GUEST-MANAGE-1",
+        status=Order.Status.PLACED,
+        payment_status=Order.PaymentStatus.PENDING,
+        fulfillment_status=Order.FulfillmentStatus.NEW,
+        quantity: int = 1,
+    ) -> Order:
+        order = Order.objects.create(
+            number=number,
+            user=None,
+            recipient_name="Гость Покупатель",
+            email="guest-manage@example.com",
+            phone="+79990001122",
+            status=status,
+            payment_status=payment_status,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code=settings.STORE_PICKUP_LOCATION_CODE,
+            subtotal_amount=self.variant.price * quantity,
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=self.variant.price * quantity,
+            confirmed_at=timezone.now(),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=self.variant,
+            product_name_snapshot=self.product.name,
+            sku_snapshot=str(self.variant.id),
+            size_snapshot=self.variant.size,
+            color_snapshot=self.variant.color,
+            unit_price=self.variant.price,
+            quantity=quantity,
+            line_total=self.variant.price * quantity,
+        )
+        return order
+
+    def _issue_guest_token(self, order: Order):
+        return GuestOrderAccessTokenService.issue_token_for_email(order)
+
+    def test_guest_access_token_created_for_guest_order_with_only_hash_stored(self):
+        order = self._create_guest_order(number="ORD-GUEST-TOKEN-1")
+
+        with patch("orders.services.secrets.token_urlsafe", return_value="fixed-guest-token") as mock_token_urlsafe:
+            issued_token = self._issue_guest_token(order)
+
+        order.refresh_from_db()
+        access_token = GuestOrderAccessToken.objects.get(order=order)
+        self.assertIsNone(order.guest_manage_token)
+        self.assertEqual(issued_token.raw_token, "fixed-guest-token")
+        self.assertEqual(access_token.token_hash, GuestOrderAccessTokenService.hash_token("fixed-guest-token"))
+        self.assertNotEqual(access_token.token_hash, "fixed-guest-token")
+        self.assertEqual(access_token.purpose, GuestOrderAccessToken.Purpose.GUEST_MANAGE)
+        self.assertIsNone(access_token.revoked_at)
+        self.assertIsNone(access_token.last_used_at)
+        self.assertGreater(access_token.expires_at, timezone.now())
+        mock_token_urlsafe.assert_called_once_with(32)
+
+    def test_registered_order_does_not_get_guest_access_token(self):
+        order = Order.objects.create(
+            number="ORD-REGISTERED-TOKEN-1",
+            user=self.user,
+            recipient_name="Иван Иванов",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("1500.00"),
+        )
+
+        self.assertIsNone(order.guest_manage_token)
+        self.assertFalse(GuestOrderAccessToken.objects.filter(order=order).exists())
+        with self.assertRaises(ValueError):
+            self._issue_guest_token(order)
+
+    def test_get_or_create_active_token_returns_existing_hash_only_token_without_raw_value(self):
+        order = self._create_guest_order(number="ORD-GUEST-GET-EXISTING-1")
+        issued_token = self._issue_guest_token(order)
+
+        with patch("orders.services.secrets.token_urlsafe") as mock_token_urlsafe:
+            active_token = GuestOrderAccessTokenService.get_or_create_active_token_for_order(order)
+
+        self.assertFalse(active_token.created)
+        self.assertIsNone(active_token.raw_token)
+        self.assertEqual(active_token.access_token.pk, issued_token.access_token.pk)
+        mock_token_urlsafe.assert_not_called()
+
+    def test_guest_manage_link_opens_only_matching_order(self):
+        order = self._create_guest_order(number="ORD-GUEST-MANAGE-1")
+        other_order = self._create_guest_order(number="ORD-GUEST-MANAGE-2")
+        issued_token = self._issue_guest_token(order)
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": issued_token.raw_token}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ORD-GUEST-MANAGE-1")
+        self.assertContains(response, self.product.name)
+        self.assertNotContains(response, other_order.number)
+
+    def test_guest_manage_wrong_token_returns_404(self):
+        self._create_guest_order(number="ORD-GUEST-WRONG-TOKEN-1")
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "wrong-token"}))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_guest_manage_expired_token_returns_404(self):
+        order = self._create_guest_order(number="ORD-GUEST-EXPIRED-TOKEN-1")
+        issued_token = self._issue_guest_token(order)
+        GuestOrderAccessToken.objects.filter(pk=issued_token.access_token.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": issued_token.raw_token}))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_guest_manage_revoked_token_returns_404(self):
+        order = self._create_guest_order(number="ORD-GUEST-REVOKED-TOKEN-1")
+        issued_token = self._issue_guest_token(order)
+        GuestOrderAccessTokenService.revoke_tokens_for_order(order)
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": issued_token.raw_token}))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_guest_manage_token_rotation_keeps_only_latest_token_active(self):
+        order = self._create_guest_order(number="ORD-GUEST-ROTATE-TOKEN-1")
+        first_token = self._issue_guest_token(order)
+        second_token = GuestOrderAccessTokenService.rotate_token_for_order(order)
+
+        first_token.access_token.refresh_from_db()
+        first_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": first_token.raw_token}))
+        second_response = self.client.get(
+            reverse("orders:guest_order_detail", kwargs={"token": second_token.raw_token})
+        )
+
+        self.assertIsNotNone(first_token.access_token.revoked_at)
+        self.assertEqual(
+            GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
+            1,
+        )
+        self.assertEqual(first_response.status_code, 404)
+        self.assertEqual(second_response.status_code, 200)
+
+    def test_expired_guest_manage_token_is_not_reused_for_new_email_token(self):
+        order = self._create_guest_order(number="ORD-GUEST-EXPIRED-NEW-EMAIL-1")
+        with patch("orders.services.secrets.token_urlsafe", return_value="expired-email-token"):
+            expired_token = self._issue_guest_token(order)
+        GuestOrderAccessToken.objects.filter(pk=expired_token.access_token.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+
+        with patch("orders.services.secrets.token_urlsafe", return_value="fresh-email-token"):
+            fresh_token = GuestOrderAccessTokenService.issue_token_for_email(order)
+
+        expired_token.access_token.refresh_from_db()
+        expired_response = self.client.get(
+            reverse("orders:guest_order_detail", kwargs={"token": expired_token.raw_token})
+        )
+        fresh_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": fresh_token.raw_token}))
+
+        self.assertIsNone(expired_token.access_token.revoked_at)
+        self.assertNotEqual(expired_token.access_token.pk, fresh_token.access_token.pk)
+        self.assertEqual(expired_response.status_code, 404)
+        self.assertEqual(fresh_response.status_code, 200)
+
+    def test_guest_manage_updates_last_used_at_on_successful_access(self):
+        order = self._create_guest_order(number="ORD-GUEST-LAST-USED-1")
+        issued_token = self._issue_guest_token(order)
+        self.assertIsNone(issued_token.access_token.last_used_at)
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": issued_token.raw_token}))
+
+        issued_token.access_token.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(issued_token.access_token.last_used_at)
+
+    def test_migrated_legacy_guest_manage_token_still_grants_access(self):
+        legacy_token = "legacy-guest-manage-token"
+        order = self._create_guest_order(number="ORD-GUEST-MIGRATED-TOKEN-1")
+        Order.objects.filter(pk=order.pk).update(guest_manage_token=legacy_token)
+
+        migration = importlib.import_module("orders.migrations.0010_guest_order_access_token")
+        migration.migrate_guest_manage_tokens(django_apps, None)
+
+        order.refresh_from_db()
+        access_token = GuestOrderAccessToken.objects.get(order=order)
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": legacy_token}))
+
+        self.assertIsNone(order.guest_manage_token)
+        self.assertEqual(access_token.token_hash, GuestOrderAccessTokenService.hash_token(legacy_token))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, order.number)
+
+    def test_registered_order_cannot_be_accessed_through_guest_token(self):
+        raw_token = "registered-order-token"
+        order = Order.objects.create(
+            number="ORD-REGISTERED-GUEST-TOKEN-1",
+            user=self.user,
+            recipient_name="Иван Иванов",
+            email=self.user.email,
+            phone=self.user.phone,
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("1500.00"),
+        )
+        GuestOrderAccessToken.objects.create(
+            order=order,
+            token_hash=GuestOrderAccessTokenService.hash_token(raw_token),
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": raw_token}))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_guest_can_cancel_order_with_allowed_status(self):
+        self.variant.reserved_quantity = 1
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        order = self._create_guest_order(number="ORD-GUEST-CANCEL-1")
+        issued_token = self._issue_guest_token(order)
+
+        response = self.client.post(
+            reverse("orders:guest_order_cancel", kwargs={"token": issued_token.raw_token}),
+            follow=True,
+        )
+
+        order.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
+        self.assertEqual(order.fulfillment_status, Order.FulfillmentStatus.CANCELLED)
+        self.assertContains(response, "Заказ успешно отменен.")
+
+    def test_guest_cannot_cancel_completed_or_already_cancelled_order(self):
+        final_states = (
+            (
+                "ORD-GUEST-DELIVERED-1",
+                Order.Status.DELIVERED,
+                Order.PaymentStatus.SUCCEEDED,
+                Order.FulfillmentStatus.DELIVERED,
+            ),
+            (
+                "ORD-GUEST-CANCELLED-1",
+                Order.Status.CANCELLED,
+                Order.PaymentStatus.CANCELLED,
+                Order.FulfillmentStatus.CANCELLED,
+            ),
+        )
+
+        for number, status, payment_status, fulfillment_status in final_states:
+            with self.subTest(status=status):
+                self.variant.reserved_quantity = 1
+                self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+                order = self._create_guest_order(
+                    number=number,
+                    status=status,
+                    payment_status=payment_status,
+                    fulfillment_status=fulfillment_status,
+                )
+                issued_token = self._issue_guest_token(order)
+
+                response = self.client.post(
+                    reverse("orders:guest_order_cancel", kwargs={"token": issued_token.raw_token}),
+                    follow=True,
+                )
+
+                order.refresh_from_db()
+                self.variant.refresh_from_db()
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(order.status, status)
+                self.assertEqual(order.payment_status, payment_status)
+                self.assertEqual(order.fulfillment_status, fulfillment_status)
+                self.assertEqual(self.variant.reserved_quantity, 1)
+                self.assertContains(response, "Этот заказ уже нельзя отменить.")
+
+    def test_guest_cancel_releases_stock_reservation(self):
+        self.variant.reserved_quantity = 2
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+        order = self._create_guest_order(number="ORD-GUEST-RELEASE-1", quantity=2)
+        issued_token = self._issue_guest_token(order)
+
+        self.client.post(reverse("orders:guest_order_cancel", kwargs={"token": issued_token.raw_token}))
+
+        self.variant.refresh_from_db()
+        self.assertEqual(self.variant.quantity, 5)
+        self.assertEqual(self.variant.reserved_quantity, 0)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    def test_guest_created_email_contains_manage_link_with_raw_token_not_hash(self):
+        order = self._create_guest_order(number="ORD-GUEST-EMAIL-LINK-1")
+        manage_url = (
+            f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'email-raw-token'})}"
+        )
+
+        with (
+            patch("orders.services.secrets.token_urlsafe", return_value="email-raw-token") as mock_token_urlsafe,
+            patch("orders.tasks.send_mail", return_value=1) as mock_send_mail,
+        ):
+            result = send_order_notification_sync(order.id, "created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        mock_token_urlsafe.assert_called_once_with(32)
+        access_token = GuestOrderAccessToken.objects.get(order=order)
+        message = mock_send_mail.call_args.kwargs["message"]
+        self.assertIn(manage_url, message)
+        self.assertNotIn(access_token.token_hash, message)
+        self.assertIn(
+            "По этой ссылке можно посмотреть статус заказа или отменить заказ без регистрации. "
+            "Не передавайте ссылку третьим лицам.",
+            message,
+        )
+        self.assertNotIn(reverse("users:order_detail", kwargs={"pk": order.pk}), message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    def test_notification_retry_does_not_revoke_already_active_guest_token(self):
+        order = self._create_guest_order(number="ORD-GUEST-RETRY-TOKEN-1")
+        first_url = (
+            f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'first-email-token'})}"
+        )
+
+        with (
+            patch("orders.services.secrets.token_urlsafe", return_value="first-email-token") as mock_token_urlsafe,
+            patch("orders.tasks.send_mail", side_effect=[RuntimeError("smtp unavailable"), 1]) as mock_send_mail,
+            patch("orders.tasks.logger.exception"),
+        ):
+            with self.assertRaises(NotificationDeliveryError):
+                send_order_notification_sync(order.id, "created", raise_on_error=True)
+            notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
+            self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+
+            self.assertTrue(
+                send_order_notification_sync(
+                    order.id,
+                    "created",
+                    notification_log_id=notification_log.pk,
+                )
+            )
+
+        first_access_token = GuestOrderAccessToken.objects.get(
+            token_hash=GuestOrderAccessTokenService.hash_token("first-email-token")
+        )
+        response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "first-email-token"}))
+        retry_message = mock_send_mail.call_args_list[1].kwargs["message"]
+
+        self.assertIsNone(first_access_token.revoked_at)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(first_url, retry_message)
+        self.assertEqual(mock_send_mail.call_count, 2)
+        self.assertEqual(mock_token_urlsafe.call_count, 1)
+        self.assertEqual(
+            GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
+            1,
+        )
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    def test_repeated_guest_created_notification_skips_second_send(self):
+        order = self._create_guest_order(number="ORD-GUEST-DUPLICATE-TOKEN-1")
+        first_url = (
+            f"{settings.SITE_URL}" f"{reverse('orders:guest_order_detail', kwargs={'token': 'first-email-token'})}"
+        )
+
+        with (
+            patch(
+                "orders.services.secrets.token_urlsafe",
+                side_effect=["first-email-token", "second-email-token"],
+            ) as mock_token_urlsafe,
+            patch("orders.tasks.send_mail", return_value=1) as mock_send_mail,
+        ):
+            first_result = send_order_notification_sync(order.id, "created")
+            first_message = mock_send_mail.call_args.kwargs["message"]
+            mock_send_mail.reset_mock()
+            second_result = send_order_notification_sync(order.id, "created")
+
+        first_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": "first-email-token"}))
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        self.assertIn(first_url, first_message)
+        mock_send_mail.assert_not_called()
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(
+            GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
+            1,
+        )
+        self.assertEqual(mock_token_urlsafe.call_count, 1)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="https://shop.example.test",
+    )
+    def test_guest_manual_resend_does_not_revoke_link_or_store_raw_token(self):
+        order = self._create_guest_order(number="ORD-GUEST-MANUAL-RESEND-TOKEN-1")
+
+        with patch("orders.services.secrets.token_urlsafe", return_value="first-email-token"):
+            first_token = self._issue_guest_token(order)
+
+        notification_log = OrderNotificationLog.objects.create(
+            order=order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=order.email,
+            status=OrderNotificationLog.Status.PENDING,
+            triggered_by=self.user,
+        )
+
+        with (
+            patch("orders.services.secrets.token_urlsafe", return_value="manual-resend-token"),
+            patch("orders.tasks.send_mail", return_value=1) as mock_send_mail,
+        ):
+            result = send_order_notification_sync(
+                order.id,
+                "created",
+                notification_log_id=notification_log.pk,
+            )
+
+        notification_log.refresh_from_db()
+        first_response = self.client.get(reverse("orders:guest_order_detail", kwargs={"token": first_token.raw_token}))
+        resend_response = self.client.get(
+            reverse("orders:guest_order_detail", kwargs={"token": "manual-resend-token"})
+        )
+        stored_log_payload = " ".join(
+            str(value or "")
+            for value in (
+                notification_log.notification_type,
+                notification_log.recipient_email,
+                notification_log.status,
+                notification_log.error_message,
+                notification_log.task_id,
+            )
+        )
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(resend_response.status_code, 200)
+        self.assertEqual(
+            GuestOrderAccessToken.objects.filter(order=order, revoked_at__isnull=True).count(),
+            2,
+        )
+        self.assertNotIn(first_token.raw_token, stored_log_payload)
+        self.assertNotIn("manual-resend-token", stored_log_payload)
 
 
 class OrderCancellationServiceTest(TestCase):
@@ -1979,6 +2801,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
 
     @patch("orders.application.order_notification_service.send_staff_new_order_notification")
     @patch("orders.application.order_notification_service.send_order_notification")
+    @override_settings(STAFF_ORDER_NOTIFICATION_EMAILS=["staff@example.com"])
     def test_checkout_schedules_created_notification(
         self,
         mock_send_order_notification,
@@ -2005,8 +2828,12 @@ class OrderNotificationServiceIntegrationTest(TestCase):
                 checkout_token="notify-created",
             )
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "created")
-        mock_send_staff_new_order_notification.delay.assert_called_once_with(order.id)
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
+        mock_send_staff_new_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
+        notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.PENDING)
+        self.assertEqual(notification_log.recipient_email, self.user.email)
+        self.assertIsNone(notification_log.triggered_by_id)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_cancellation_schedules_cancelled_notification(self, mock_send_order_notification):
@@ -2042,7 +2869,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             OrderCancellationService().cancel_order(order_id=order.id, user_id=self.user.id)
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "cancelled")
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_ready_status_schedules_ready_notification(self, mock_send_order_notification):
@@ -2065,7 +2892,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             DashboardOrderFlowService().update_order_status(order, "ready")
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "ready")
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
 
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_successful_manual_payment_schedules_paid_notification(self, mock_send_order_notification):
@@ -2088,7 +2915,7 @@ class OrderNotificationServiceIntegrationTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             ManualPaymentUpdateService().update_order_payment_status(order.id, Order.PaymentStatus.SUCCEEDED)
 
-        mock_send_order_notification.delay.assert_called_once_with(order.id, "paid")
+        mock_send_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
 
 
 class OrderStaffNotificationTaskTest(TestCase):
@@ -2147,12 +2974,29 @@ class OrderStaffNotificationTaskTest(TestCase):
             line_total=Decimal("7000.00"),
         )
 
+    def _create_guest_order(self, *, number: str = "ORD-GUEST-1") -> Order:
+        return Order.objects.create(
+            number=number,
+            user=None,
+            recipient_name="Гость",
+            email="guest-buyer@example.com",
+            phone="+79990000002",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            pickup_point_code="main-store",
+            subtotal_amount=Decimal("3500.00"),
+            total_amount=Decimal("3500.00"),
+            confirmed_at=timezone.now(),
+        )
+
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
         STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com", "staff2@example.com"],
         SITE_URL="http://localhost:8000",
     )
-    @patch("orders.tasks.send_mail")
+    @patch("orders.tasks.send_mail", return_value=1)
     def test_send_staff_new_order_notification_sync_sends_detailed_email(self, mock_send_mail):
         result = send_staff_new_order_notification_sync(self.order.id)
 
@@ -2167,6 +3011,41 @@ class OrderStaffNotificationTaskTest(TestCase):
         self.assertIn(self.order.phone, kwargs["message"])
         self.assertIn(self.product.name, kwargs["message"])
         self.assertIn(reverse("store:dashboard_order_detail", kwargs={"pk": self.order.pk}), kwargs["message"])
+        notification_log = OrderNotificationLog.objects.get(
+            order=self.order,
+            event_key=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+        )
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.recipient_list_snapshot, ["staff1@example.com", "staff2@example.com"])
+        self.assertEqual(notification_log.subject, kwargs["subject"])
+        self.assertEqual(notification_log.message, kwargs["message"])
+        self.assertEqual(notification_log.attempts_count, 1)
+        self.assertIsNotNone(notification_log.sent_at)
+        self.assertIsNone(notification_log.last_error)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        STAFF_ORDER_NOTIFICATION_EMAILS=["staff1@example.com", "staff2@example.com"],
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_repeated_staff_notification_does_not_call_send_mail(self, mock_send_mail):
+        first_result = send_staff_new_order_notification_sync(self.order.id)
+        mock_send_mail.reset_mock()
+
+        second_result = send_staff_new_order_notification_sync(self.order.id)
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        mock_send_mail.assert_not_called()
+        notification_log = OrderNotificationLog.objects.get(
+            order=self.order,
+            event_key=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+        )
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
@@ -2178,6 +3057,13 @@ class OrderStaffNotificationTaskTest(TestCase):
 
         self.assertFalse(result)
         mock_send_mail.assert_not_called()
+        notification_log = OrderNotificationLog.objects.get(
+            order=self.order,
+            event_key=OrderNotificationLog.NotificationType.STAFF_CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+        )
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIn("Email получателей", notification_log.last_error)
 
     @override_settings(
         DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
@@ -2216,6 +3102,314 @@ class OrderStaffNotificationTaskTest(TestCase):
         result = send_staff_new_order_notification_sync(self.order.id)
 
         self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_sends_email_for_supported_events(self, mock_send_mail):
+        expected_subject_parts = {
+            "created": "принят",
+            "cancelled": "отменен",
+            "ready": "готов к выдаче",
+            "paid": "подтверждена",
+        }
+
+        for event_key, expected_subject_part in expected_subject_parts.items():
+            with self.subTest(event_key=event_key):
+                mock_send_mail.reset_mock()
+                result = send_order_notification_sync(self.order.id, event_key)
+
+                self.assertTrue(result)
+                mock_send_mail.assert_called_once()
+                kwargs = mock_send_mail.call_args.kwargs
+                self.assertEqual(kwargs["recipient_list"], [self.order.email])
+                self.assertIn(self.order.number, kwargs["subject"])
+                self.assertIn(expected_subject_part, kwargs["subject"])
+                self.assertIn("Заказ:", kwargs["message"])
+                self.assertIn("Сумма:", kwargs["message"])
+                self.assertIn(reverse("users:order_detail", kwargs={"pk": self.order.pk}), kwargs["message"])
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_creates_sent_notification_log(self, mock_send_mail):
+        result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.recipient_email, self.order.email)
+        self.assertEqual(notification_log.event_key, "created")
+        self.assertEqual(notification_log.recipient_type, OrderNotificationLog.RecipientType.CUSTOMER)
+        self.assertEqual(notification_log.recipient_list_snapshot, [self.order.email])
+        self.assertEqual(notification_log.subject, mock_send_mail.call_args.kwargs["subject"])
+        self.assertEqual(notification_log.message, mock_send_mail.call_args.kwargs["message"])
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
+        self.assertIsNotNone(notification_log.sent_at)
+        self.assertIsNone(notification_log.error_message)
+        self.assertIsNone(notification_log.last_error)
+        self.assertIsNone(notification_log.triggered_by_id)
+        self.assertTrue(notification_log.idempotency_key)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_repeated_customer_notification_does_not_call_send_mail(self, mock_send_mail):
+        first_result = send_order_notification_sync(self.order.id, "created")
+        mock_send_mail.reset_mock()
+
+        second_result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        mock_send_mail.assert_not_called()
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_already_sent_notification_is_not_retried_by_automatic_task(self, mock_send_mail):
+        OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            event_key=OrderNotificationLog.NotificationType.CREATED,
+            recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+            recipient_email=self.order.email,
+            recipient_list_snapshot=[self.order.email],
+            subject="Заказ уже отправлен",
+            message="Письмо уже было доставлено.",
+            status=OrderNotificationLog.Status.SENT,
+            attempts_count=1,
+            sent_at=timezone.now(),
+        )
+
+        result = send_order_notification.run(order_id=self.order.id, event_key="created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_not_called()
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.exception")
+    @patch(
+        "orders.tasks.send_mail",
+        side_effect=RuntimeError(
+            "smtp unavailable token=raw-guest-token buyer@example.com "
+            "https://shop.example.test/orders/guest/raw-guest-token/ "
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ),
+    )
+    def test_send_order_notification_sync_creates_failed_notification_log(
+        self,
+        mock_send_mail,
+        mock_logger_exception,
+    ):
+        result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_exception.assert_called_once()
+        notification_log = OrderNotificationLog.objects.get(order=self.order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIsNone(notification_log.sent_at)
+        self.assertEqual(notification_log.attempts_count, 1)
+        self.assertLessEqual(len(notification_log.error_message), 240)
+        self.assertIn("smtp unavailable", notification_log.error_message)
+        self.assertIn("smtp unavailable", notification_log.last_error)
+        self.assertNotIn("raw-guest-token", notification_log.error_message)
+        self.assertNotIn("buyer@example.com", notification_log.error_message)
+        self.assertTrue(notification_log.subject)
+        self.assertTrue(notification_log.message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_failed_notification_can_be_retried_manually(self, mock_send_mail):
+        manager = User.objects.create_user(email="manager-resend@example.com", password="managerpass123")
+        notification_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.FAILED,
+            error_message="smtp unavailable",
+            triggered_by=manager,
+        )
+
+        result = send_order_notification_sync(
+            self.order.id,
+            "created",
+            notification_log_id=notification_log.pk,
+        )
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        notification_log.refresh_from_db()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.SENT)
+        self.assertEqual(notification_log.attempts_count, 1)
+        self.assertIsNotNone(notification_log.sent_at)
+        self.assertIsNone(notification_log.error_message)
+        self.assertIsNone(notification_log.last_error)
+        self.assertEqual(notification_log.triggered_by_id, manager.id)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.exception")
+    @patch("orders.tasks.send_mail", side_effect=RuntimeError("smtp unavailable"))
+    def test_manual_resend_failure_updates_log_to_failed(
+        self,
+        mock_send_mail,
+        mock_logger_exception,
+    ):
+        manager = User.objects.create_user(email="manager-resend-failed@example.com", password="managerpass123")
+        notification_log = OrderNotificationLog.objects.create(
+            order=self.order,
+            notification_type=OrderNotificationLog.NotificationType.CREATED,
+            recipient_email=self.order.email,
+            status=OrderNotificationLog.Status.PENDING,
+            triggered_by=manager,
+        )
+
+        result = send_order_notification_sync(
+            self.order.id,
+            "created",
+            notification_log_id=notification_log.pk,
+        )
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_exception.assert_called_once()
+        notification_log.refresh_from_db()
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIn("smtp unavailable", notification_log.error_message)
+        self.assertEqual(notification_log.triggered_by_id, manager.id)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_guest_created_includes_registration_hint(self, mock_send_mail):
+        guest_order = self._create_guest_order()
+
+        result = send_order_notification_sync(guest_order.id, "created")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        message = mock_send_mail.call_args.kwargs["message"]
+        self.assertIn("Сохраните номер заказа для связи с магазином.", message)
+        self.assertIn(
+            "После регистрации и подтверждения почты " "заказ появится в личном кабинете.",
+            message,
+        )
+        self.assertNotIn(reverse("users:order_detail", kwargs={"pk": guest_order.pk}), message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_guest_non_created_excludes_registration_hint(self, mock_send_mail):
+        guest_order = self._create_guest_order(number="ORD-GUEST-2")
+
+        for event_key in ("cancelled", "ready", "paid"):
+            with self.subTest(event_key=event_key):
+                mock_send_mail.reset_mock()
+                result = send_order_notification_sync(guest_order.id, event_key)
+
+                self.assertTrue(result)
+                mock_send_mail.assert_called_once()
+                message = mock_send_mail.call_args.kwargs["message"]
+                self.assertIn("Сохраните номер заказа для связи с магазином.", message)
+                self.assertNotIn(
+                    "После регистрации и подтверждения почты " "заказ появится в личном кабинете.",
+                    message,
+                )
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+        STORE_SUPPORT_EMAIL=("Магазин атрибутики ФК Шинник " "[mail@shinnik-shop.ru](mailto:mail@shinnik-shop.ru)"),
+    )
+    @patch("orders.tasks.send_mail", return_value=1)
+    def test_send_order_notification_sync_cancelled_uses_plain_support_email(self, mock_send_mail):
+        result = send_order_notification_sync(self.order.id, "cancelled")
+
+        self.assertTrue(result)
+        mock_send_mail.assert_called_once()
+        message = mock_send_mail.call_args.kwargs["message"]
+        self.assertIn("Написать в поддержку: mail@shinnik-shop.ru", message)
+        self.assertNotIn("(mailto:", message)
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.error")
+    @patch("orders.tasks.send_mail")
+    def test_send_order_notification_sync_returns_false_on_unsupported_event_key(
+        self,
+        mock_send_mail,
+        mock_logger_error,
+    ):
+        result = send_order_notification_sync(self.order.id, "unexpected_status")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_not_called()
+        mock_logger_error.assert_called_once()
+        log_extra = mock_logger_error.call_args.kwargs["extra"]
+        self.assertEqual(log_extra["order_id"], self.order.id)
+        self.assertEqual(log_extra["event_key"], "unexpected_status")
+        self.assertEqual(log_extra["reason"], "unsupported_event_key")
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.logger.error")
+    @patch("orders.tasks.send_mail", return_value=0)
+    def test_send_order_notification_sync_returns_false_when_send_mail_returns_zero(
+        self,
+        mock_send_mail,
+        mock_logger_error,
+    ):
+        result = send_order_notification_sync(self.order.id, "created")
+
+        self.assertFalse(result)
+        mock_send_mail.assert_called_once()
+        mock_logger_error.assert_called_once()
+        log_extra = mock_logger_error.call_args.kwargs["extra"]
+        self.assertEqual(log_extra["order_id"], self.order.id)
+        self.assertEqual(log_extra["event_key"], "created")
+        self.assertEqual(log_extra["reason"], "send_mail_returned_zero")
+
+    @override_settings(
+        DEFAULT_FROM_EMAIL="noreply@matchday-store.com",
+        SITE_URL="http://localhost:8000",
+    )
+    @patch("orders.tasks.send_mail", return_value=0)
+    def test_send_order_notification_sync_raises_on_zero_send_count_when_raise_on_error(self, mock_send_mail):
+        with self.assertRaises(NotificationDeliveryError):
+            send_order_notification_sync(self.order.id, "created", raise_on_error=True)
+
         mock_send_mail.assert_called_once()
 
     @override_settings(
@@ -2273,7 +3467,7 @@ class OrderNotificationTaskRetryConfigurationTest(SimpleTestCase):
         self._assert_retry_settings(send_staff_new_order_notification)
 
 
-class OrderNotificationServiceQueueDispatchTest(SimpleTestCase):
+class OrderNotificationServiceQueueDispatchTest(TestCase):
     @patch("orders.application.order_notification_service.send_order_notification")
     def test_enqueue_returns_false_when_celery_dispatch_fails(
         self,
@@ -2281,9 +3475,24 @@ class OrderNotificationServiceQueueDispatchTest(SimpleTestCase):
     ):
         from orders.application.order_notification_service import OrderNotificationService
 
+        order = Order.objects.create(
+            number="ORD-QUEUE-FAIL-1",
+            user=None,
+            recipient_name="Покупатель",
+            email="queue-fail@example.com",
+            phone="+79990000000",
+            status=Order.Status.PLACED,
+            payment_status=Order.PaymentStatus.PENDING,
+            fulfillment_status=Order.FulfillmentStatus.NEW,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            total_amount=Decimal("1500.00"),
+        )
         mock_async_task.delay.side_effect = RuntimeError("broker down")
 
-        result = OrderNotificationService.enqueue(order_id=42, event_key="created")
+        result = OrderNotificationService.enqueue(order_id=order.pk, event_key="created")
 
         self.assertFalse(result)
-        mock_async_task.delay.assert_called_once_with(42, "created")
+        mock_async_task.delay.assert_called_once_with(notification_log_id=ANY)
+        notification_log = OrderNotificationLog.objects.get(order=order, notification_type="created")
+        self.assertEqual(notification_log.status, OrderNotificationLog.Status.FAILED)
+        self.assertIn("broker down", notification_log.error_message)

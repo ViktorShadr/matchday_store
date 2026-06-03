@@ -7,14 +7,19 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, RedirectView, TemplateView, UpdateView
 
-from orders.application import DashboardOrderFlowError, DashboardOrderFlowService
+from orders.application import DashboardOrderFlowError, DashboardOrderFlowService, OrderNotificationService
 from orders.models import Order
 from orders.services import OrderAutoCancellationService
 from store.application import WarehouseCrudService
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm
-from store.mixins import ModeratorRequiredMixin
+from store.mixins import ModeratorRequiredMixin, StaffOrderViewPermissionMixin
 from store.models import Category, Product, ProductImage, ProductVariant
-from store.presenters import DashboardOrderPresenter, WarehouseProductPresenter, WarehouseUiPresenter
+from store.presenters import (
+    DashboardOrderPresenter,
+    StatusTransitionPresenter,
+    WarehouseProductPresenter,
+    WarehouseUiPresenter,
+)
 from store.queries import DashboardOrderQueryService, WarehouseManagementQueryService, WarehouseQueryService
 
 DASHBOARD_ORDER_FILTERS = DashboardOrderPresenter.STATUS_FILTERS
@@ -150,9 +155,8 @@ class OrdersDashboardView(ModeratorRequiredMixin, TemplateView):
         return context
 
 
-class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
+class DashboardOrderContextMixin:
     model = Order
-    template_name = "dashboard/order_detail.html"
     context_object_name = "order"
 
     def get_queryset(self):
@@ -176,11 +180,21 @@ class DashboardOrderDetailView(ModeratorRequiredMixin, DetailView):
         context["staff_guidance"] = DashboardOrderPresenter.build_staff_guidance(self.object)
         if self.object.delivery_method == Order.DeliveryMethod.PICKUP:
             context["pickup_deadline"] = OrderAutoCancellationService.get_pickup_deadline(self.object)
-        context["status_transitions"] = self.object.status_transitions.select_related("changed_by").order_by(
-            "-created_at",
-            "-id",
+        status_transitions = self.object.status_transitions.select_related("changed_by").order_by("-created_at", "-id")
+        context["status_transitions"] = StatusTransitionPresenter.present_many(status_transitions)
+        context["notification_logs"] = list(
+            self.object.notification_logs.select_related("triggered_by").order_by("-created_at", "-id")[:8]
         )
+        context["manual_resend"] = OrderNotificationService.build_manual_resend_context(self.object)
         return context
+
+
+class DashboardOrderDetailView(ModeratorRequiredMixin, DashboardOrderContextMixin, DetailView):
+    template_name = "dashboard/order_detail.html"
+
+
+class DashboardOrderPrintView(StaffOrderViewPermissionMixin, DashboardOrderContextMixin, DetailView):
+    template_name = "dashboard/order_print.html"
 
 
 class DashboardOrderStatusUpdateView(ModeratorRequiredMixin, View):
@@ -232,6 +246,21 @@ class DashboardOrderStaffNoteUpdateView(ModeratorRequiredMixin, View):
         order.staff_note = request.POST.get("staff_note", "").strip()
         order.save(update_fields=["staff_note", "updated_at"])
         messages.success(request, "Внутренняя заметка сохранена.")
+        return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
+
+
+class DashboardOrderNotificationResendView(ModeratorRequiredMixin, View):
+    notification_service = OrderNotificationService
+
+    def post(self, request, *args, **kwargs):
+        order = get_object_or_404(Order, pk=self.kwargs["pk"])
+        result = self.notification_service.enqueue_manual_resend(order, triggered_by=request.user)
+        if result.level == "warning":
+            messages.warning(request, result.message)
+        elif result.is_enqueued:
+            messages.info(request, result.message)
+        else:
+            messages.error(request, result.message)
         return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
 

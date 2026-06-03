@@ -6,7 +6,7 @@ from unittest.mock import ANY, call, patch
 from uuid import uuid4
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase, TransactionTestCase, tag
+from django.test import Client, TestCase, TransactionTestCase, override_settings, tag
 from django.urls import reverse
 
 from orders.models import Order, OrderStatusTransition
@@ -49,6 +49,7 @@ class SalesFlowSmokeE2ETest(TestCase):
             image=self.image,
         )
 
+    @override_settings(STAFF_ORDER_NOTIFICATION_EMAILS=["smoke-staff@example.com"])
     def test_full_sales_flow_smoke_e2e(self):
         user_email = f"smoke-user-{uuid4().hex[:8]}@example.com"
         user_password = "smokeuserpass123"
@@ -143,8 +144,11 @@ class SalesFlowSmokeE2ETest(TestCase):
             customer_cart = Cart.objects.get(user=customer_user)
             self.assertEqual(customer_cart.items.count(), 0)
 
-            mock_send_staff_new_order_notification.delay.assert_called_once_with(order.id)
-            self.assertIn(call(order.id, "created"), mock_send_order_notification.delay.call_args_list)
+            mock_send_staff_new_order_notification.delay.assert_called_once_with(notification_log_id=ANY)
+            self.assertIn(
+                call(notification_log_id=ANY),
+                mock_send_order_notification.delay.call_args_list,
+            )
 
             self.dashboard_client.force_login(self.dashboard_user)
 
@@ -187,8 +191,14 @@ class SalesFlowSmokeE2ETest(TestCase):
             self.assertEqual(self.variant.quantity, 8)
             self.assertEqual(self.variant.reserved_quantity, 0)
 
-            self.assertIn(call(order.id, "paid"), mock_send_order_notification.delay.call_args_list)
-            self.assertIn(call(order.id, "ready"), mock_send_order_notification.delay.call_args_list)
+            self.assertIn(
+                call(notification_log_id=ANY),
+                mock_send_order_notification.delay.call_args_list,
+            )
+            self.assertIn(
+                call(notification_log_id=ANY),
+                mock_send_order_notification.delay.call_args_list,
+            )
             self.assertTrue(
                 OrderStatusTransition.objects.filter(
                     order=order,

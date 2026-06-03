@@ -1,4 +1,4 @@
-from orders.models import Order
+from orders.models import Order, OrderStatusTransition
 
 
 def _order_status_policy():
@@ -162,3 +162,36 @@ class DashboardOrderPresenter:
     @classmethod
     def present_many(cls, orders):
         return [cls.present(order) for order in orders]
+
+
+class StatusTransitionPresenter:
+    """Презентация audit log переходов статусов для staff-dashboard."""
+
+    STATUS_LABELS_BY_TYPE = {
+        OrderStatusTransition.TransitionType.DASHBOARD_STATUS: dict(DashboardOrderPresenter.STATUS_CHOICES),
+        OrderStatusTransition.TransitionType.ORDER_STATUS: dict(Order.Status.choices),
+        OrderStatusTransition.TransitionType.FULFILLMENT_STATUS: dict(Order.FulfillmentStatus.choices),
+        OrderStatusTransition.TransitionType.PAYMENT_STATUS: dict(DashboardOrderPresenter.PAYMENT_STATUS_CHOICES),
+    }
+
+    @classmethod
+    def display_value(cls, transition_type: str, value: str) -> str:
+        return cls.STATUS_LABELS_BY_TYPE.get(transition_type, {}).get(value, value)
+
+    @classmethod
+    def present(cls, transition: OrderStatusTransition) -> dict:
+        from_label = cls.display_value(transition.transition_type, transition.from_value)
+        to_label = cls.display_value(transition.transition_type, transition.to_value)
+        return {
+            "created_at": transition.created_at,
+            "type_label": transition.get_transition_type_display(),
+            "from_label": from_label,
+            "to_label": to_label,
+            "changed_by_label": (
+                transition.changed_by.email if transition.changed_by and transition.changed_by.email else "Система"
+            ),
+        }
+
+    @classmethod
+    def present_many(cls, transitions):
+        return [cls.present(transition) for transition in transitions]

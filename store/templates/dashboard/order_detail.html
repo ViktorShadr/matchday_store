@@ -23,58 +23,42 @@
                         Дата: {{ order.created_at|date:"d.m.Y H:i" }}
                     </p>
                 </div>
-                <a class="btn btn-outline-primary" href="{% url 'store:dashboard_orders' %}">Назад к заказам</a>
             </div>
 
             {% include 'dashboard/_tabs.html' %}
 
-            <div class="row g-4">
-                <div class="col-12 col-xl-8">
-                    <div class="sf-surface p-4">
-                        <h2 class="h4 mb-3">Состав заказа</h2>
-                        <div class="d-grid gap-2">
-                            {% for item in items %}
-                                <div class="sf-order-item-row">
-                                    <div>
-                                        <div class="fw-semibold">{{ item.product_name_snapshot }}</div>
-                                        <div class="small text-muted">
-                                            {{ item.quantity }} шт.
-                                            {% if item.size_snapshot or item.color_snapshot %}
-                                                · {{ item.size_snapshot|default:'—' }} / {{ item.color_snapshot|default:'—' }}
-                                            {% endif %}
-                                            {% if item.sku_snapshot %}
-                                                · SKU: {{ item.sku_snapshot }}
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    <div class="fw-semibold">{{ item.line_total|floatformat:"-2" }} ₽</div>
+            <div class="d-grid gap-4">
+                <div class="sf-surface p-3 p-lg-4">
+                    <h2 class="h4 mb-3">Краткая информация</h2>
+                    <div class="row row-cols-1 row-cols-lg-2 row-cols-xl-3 g-0 border-top">
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Статус заказа</div>
+                                <div class="col-12 col-sm-7 text-sm-end">
+                                    <span class="{{ current_status_badge }}">{{ current_status_label }}</span>
                                 </div>
-                            {% empty %}
-                                <div class="text-muted">Состав заказа пока недоступен.</div>
-                            {% endfor %}
+                            </div>
                         </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-xl-4">
-                    <div class="sf-surface p-4 mb-4">
-                        <h2 class="h4 mb-3">Сводка</h2>
-                        <div class="d-grid gap-2">
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Статус</span>
-                                <span class="{{ current_status_badge }}">{{ current_status_label }}</span>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Статус оплаты</div>
+                                <div class="col-12 col-sm-7 text-sm-end">
+                                    <span class="{{ current_payment_status_badge }}">{{ current_payment_status_label }}</span>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Оплата</span>
-                                <span class="{{ current_payment_status_badge }}">{{ current_payment_status_label }}</span>
+                        </div>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Сумма</div>
+                                <div class="col-12 col-sm-7 text-sm-end fw-semibold">
+                                    {{ order.total_amount|floatformat:"-2" }} ₽
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Итого</span>
-                                <strong>{{ order.total_amount|floatformat:"-2" }} ₽</strong>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Получатель</span>
-                                <strong class="text-end">
+                        </div>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Клиент</div>
+                                <div class="col-12 col-sm-7 text-sm-end fw-semibold text-break">
                                     {% if order.recipient_name %}
                                         {{ order.recipient_name }}
                                     {% elif order.email %}
@@ -84,11 +68,13 @@
                                     {% else %}
                                         —
                                     {% endif %}
-                                </strong>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Email</span>
-                                <strong class="text-end">
+                        </div>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Email</div>
+                                <div class="col-12 col-sm-7 text-sm-end fw-semibold text-break">
                                     {% if order.email %}
                                         <a href="mailto:{{ order.email }}">{{ order.email }}</a>
                                     {% elif order.user %}
@@ -96,142 +82,263 @@
                                     {% else %}
                                         —
                                     {% endif %}
-                                </strong>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Телефон</span>
-                                <strong class="text-end">
+                        </div>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Телефон</div>
+                                <div class="col-12 col-sm-7 text-sm-end fw-semibold text-break">
                                     {% if order.phone %}
                                         <a href="tel:{{ order.phone }}">{{ order.phone }}</a>
                                     {% else %}
                                         —
                                     {% endif %}
-                                </strong>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Получение</span>
-                                <strong class="text-end">Самовывоз</strong>
+                        </div>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Способ получения</div>
+                                <div class="col-12 col-sm-7 text-sm-end fw-semibold">
+                                    {{ order.get_delivery_method_display|default:"Самовывоз" }}
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Забрать до</span>
-                                <strong class="text-end">
+                        </div>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Забрать до</div>
+                                <div class="col-12 col-sm-7 text-sm-end fw-semibold">
                                     {% if pickup_deadline %}
                                         {{ pickup_deadline|date:"d.m.Y H:i" }}
                                     {% else %}
                                         —
                                     {% endif %}
-                                </strong>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Выдан</span>
-                                <strong class="text-end">
+                        </div>
+                        <div class="col border-bottom">
+                            <div class="row g-2 align-items-start py-3 px-lg-3">
+                                <div class="col-12 col-sm-5 small text-muted">Дата выдачи</div>
+                                <div class="col-12 col-sm-7 text-sm-end fw-semibold">
                                     {% if order.issued_at %}
                                         {{ order.issued_at|date:"d.m.Y H:i" }}
                                     {% else %}
                                         —
                                     {% endif %}
-                                </strong>
+                                </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    {% if order.customer_comment %}
-                        <div class="sf-surface p-4 mb-4">
-                            <h2 class="h4 mb-3">Комментарий клиента</h2>
-                            <div>{{ order.customer_comment }}</div>
+                <div class="sf-surface p-3 p-lg-4 sf-no-print">
+                    <h2 class="h4 mb-3">Действия менеджера</h2>
+                    <div class="d-grid gap-4">
+                        <div>
+                            <h3 class="h6 mb-2">Быстрые действия</h3>
+                            <div class="d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-center">
+                                {% if perms.orders.view_order %}
+                                    <a class="btn btn-primary" href="{% url 'store:dashboard_order_print' order.pk %}">
+                                        Распечатать заказ
+                                    </a>
+                                {% endif %}
+                                <a class="btn btn-outline-primary" href="{% url 'store:dashboard_orders' %}">
+                                    Назад к заказам
+                                </a>
+                            </div>
                         </div>
-                    {% endif %}
 
-                    <div class="sf-surface p-4 mb-4">
-                        <h2 class="h4 mb-3">Внутренняя заметка</h2>
-                        <form method="post" action="{% url 'store:dashboard_order_staff_note_update' order.pk %}">
-                            {% csrf_token %}
-                            <label class="visually-hidden" for="staffNote">Внутренняя заметка</label>
-                            <textarea
+                        <div>
+                            <h3 class="h6 mb-3">Изменение статусов</h3>
+                            <form method="post" action="{% url 'store:dashboard_order_status_update' order.pk %}"
+                                  class="mb-3">
+                                {% csrf_token %}
+                                <div class="row g-2 align-items-start">
+                                    <div class="col-12 col-lg-3">
+                                        <label class="form-label mb-lg-0 pt-lg-2" for="dashboardOrderStatus">Статус
+                                            заказа</label>
+                                    </div>
+                                    <div class="col-12 col-lg-5 col-xl-4">
+                                        <select id="dashboardOrderStatus" class="form-select" name="status">
+                                            {% for value, label, is_allowed in status_choices %}
+                                                <option value="{{ value }}"
+                                                        {% if current_status_key == value %}selected{% endif %}
+                                                        {% if not is_allowed %}disabled{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-text small text-muted mt-1">
+                                            Доступны только корректные переходы. Для статуса «Выдан» оплата должна быть
+                                            подтверждена.
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-lg-auto">
+                                        <button type="submit" class="btn btn-primary w-100">Сохранить статус</button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <form method="post"
+                                  action="{% url 'store:dashboard_order_payment_status_update' order.pk %}">
+                                {% csrf_token %}
+                                <div class="row g-2 align-items-start">
+                                    <div class="col-12 col-lg-3">
+                                        <label class="form-label mb-lg-0 pt-lg-2" for="dashboardPaymentStatus">Статус
+                                            оплаты</label>
+                                    </div>
+                                    <div class="col-12 col-lg-5 col-xl-4">
+                                        <select id="dashboardPaymentStatus" class="form-select" name="payment_status">
+                                            {% for value, label in payment_status_choices %}
+                                                <option value="{{ value }}"
+                                                        {% if current_payment_status_key == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-lg-auto">
+                                        <button type="submit" class="btn btn-outline-primary w-100">Сохранить оплату
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sf-surface p-3 p-lg-4">
+                    <h2 class="h4 mb-3">Состав заказа</h2>
+                    <div class="d-grid gap-2">
+                        {% for item in items %}
+                            <div class="sf-order-item-row">
+                                <div>
+                                    <div class="fw-semibold">{{ item.product_name_snapshot }}</div>
+                                    <div class="small text-muted">
+                                        {{ item.quantity }} шт.
+                                        {% if item.size_snapshot or item.color_snapshot %}
+                                            · {{ item.size_snapshot|default:'—' }} /
+                                            {{ item.color_snapshot|default:'—' }}
+                                        {% endif %}
+                                        {% if item.sku_snapshot %}
+                                            · SKU: {{ item.sku_snapshot }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="fw-semibold">{{ item.line_total|floatformat:"-2" }} ₽</div>
+                            </div>
+                        {% empty %}
+                            <div class="text-muted">Состав заказа пока недоступен.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {% if order.customer_comment %}
+                    <div class="sf-surface p-3 p-lg-4">
+                        <h2 class="h4 mb-3">Комментарий клиента</h2>
+                        <div>{{ order.customer_comment }}</div>
+                    </div>
+                {% endif %}
+
+                <div class="sf-surface p-3 p-lg-4">
+                    <h2 class="h4 mb-3">Внутренняя заметка</h2>
+                    <form method="post" action="{% url 'store:dashboard_order_staff_note_update' order.pk %}">
+                        {% csrf_token %}
+                        <label class="visually-hidden" for="staffNote">Внутренняя заметка</label>
+                        <textarea
                                 id="staffNote"
                                 name="staff_note"
                                 class="form-control"
                                 rows="4"
                                 placeholder="Информация для сотрудников, не видна покупателю"
-                            >{{ order.staff_note }}</textarea>
-                            <button type="submit" class="btn btn-outline-primary w-100 mt-3">Сохранить заметку</button>
-                        </form>
-                    </div>
-
-                    <div class="sf-surface p-4 mb-4">
-                        <h2 class="h4 mb-3">Следующий шаг</h2>
-                        <div class="d-grid gap-2">
-                            {% for note in staff_guidance %}
-                                <div class="small">{{ note }}</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <div class="sf-surface p-4">
-                        <h2 class="h4 mb-3">Изменить статус</h2>
-                        <form method="post" action="{% url 'store:dashboard_order_status_update' order.pk %}">
-                            {% csrf_token %}
-                            <label class="form-label" for="dashboardOrderStatus">Статус заказа</label>
-                            <select id="dashboardOrderStatus" class="form-select" name="status">
-                                {% for value, label, is_allowed in status_choices %}
-                                    <option value="{{ value }}" {% if current_status_key == value %}selected{% endif %} {% if not is_allowed %}disabled{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text mt-2">
-                                Доступны только корректные переходы. Для статуса «Выдан» оплата должна быть подтверждена.
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100 mt-3">Сохранить</button>
-                        </form>
-                    </div>
-
-                    <div class="sf-surface p-4 mt-4">
-                        <h2 class="h4 mb-3">Изменить оплату</h2>
-                        <form method="post" action="{% url 'store:dashboard_order_payment_status_update' order.pk %}">
-                            {% csrf_token %}
-                            <label class="form-label" for="dashboardPaymentStatus">Статус оплаты</label>
-                            <select id="dashboardPaymentStatus" class="form-select" name="payment_status">
-                                {% for value, label in payment_status_choices %}
-                                    <option value="{{ value }}" {% if current_payment_status_key == value %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                            <button type="submit" class="btn btn-outline-primary w-100 mt-3">Сохранить оплату</button>
-                        </form>
-                    </div>
-
-                    <div class="sf-surface p-4 mt-4">
-                        <h2 class="h4 mb-3">История изменений</h2>
+                        >{{ order.staff_note }}</textarea>
+                        <button type="submit" class="btn btn-outline-primary mt-3">Сохранить заметку</button>
+                    </form>
+                </div>
+                <div class="sf-surface p-3 p-lg-4">
+                    <h2 class="h4 mb-3">Уведомления</h2>
+                    {% if notification_logs %}
                         <div class="table-responsive">
-                            <table class="table table-sm align-middle mb-0">
+                            <table class="table table-sm align-middle mb-0 sf-dashboard-table">
                                 <thead>
-                                    <tr>
-                                        <th scope="col">Когда</th>
-                                        <th scope="col">Тип</th>
-                                        <th scope="col">Переход</th>
-                                        <th scope="col">Кто</th>
-                                    </tr>
+                                <tr>
+                                    <th scope="col">Тип</th>
+                                    <th scope="col">Статус</th>
+                                    <th scope="col">Когда</th>
+                                    <th scope="col" class="text-end">Действие</th>
+                                </tr>
                                 </thead>
                                 <tbody>
-                                    {% for transition in status_transitions %}
-                                        <tr>
-                                            <td>{{ transition.created_at|date:"d.m.Y H:i" }}</td>
-                                            <td>{{ transition.get_transition_type_display }}</td>
-                                            <td><code>{{ transition.from_value }}</code> &rarr; <code>{{ transition.to_value }}</code></td>
-                                            <td>
-                                                {% if transition.changed_by %}
-                                                    {{ transition.changed_by.email|default:"Система" }}
+                                {% for log in notification_logs %}
+                                    <tr>
+                                        <td class="text-break">
+                                            <div class="fw-semibold">{{ log.get_notification_type_display }}</div>
+                                            <div class="small text-muted">{{ log.get_recipient_type_display }}: {{ log.recipient_display }}</div>
+                                            <div class="small text-muted">{{ log.trigger_display }}</div>
+                                            <div class="small text-muted">Попыток: {{ log.attempts_count }}</div>
+                                            {% if log.status == "failed" and log.last_error %}
+                                                <div class="small text-danger mt-1">{{ log.last_error }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td><span
+                                                class="{{ log.status_badge_class }}">{{ log.get_status_display }}</span>
+                                        </td>
+                                        <td class="small text-muted">
+                                            <div>{{ log.created_at|date:"d.m.Y H:i" }}</div>
+                                            {% if log.sent_at %}
+                                                <div>Отправлено: {{ log.sent_at|date:"d.m.Y H:i" }}</div>
+                                            {% endif %}
+                                        </td>
+                                        {% if forloop.first %}
+                                            <td class="align-top text-end" rowspan="{{ notification_logs|length }}">
+                                                {% if manual_resend.is_available %}
+                                                    <form method="post"
+                                                          action="{% url 'store:dashboard_order_notification_resend' order.pk %}"
+                                                          class="m-0">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                                                            {{ manual_resend.label }}
+                                                        </button>
+                                                    </form>
                                                 {% else %}
-                                                    Система
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
+                                                        {{ manual_resend.label }}
+                                                    </button>
                                                 {% endif %}
                                             </td>
-                                        </tr>
-                                    {% empty %}
-                                        <tr>
-                                            <td colspan="4" class="text-muted">История переходов пока пуста.</td>
-                                        </tr>
-                                    {% endfor %}
+                                        {% endif %}
+                                    </tr>
+                                {% endfor %}
                                 </tbody>
                             </table>
                         </div>
+                    {% else %}
+                        <div class="text-muted mb-3">Уведомления по заказу еще не отправлялись.</div>
+                        <form method="post" action="{% url 'store:dashboard_order_notification_resend' order.pk %}"
+                              class="m-0">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-primary">
+                                {{ manual_resend.label }}
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+
+                <div class="sf-surface p-3 p-lg-4">
+                    <h2 class="h4 mb-3">История изменений</h2>
+                    <div class="d-grid gap-3">
+                        {% for transition in status_transitions %}
+                            <article class="border rounded-3 p-3">
+                                <div class="d-flex flex-column flex-md-row justify-content-md-between gap-2 mb-2">
+                                    <time class="text-muted small" datetime="{{ transition.created_at|date:'c' }}">
+                                        {{ transition.created_at|date:"d.m.Y H:i" }}
+                                    </time>
+                                    <div class="text-muted small">Изменил: {{ transition.changed_by_label }}</div>
+                                </div>
+                                <div class="fw-semibold">
+                                    {{ transition.type_label }}: {{ transition.from_label }} → {{ transition.to_label }}
+                                </div>
+                            </article>
+                        {% empty %}
+                            <div class="text-muted">История переходов пока пуста.</div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>

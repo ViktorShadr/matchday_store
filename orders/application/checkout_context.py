@@ -10,6 +10,7 @@ class CheckoutContext:
 
     user: Optional[object]
     cart_context: CartContext
+    ip_address: Optional[str] = None
 
     @property
     def is_authenticated(self) -> bool:

@@ -39,6 +39,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_healthy
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
@@ -91,6 +93,22 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    ports:
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: [ "CMD", "/mailpit", "readyz" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   worker:
     build:
@@ -146,6 +164,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
     volumes:
       - media_data:/app/media

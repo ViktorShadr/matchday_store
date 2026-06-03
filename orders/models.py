@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 class Address(models.Model):
@@ -66,6 +67,7 @@ class Order(models.Model):
         user (User): Пользователь, сделавший заказ (необязательно для гостевого заказа)
         email (str): Email заказчика
         phone (str): Номер телефона заказчика
+        guest_manage_token (str): Устаревший raw-токен управления гостевым заказом
         status (str): Статус заказа (из Status.choices)
         payment_status (str): Статус оплаты (из PaymentStatus.choices)
         fulfillment_status (str): Статус исполнения (из FulfillmentStatus.choices)
@@ -80,6 +82,8 @@ class Order(models.Model):
         customer_comment (str): Комментарий заказчика
         staff_note (str): Внутренняя заметка сотрудников
         source_cart_id (int): ID корзины-источника
+        checkout_session_key (str): Снимок session key гостевого checkout
+        checkout_ip_address (str): Снимок IP гостевого checkout
         confirmed_at (datetime): Дата подтверждения
         paid_at (datetime): Дата оплаты
         issued_at (datetime): Дата выдачи заказа
@@ -140,6 +144,17 @@ class Order(models.Model):
     recipient_name = models.CharField(max_length=255, blank=True)
     email = models.EmailField()
     phone = models.CharField(max_length=32)
+    guest_manage_token = models.CharField(
+        max_length=128,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            "Deprecated legacy raw token. New guest management access is stored in "
+            "GuestOrderAccessToken.token_hash."
+        ),
+    )
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
     payment_status = models.CharField(
         max_length=32,
@@ -172,6 +187,18 @@ class Order(models.Model):
     customer_comment = models.TextField(blank=True)
     staff_note = models.TextField(blank=True)
     source_cart_id = models.PositiveBigIntegerField(null=True, blank=True)
+    checkout_session_key = models.CharField(
+        max_length=40,
+        blank=True,
+        db_index=True,
+        help_text="Guest checkout session snapshot for stock reservation abuse limits.",
+    )
+    checkout_ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Guest checkout IP snapshot for stock reservation abuse limits.",
+    )
     confirmed_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     issued_at = models.DateTimeField(null=True, blank=True)
@@ -189,6 +216,188 @@ class Order(models.Model):
     def __str__(self):
         """Возвращает строковое представление объекта."""
         return f"Заказ {self.number}"
+
+    @staticmethod
+    def _include_update_field(kwargs, field_name: str) -> None:
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and field_name not in update_fields:
+            kwargs["update_fields"] = [*update_fields, field_name]
+
+    def save(self, *args, **kwargs):
+        if self.user_id is not None and self.guest_manage_token:
+            self.guest_manage_token = None
+            self._include_update_field(kwargs, "guest_manage_token")
+
+        super().save(*args, **kwargs)
+
+
+class GuestOrderAccessToken(models.Model):
+    """Хэшированный токен доступа к управлению гостевым заказом."""
+
+    class Purpose(models.TextChoices):
+        GUEST_MANAGE = "guest_manage", "Guest order management"
+
+    order = models.ForeignKey("orders.Order", on_delete=models.CASCADE, related_name="guest_access_tokens")
+    token_hash = models.CharField(max_length=64, unique=True)
+    purpose = models.CharField(max_length=32, choices=Purpose.choices, default=Purpose.GUEST_MANAGE, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Токен гостевого доступа к заказу"
+        verbose_name_plural = "Токены гостевого доступа к заказам"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["order", "purpose", "revoked_at", "expires_at"], name="guest_token_lookup_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.order_id}: {self.purpose}"
+
+
+class OrderNotificationLog(models.Model):
+    """DB-backed outbox record for order email notifications."""
+
+    class NotificationType(models.TextChoices):
+        CREATED = "created", "Заказ принят"
+        CANCELLED = "cancelled", "Заказ отменен"
+        READY = "ready", "Готов к выдаче"
+        PAID = "paid", "Оплата подтверждена"
+        STAFF_CREATED = "staff_created", "Новый заказ для сотрудников"
+
+    class RecipientType(models.TextChoices):
+        CUSTOMER = "customer", "Покупатель"
+        STAFF = "staff", "Сотрудники"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ожидает отправки"
+        SENDING = "sending", "Отправляется"
+        SENT = "sent", "Отправлено"
+        FAILED = "failed", "Ошибка"
+
+    order = models.ForeignKey("orders.Order", on_delete=models.CASCADE, related_name="notification_logs")
+    notification_type = models.CharField(max_length=32, choices=NotificationType.choices, db_index=True)
+    event_key = models.CharField(max_length=32, choices=NotificationType.choices, db_index=True)
+    recipient_type = models.CharField(
+        max_length=16,
+        choices=RecipientType.choices,
+        default=RecipientType.CUSTOMER,
+        db_index=True,
+    )
+    recipient_email = models.EmailField(blank=True)
+    recipient_list_snapshot = models.JSONField(default=list, blank=True)
+    subject = models.CharField(max_length=255, blank=True)
+    message = models.TextField(blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    attempts_count = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(null=True, blank=True)
+    error_message = models.TextField(null=True, blank=True)
+    task_id = models.CharField(max_length=255, null=True, blank=True)
+    idempotency_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="triggered_order_notification_logs",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Журнал уведомления заказа"
+        verbose_name_plural = "Журнал уведомлений заказов"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["order", "-created_at"], name="order_notif_order_created_idx"),
+            models.Index(fields=["order", "status"], name="order_notif_order_status_idx"),
+            models.Index(fields=["order", "event_key", "recipient_type"], name="order_notif_outbox_lookup_idx"),
+        ]
+
+    def __str__(self):
+        recipient = self.recipient_email or ", ".join(self.recipient_list_snapshot or [])
+        return f"{self.order_id}: {self.event_key} -> {recipient} ({self.status})"
+
+    @staticmethod
+    def _include_update_field(kwargs, field_name: str) -> None:
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and field_name not in update_fields:
+            kwargs["update_fields"] = [*update_fields, field_name]
+
+    @classmethod
+    def build_idempotency_key(cls, *, order_id: int, event_key: str, recipient_type: str) -> str:
+        return f"order-notification:{order_id}:{event_key}:{recipient_type}"
+
+    def save(self, *args, **kwargs):
+        if self.event_key and not self.notification_type:
+            self.notification_type = self.event_key
+            self._include_update_field(kwargs, "notification_type")
+        elif self.notification_type and not self.event_key:
+            self.event_key = self.notification_type
+            self._include_update_field(kwargs, "event_key")
+
+        if self.last_error and not self.error_message:
+            self.error_message = self.last_error
+            self._include_update_field(kwargs, "error_message")
+        elif self.error_message and not self.last_error:
+            self.last_error = self.error_message
+            self._include_update_field(kwargs, "last_error")
+
+        if self.order_id and self.event_key and self.recipient_type and not self.idempotency_key:
+            self.idempotency_key = self.build_idempotency_key(
+                order_id=self.order_id,
+                event_key=self.event_key,
+                recipient_type=self.recipient_type,
+            )
+            self._include_update_field(kwargs, "idempotency_key")
+
+        super().save(*args, **kwargs)
+
+    @property
+    def status_badge_class(self) -> str:
+        badge_modifiers = {
+            self.Status.SENT: "sf-status-badge--success",
+            self.Status.SENDING: "sf-status-badge--warning",
+            self.Status.PENDING: "sf-status-badge--warning",
+            self.Status.FAILED: "sf-status-badge--danger",
+        }
+        return f"sf-status-badge {badge_modifiers.get(self.status, 'sf-status-badge--dark')}"
+
+    @property
+    def trigger_display(self) -> str:
+        return "Вручную" if self.triggered_by_id else "Автоматически"
+
+    @property
+    def recipient_display(self) -> str:
+        if self.recipient_email:
+            return self.recipient_email
+        recipients = [email for email in (self.recipient_list_snapshot or []) if isinstance(email, str) and email]
+        return ", ".join(recipients) if recipients else "—"
+
+    def mark_pending(self, *, task_id: str | None = None) -> None:
+        self.status = self.Status.PENDING
+        self.last_error = None
+        self.error_message = None
+        self.sent_at = None
+        if task_id:
+            self.task_id = task_id
+        self.save(update_fields=["status", "last_error", "error_message", "sent_at", "task_id", "updated_at"])
+
+    def mark_sent(self) -> None:
+        self.status = self.Status.SENT
+        self.last_error = None
+        self.error_message = None
+        self.sent_at = timezone.now()
+        self.save(update_fields=["status", "last_error", "error_message", "sent_at", "updated_at"])
+
+    def mark_failed(self, error_message: str) -> None:
+        self.status = self.Status.FAILED
+        self.last_error = error_message
+        self.error_message = error_message
+        self.save(update_fields=["status", "last_error", "error_message", "updated_at"])
 
 
 class OrderStatusTransition(models.Model):

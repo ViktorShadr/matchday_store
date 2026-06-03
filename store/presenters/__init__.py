@@ -1,6 +1,6 @@
 from .cart_presenters import CartItemPresenter
 from .catalog_presenters import CategoryPresenter, PermissionPresenter, ProductCardPresenter, ProductDetailsPresenter
-from .dashboard_presenters import DashboardOrderPresenter, WarehouseProductPresenter
+from .dashboard_presenters import DashboardOrderPresenter, StatusTransitionPresenter, WarehouseProductPresenter
 from .warehouse_ui_presenters import WarehouseUiPresenter
 
 __all__ = [
@@ -10,6 +10,7 @@ __all__ = [
     "ProductCardPresenter",
     "ProductDetailsPresenter",
     "DashboardOrderPresenter",
+    "StatusTransitionPresenter",
     "WarehouseProductPresenter",
     "WarehouseUiPresenter",
 ]

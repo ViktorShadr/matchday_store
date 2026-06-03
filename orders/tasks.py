@@ -1,4 +1,6 @@
 import logging
+import re
+from email.utils import parseaddr
 
 from celery import shared_task
 from django.conf import settings
@@ -11,11 +13,13 @@ from config.email_delivery import (
     build_email_delivery_log_extra,
     is_permanent_email_delivery_error,
 )
-from orders.models import Order
+from orders.models import Order, OrderNotificationLog
+from orders.notification_logs import OrderNotificationLogService
 from store.site_contacts import format_business_days_label
 
 logger = logging.getLogger(__name__)
 STAFF_NEW_ORDER_EVENT_KEY = "staff_created"
+EMAIL_ADDRESS_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 
 def _log_notification_error(
@@ -35,9 +39,9 @@ def _log_notification_error(
     )
     if reason == "smtp_permanent_failure":
         event_name = f"{base_event_name}.permanent"
-    elif reason == "send_mail_failed":
+    elif reason in {"send_mail_failed", "send_mail_returned_zero"}:
         event_name = f"{base_event_name}.transient"
-    elif reason == "invalid_default_from_email":
+    elif reason in {"invalid_default_from_email", "unsupported_event_key"}:
         event_name = f"{base_event_name}.configuration"
     else:
         event_name = base_event_name
@@ -60,27 +64,59 @@ def _build_order_detail_url(order: Order) -> str:
     return f"{settings.SITE_URL}{reverse('users:order_detail', kwargs={'pk': order.pk})}"
 
 
+def _build_guest_order_manage_url(order: Order) -> str:
+    from orders.services import GuestOrderAccessTokenService
+
+    issued_token = GuestOrderAccessTokenService.issue_token_for_email(order)
+    return f"{settings.SITE_URL}{reverse('orders:guest_order_detail', kwargs={'token': issued_token.raw_token})}"
+
+
 def _build_dashboard_order_detail_url(order: Order) -> str:
     return f"{settings.SITE_URL}{reverse('store:dashboard_order_detail', kwargs={'pk': order.pk})}"
+
+
+def _resolve_support_email_for_notifications() -> str:
+    configured_value = (getattr(settings, "STORE_SUPPORT_EMAIL", "") or "").strip()
+    if not configured_value:
+        return (getattr(settings, "DEFAULT_FROM_EMAIL", "") or "").strip()
+
+    _, parsed_email = parseaddr(configured_value)
+    if parsed_email and "@" in parsed_email:
+        return parsed_email.strip()
+
+    match = EMAIL_ADDRESS_RE.search(configured_value)
+    if match:
+        return match.group(0)
+
+    return configured_value
+
+
+def _build_order_notification_base_lines(order: Order, event_key: str) -> list[str]:
+    base_lines = [
+        f"Заказ: {order.number or order.pk}",
+        f"Сумма: {order.total_amount} {order.currency}",
+    ]
+    if order.user_id:
+        base_lines.append(f"Детали заказа: {_build_order_detail_url(order)}")
+        return base_lines
+
+    base_lines.append("Сохраните номер заказа для связи с магазином.")
+    if event_key == "created":
+        guest_order_manage_url = _build_guest_order_manage_url(order)
+        base_lines.append(f"Ссылка для просмотра и управления заказом: {guest_order_manage_url}")
+        base_lines.append(
+            "По этой ссылке можно посмотреть статус заказа или отменить заказ без регистрации. "
+            "Не передавайте ссылку третьим лицам."
+        )
+        base_lines.append("После регистрации и подтверждения почты " "заказ появится в личном кабинете.")
+    return base_lines
 
 
 def _build_order_notification_content(order: Order, event_key: str) -> tuple[str, str]:
     order_number = order.number or str(order.pk)
     brand_name = settings.STORE_BRAND_NAME
     pickup_retention_label = format_business_days_label(settings.ORDER_PICKUP_RETENTION_BUSINESS_DAYS)
-    base_lines = [
-        f"Заказ: {order_number}",
-        f"Сумма: {order.total_amount} {order.currency}",
-    ]
-    if order.user_id:
-        base_lines.append(f"Детали заказа: {_build_order_detail_url(order)}")
-    else:
-        base_lines.extend(
-            [
-                "Сохраните номер заказа для связи с магазином.",
-                "После регистрации и подтверждения этого email заказ появится в личном кабинете.",
-            ]
-        )
+    base_lines = _build_order_notification_base_lines(order, event_key)
 
     if event_key == "created":
         subject = f"Заказ {order_number} принят"
@@ -98,9 +134,9 @@ def _build_order_notification_content(order: Order, event_key: str) -> tuple[str
         subject = f"Заказ {order_number} отменен"
         lines = [
             "Ваш заказ отменен.",
-            "Если отмена произошла по ошибке, оформите новый заказ или свяжитесь с магазином.",
+            "Если отмена произошла по ошибке, оформите новый заказ или свяжитесь с нами.",
             f"Телефон магазина: {settings.STORE_PICKUP_PHONE}",
-            f"Email поддержки: {settings.STORE_SUPPORT_EMAIL}",
+            f"Написать в поддержку: {_resolve_support_email_for_notifications()}",
         ]
     elif event_key == "ready":
         subject = f"Заказ {order_number} готов к выдаче"
@@ -190,17 +226,110 @@ def _build_staff_new_order_notification_content(order: Order) -> tuple[str, str]
     return subject, message
 
 
-def send_order_notification_sync(
+def _normalize_recipient_snapshot(recipients) -> list[str]:
+    if not isinstance(recipients, list):
+        return []
+    return [email.strip() for email in recipients if isinstance(email, str) and email.strip()]
+
+
+def _log_notification_skipped_already_sent(
+    *,
     order_id: int,
     event_key: str,
-    *,
-    raise_on_error: bool = False,
+    recipient_type: str,
     task=None,
     retries: int | None = None,
-) -> bool:
-    if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
-        _log_notification_error(order_id, event_key, "invalid_default_from_email", task=task, retries=retries)
-        return False
+) -> None:
+    event_name = (
+        "order.staff_notification_skipped_already_sent"
+        if recipient_type == OrderNotificationLog.RecipientType.STAFF
+        else "order.notification_skipped_already_sent"
+    )
+    logger.info(
+        event_name,
+        extra=build_email_delivery_log_extra(
+            task=task,
+            retries=retries,
+            event=event_name,
+            order_id=order_id,
+            event_key=event_key,
+            recipient_type=recipient_type,
+        ),
+    )
+
+
+def _log_notification_skipped_already_sending(
+    *,
+    order_id: int,
+    event_key: str,
+    recipient_type: str,
+    task=None,
+    retries: int | None = None,
+) -> None:
+    event_name = (
+        "order.staff_notification_skipped_already_sending"
+        if recipient_type == OrderNotificationLog.RecipientType.STAFF
+        else "order.notification_skipped_already_sending"
+    )
+    logger.info(
+        event_name,
+        extra=build_email_delivery_log_extra(
+            task=task,
+            retries=retries,
+            event=event_name,
+            order_id=order_id,
+            event_key=event_key,
+            recipient_type=recipient_type,
+        ),
+    )
+
+
+def _get_customer_recipient_snapshot(notification_log: OrderNotificationLog, order: Order) -> tuple[str, list[str]]:
+    recipient_email = notification_log.recipient_email or order.email or ""
+    recipient_list = _normalize_recipient_snapshot(notification_log.recipient_list_snapshot)
+    if not recipient_list and recipient_email:
+        recipient_list = [recipient_email]
+    return recipient_email, recipient_list
+
+
+def _resolve_customer_outbox(
+    *,
+    order_id: int | None,
+    event_key: str | None,
+    notification_log_id: int | None,
+    task=None,
+) -> tuple[Order | None, OrderNotificationLog | None, str | None]:
+    if notification_log_id:
+        notification_log = OrderNotificationLogService.get_by_id(notification_log_id)
+        if notification_log is not None:
+            order = notification_log.order
+            resolved_event_key = event_key or notification_log.event_key or notification_log.notification_type
+            if order_id is not None and order.pk != order_id:
+                logger.warning(
+                    "order.notification_skipped_log_order_mismatch",
+                    extra=build_email_delivery_log_extra(
+                        task=task,
+                        event="order.notification_skipped_log_order_mismatch",
+                        order_id=order_id,
+                        notification_log_id=notification_log_id,
+                        event_key=resolved_event_key,
+                    ),
+                )
+                return None, None, resolved_event_key
+            return order, notification_log, resolved_event_key
+
+    if order_id is None or event_key is None:
+        logger.warning(
+            "order.notification_skipped_missing_outbox_reference",
+            extra=build_email_delivery_log_extra(
+                task=task,
+                event="order.notification_skipped_missing_outbox_reference",
+                order_id=order_id,
+                event_key=event_key,
+                notification_log_id=notification_log_id,
+            ),
+        )
+        return None, None, event_key
 
     try:
         order = Order.objects.select_related("user").get(pk=order_id)
@@ -209,52 +338,157 @@ def send_order_notification_sync(
             "order.notification_skipped_order_not_found",
             extra=build_email_delivery_log_extra(
                 task=task,
-                retries=retries,
                 event="order.notification_skipped_order_not_found",
                 order_id=order_id,
                 event_key=event_key,
             ),
         )
+        return None, None, event_key
+
+    notification_log = OrderNotificationLogService.get_or_create_outbox(
+        order=order,
+        event_key=event_key,
+        recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+        task_id=OrderNotificationLogService.task_id_from_task(task),
+        recipient_email=order.email or "",
+        recipient_list_snapshot=[order.email] if order.email else [],
+    )
+    return order, notification_log, event_key
+
+
+def send_order_notification_sync(
+    order_id: int | None = None,
+    event_key: str | None = None,
+    *,
+    raise_on_error: bool = False,
+    task=None,
+    retries: int | None = None,
+    notification_log_id: int | None = None,
+) -> bool:
+    order, notification_log, resolved_event_key = _resolve_customer_outbox(
+        order_id=order_id,
+        event_key=event_key,
+        notification_log_id=notification_log_id,
+        task=task,
+    )
+    if order is None or notification_log is None or resolved_event_key is None:
+        return False
+    event_key = resolved_event_key
+
+    if notification_log.status == OrderNotificationLog.Status.SENT:
+        _log_notification_skipped_already_sent(
+            order_id=order.pk,
+            event_key=event_key,
+            recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+            task=task,
+            retries=retries,
+        )
+        return True
+
+    if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
+        notification_log.mark_failed("DEFAULT_FROM_EMAIL не настроен.")
+        _log_notification_error(order.pk, event_key, "invalid_default_from_email", task=task, retries=retries)
         return False
 
-    if not order.email:
+    recipient_email, recipient_list = _get_customer_recipient_snapshot(notification_log, order)
+    if not recipient_list:
+        notification_log.mark_failed("Email получателя не указан.")
         logger.warning(
             "order.notification_skipped_recipient_missing",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
                 event="order.notification_skipped_recipient_missing",
-                order_id=order_id,
+                order_id=order.pk,
                 event_key=event_key,
             ),
         )
         return False
 
-    subject, message = _build_order_notification_content(order, event_key)
+    notification_log, is_claimed, claim_reason = OrderNotificationLogService.claim_for_sending(
+        notification_log.pk,
+        task=task,
+    )
+    if notification_log is None:
+        return False
+    if not is_claimed:
+        if claim_reason == "already_sent":
+            _log_notification_skipped_already_sent(
+                order_id=order.pk,
+                event_key=event_key,
+                recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+                task=task,
+                retries=retries,
+            )
+            return True
+        if claim_reason == "already_sending":
+            _log_notification_skipped_already_sending(
+                order_id=order.pk,
+                event_key=event_key,
+                recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+                task=task,
+                retries=retries,
+            )
+        return False
+
+    recipient_email, recipient_list = _get_customer_recipient_snapshot(notification_log, order)
+    subject = notification_log.subject
+    message = notification_log.message
+    if not subject or not message:
+        try:
+            subject, message = _build_order_notification_content(order, event_key)
+        except ValueError as exc:
+            OrderNotificationLogService.mark_failed(notification_log, exc)
+            _log_notification_error(
+                order.pk,
+                event_key,
+                "unsupported_event_key",
+                error_type="ValueError",
+                task=task,
+                retries=retries,
+            )
+            return False
+        OrderNotificationLogService.update_snapshot(
+            notification_log,
+            recipient_email=recipient_email,
+            recipient_list_snapshot=recipient_list,
+            subject=subject,
+            message=message,
+        )
 
     try:
-        send_mail(
+        sent_count = send_mail(
             subject=subject,
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[order.email],
+            recipient_list=recipient_list,
             fail_silently=False,
         )
+        if sent_count == 0:
+            notification_log.mark_failed("Почтовый сервер не принял письмо к отправке.")
+            _log_notification_error(order.pk, event_key, "send_mail_returned_zero", task=task, retries=retries)
+            if raise_on_error:
+                raise NotificationDeliveryError("Не удалось отправить email-уведомление по заказу")
+            return False
+        notification_log.mark_sent()
         logger.info(
             "order.notification_sent",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
                 event="order.notification_sent",
-                order_id=order_id,
+                order_id=order.pk,
                 event_key=event_key,
             ),
         )
         return True
+    except NotificationDeliveryError:
+        raise
     except Exception as exc:
         is_permanent_error = is_permanent_email_delivery_error(exc)
+        OrderNotificationLogService.mark_failed(notification_log, exc)
         _log_notification_error(
-            order_id,
+            order.pk,
             event_key,
             "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
             with_traceback=True,
@@ -268,15 +502,66 @@ def send_order_notification_sync(
 
 
 def send_staff_new_order_notification_sync(
-    order_id: int,
+    order_id: int | None = None,
     *,
     raise_on_error: bool = False,
     task=None,
     retries: int | None = None,
+    notification_log_id: int | None = None,
 ) -> bool:
+    notification_log = OrderNotificationLogService.get_by_id(notification_log_id) if notification_log_id else None
+    if notification_log is not None:
+        order = notification_log.order
+        order_id = order.pk
+    else:
+        if order_id is None:
+            logger.warning(
+                "order.staff_notification_skipped_missing_outbox_reference",
+                extra=build_email_delivery_log_extra(
+                    task=task,
+                    retries=retries,
+                    event="order.staff_notification_skipped_missing_outbox_reference",
+                    event_key=STAFF_NEW_ORDER_EVENT_KEY,
+                    notification_log_id=notification_log_id,
+                ),
+            )
+            return False
+        try:
+            order = Order.objects.select_related("user").prefetch_related("items").get(pk=order_id)
+        except Order.DoesNotExist:
+            logger.warning(
+                "order.staff_notification_skipped_order_not_found",
+                extra=build_email_delivery_log_extra(
+                    task=task,
+                    retries=retries,
+                    event="order.staff_notification_skipped_order_not_found",
+                    order_id=order_id,
+                    event_key=STAFF_NEW_ORDER_EVENT_KEY,
+                ),
+            )
+            return False
+        notification_log = OrderNotificationLogService.get_or_create_outbox(
+            order=order,
+            event_key=STAFF_NEW_ORDER_EVENT_KEY,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+            task_id=OrderNotificationLogService.task_id_from_task(task),
+            recipient_list_snapshot=_get_staff_order_notification_recipients(),
+        )
+
+    if notification_log.status == OrderNotificationLog.Status.SENT:
+        _log_notification_skipped_already_sent(
+            order_id=order.pk,
+            event_key=STAFF_NEW_ORDER_EVENT_KEY,
+            recipient_type=OrderNotificationLog.RecipientType.STAFF,
+            task=task,
+            retries=retries,
+        )
+        return True
+
     if not settings.DEFAULT_FROM_EMAIL or "@" not in settings.DEFAULT_FROM_EMAIL:
+        notification_log.mark_failed("DEFAULT_FROM_EMAIL не настроен.")
         _log_notification_error(
-            order_id,
+            order.pk,
             STAFF_NEW_ORDER_EVENT_KEY,
             "invalid_default_from_email",
             task=task,
@@ -284,60 +569,104 @@ def send_staff_new_order_notification_sync(
         )
         return False
 
-    recipient_list = _get_staff_order_notification_recipients()
+    recipient_list = _normalize_recipient_snapshot(notification_log.recipient_list_snapshot)
     if not recipient_list:
+        recipient_list = _get_staff_order_notification_recipients()
+        if recipient_list:
+            OrderNotificationLogService.update_snapshot(
+                notification_log,
+                recipient_list_snapshot=recipient_list,
+            )
+    if not recipient_list:
+        notification_log.mark_failed("Email получателей не указан.")
         logger.warning(
             "order.staff_notification_skipped_recipients_missing",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
                 event="order.staff_notification_skipped_recipients_missing",
-                order_id=order_id,
+                order_id=order.pk,
                 event_key=STAFF_NEW_ORDER_EVENT_KEY,
             ),
         )
         return False
 
-    try:
-        order = Order.objects.select_related("user").prefetch_related("items").get(pk=order_id)
-    except Order.DoesNotExist:
-        logger.warning(
-            "order.staff_notification_skipped_order_not_found",
-            extra=build_email_delivery_log_extra(
+    notification_log, is_claimed, claim_reason = OrderNotificationLogService.claim_for_sending(
+        notification_log.pk,
+        task=task,
+    )
+    if notification_log is None:
+        return False
+    if not is_claimed:
+        if claim_reason == "already_sent":
+            _log_notification_skipped_already_sent(
+                order_id=order.pk,
+                event_key=STAFF_NEW_ORDER_EVENT_KEY,
+                recipient_type=OrderNotificationLog.RecipientType.STAFF,
                 task=task,
                 retries=retries,
-                event="order.staff_notification_skipped_order_not_found",
-                order_id=order_id,
+            )
+            return True
+        if claim_reason == "already_sending":
+            _log_notification_skipped_already_sending(
+                order_id=order.pk,
                 event_key=STAFF_NEW_ORDER_EVENT_KEY,
-            ),
-        )
+                recipient_type=OrderNotificationLog.RecipientType.STAFF,
+                task=task,
+                retries=retries,
+            )
         return False
 
-    subject, message = _build_staff_new_order_notification_content(order)
+    subject = notification_log.subject
+    message = notification_log.message
+    if not subject or not message:
+        subject, message = _build_staff_new_order_notification_content(order)
+        OrderNotificationLogService.update_snapshot(
+            notification_log,
+            recipient_list_snapshot=recipient_list,
+            subject=subject,
+            message=message,
+        )
 
     try:
-        send_mail(
+        sent_count = send_mail(
             subject=subject,
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=recipient_list,
             fail_silently=False,
         )
+        if sent_count == 0:
+            notification_log.mark_failed("Почтовый сервер не принял письмо к отправке.")
+            _log_notification_error(
+                order.pk,
+                STAFF_NEW_ORDER_EVENT_KEY,
+                "send_mail_returned_zero",
+                task=task,
+                retries=retries,
+            )
+            if raise_on_error:
+                raise NotificationDeliveryError("Не удалось отправить staff email-уведомление по заказу")
+            return False
+        notification_log.mark_sent()
         logger.info(
             "order.staff_notification_sent",
             extra=build_email_delivery_log_extra(
                 task=task,
                 retries=retries,
                 event="order.staff_notification_sent",
-                order_id=order_id,
+                order_id=order.pk,
                 event_key=STAFF_NEW_ORDER_EVENT_KEY,
             ),
         )
         return True
+    except NotificationDeliveryError:
+        raise
     except Exception as exc:
         is_permanent_error = is_permanent_email_delivery_error(exc)
+        OrderNotificationLogService.mark_failed(notification_log, exc)
         _log_notification_error(
-            order_id,
+            order.pk,
             STAFF_NEW_ORDER_EVENT_KEY,
             "smtp_permanent_failure" if is_permanent_error else "send_mail_failed",
             with_traceback=True,
@@ -351,13 +680,33 @@ def send_staff_new_order_notification_sync(
 
 
 @shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
-def send_order_notification(self, order_id: int, event_key: str) -> bool:
-    return send_order_notification_sync(order_id, event_key, raise_on_error=True, task=self)
+def send_order_notification(
+    self,
+    order_id: int | None = None,
+    event_key: str | None = None,
+    notification_log_id: int | None = None,
+) -> bool:
+    return send_order_notification_sync(
+        order_id,
+        event_key,
+        raise_on_error=True,
+        task=self,
+        notification_log_id=notification_log_id,
+    )
 
 
 @shared_task(**EMAIL_TASK_AUTORETRY_KWARGS)
-def send_staff_new_order_notification(self, order_id: int) -> bool:
-    return send_staff_new_order_notification_sync(order_id, raise_on_error=True, task=self)
+def send_staff_new_order_notification(
+    self,
+    order_id: int | None = None,
+    notification_log_id: int | None = None,
+) -> bool:
+    return send_staff_new_order_notification_sync(
+        order_id,
+        raise_on_error=True,
+        task=self,
+        notification_log_id=notification_log_id,
+    )
 
 
 @shared_task

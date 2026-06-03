@@ -1,18 +1,28 @@
 from django.contrib import messages
 from django.db.models import Prefetch
-from django.http import Http404
+from django.http import Http404, HttpResponseNotFound
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.generic import FormView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
 from analytics.metrika import build_checkout_event, build_purchase_event, is_metrika_enabled, queue_ecommerce_event
 from config.rate_limits import setting_rate
+from config.request_ip import get_safe_request_ip
 from orders.application import CheckoutContext, CheckoutSessionService
+from orders.application.order_status_policy import OrderStatusPolicy
 from orders.forms import CheckoutForm
 from orders.models import Order, OrderItem
-from orders.services import CheckoutError, CheckoutService
+from orders.services import (
+    CheckoutError,
+    CheckoutService,
+    GuestOrderAccessTokenService,
+    OrderAutoCancellationService,
+    OrderCancellationError,
+    OrderCancellationService,
+)
 from store.application import CartContextResolver
 from store.mixins.cart_mixins import CartContextMixin
 from store.services.cart_service import CartService
@@ -21,6 +31,14 @@ from store.services.cart_service import CartService
 checkout_service = CheckoutService()
 cart_service = CartService()
 cart_context_resolver = CartContextResolver()
+
+GUEST_ORDER_STATUS_LABELS = {
+    "new": "Новый",
+    "processing": "В обработке",
+    "ready": "Готов к выдаче",
+    "issued": "Выдан",
+    "cancelled": "Отменен",
+}
 
 
 @method_decorator(
@@ -120,6 +138,7 @@ class CheckoutView(CartContextMixin, FormView):
                 CheckoutContext(
                     user=self.request.user if self.request.user.is_authenticated else None,
                     cart_context=self.cart_context,
+                    ip_address=get_safe_request_ip(self.request),
                 ),
                 form.cleaned_data,
                 checkout_token=submitted_token,
@@ -169,3 +188,85 @@ class CheckoutSuccessView(CartContextMixin, TemplateView):
         context["order_items"] = order_items
         context["pickup_location"] = CheckoutSessionService.build_pickup_location()
         return context
+
+
+class GuestOrderAccessMixin:
+    """Поиск гостевого заказа строго по защищённому токену."""
+
+    access_token_service = GuestOrderAccessTokenService()
+    cancellation_service = OrderCancellationService()
+
+    def get_guest_token(self):
+        token = (self.kwargs.get("token") or "").strip()
+        if not token:
+            raise Http404
+        return token
+
+    def get_guest_order(self):
+        token = self.get_guest_token()
+        queryset = Order.objects.filter(user__isnull=True).prefetch_related(
+            Prefetch(
+                "items",
+                queryset=OrderItem.objects.select_related("product_variant__product__category").order_by("pk"),
+            )
+        )
+        order = self.access_token_service.get_order_by_raw_token(token, order_queryset=queryset)
+        if order is None:
+            raise Http404
+        return order
+
+    @staticmethod
+    def guest_not_found_response():
+        response = HttpResponseNotFound()
+        response._has_been_logged = True
+        return response
+
+
+class GuestOrderDetailView(GuestOrderAccessMixin, CartContextMixin, TemplateView):
+    """Страница просмотра гостевого заказа по защищённому токену."""
+
+    template_name = "orders/guest_order_detail.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            self.order = self.get_guest_order()
+        except Http404:
+            return self.guest_not_found_response()
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        status_key = OrderStatusPolicy.get_status_key(self.order)
+        context["order"] = self.order
+        context["order_items"] = list(self.order.items.all())
+        context["status_label"] = GUEST_ORDER_STATUS_LABELS[status_key]
+        context["payment_status_label"] = self.order.get_payment_status_display()
+        context["can_cancel"] = OrderCancellationService.can_be_cancelled(self.order)
+        context["guest_token"] = self.get_guest_token()
+        if self.order.delivery_method == Order.DeliveryMethod.PICKUP:
+            context["pickup_location"] = CheckoutSessionService.build_pickup_location()
+            context["pickup_deadline"] = OrderAutoCancellationService.get_pickup_deadline(self.order)
+        return context
+
+
+class GuestOrderCancelView(GuestOrderAccessMixin, View):
+    """Отмена гостевого заказа по защищённому токену."""
+
+    def post(self, request, *args, **kwargs):
+        try:
+            token = self.get_guest_token()
+            order = self.get_guest_order()
+        except Http404:
+            return self.guest_not_found_response()
+
+        if not OrderCancellationService.can_be_cancelled(order):
+            messages.error(request, "Этот заказ уже нельзя отменить.")
+            return redirect("orders:guest_order_detail", token=token)
+
+        try:
+            self.cancellation_service.cancel_order(order_id=order.pk)
+        except OrderCancellationError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, "Заказ успешно отменен.")
+        return redirect("orders:guest_order_detail", token=token)

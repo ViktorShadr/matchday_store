@@ -1,24 +1,29 @@
 import logging
+import re
+import secrets
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
+from hashlib import sha256
 from typing import Optional
 from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db import IntegrityError, connection, transaction
+from django.db.models import F, Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
-from orders.models import Order, OrderItem, OrderStatusTransition
+from orders.application.order_status_policy import OrderStatusPolicy
+from orders.models import GuestOrderAccessToken, Order, OrderItem, OrderStatusTransition
 from orders.repositories import IOrderRepository, IPaymentRepository, OrderRepository, PaymentRepository
 from payments.application import PaymentWorkflowService
 from payments.models import Payment
-from store.models import ProductVariant
+from store.models import Cart, ProductVariant
 from store.repositories import IProductVariantRepository, ProductVariantRepository
 from store.services.cart_service import CartService
 from store.services.interfaces import ICheckoutService
@@ -41,6 +46,248 @@ class OrderIssueError(Exception):
 
 class ManualPaymentUpdateError(Exception):
     """Бизнес-ошибка обновления оплаты заказа."""
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedGuestOrderAccessToken:
+    raw_token: str
+    access_token: GuestOrderAccessToken
+
+
+@dataclass(frozen=True, slots=True)
+class GuestOrderAccessTokenResult:
+    access_token: GuestOrderAccessToken
+    raw_token: str | None
+    created: bool
+
+
+class GuestOrderAccessTokenService:
+    """Сервис жизненного цикла bearer-токенов гостевого управления заказом."""
+
+    token_model = GuestOrderAccessToken
+    default_purpose = GuestOrderAccessToken.Purpose.GUEST_MANAGE
+
+    @staticmethod
+    def hash_token(raw_token: str) -> str:
+        return sha256(raw_token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def get_token_ttl() -> timedelta:
+        return timedelta(days=getattr(settings, "GUEST_ORDER_TOKEN_TTL_DAYS", 30))
+
+    @classmethod
+    def _active_tokens_for_order(cls, order: Order, purpose: str):
+        return cls.token_model.objects.filter(order=order, purpose=purpose, revoked_at__isnull=True)
+
+    @classmethod
+    def _valid_active_tokens_for_order(cls, order: Order, purpose: str, now):
+        return cls._active_tokens_for_order(order, purpose).filter(expires_at__gt=now)
+
+    @classmethod
+    def _recover_raw_token_for_access_token(cls, order: Order, access_token: GuestOrderAccessToken) -> str | None:
+        legacy_raw_token = (order.guest_manage_token or "").strip()
+        if legacy_raw_token and constant_time_compare(
+            cls.hash_token(legacy_raw_token),
+            access_token.token_hash,
+        ):
+            return legacy_raw_token
+        return None
+
+    @classmethod
+    def revoke_tokens_for_order(cls, order: Order, purpose: str | None = None) -> int:
+        """Отозвать все неотозванные гостевые токены заказа."""
+        token_purpose = purpose or cls.default_purpose
+        return cls._active_tokens_for_order(order, token_purpose).update(revoked_at=timezone.now())
+
+    @classmethod
+    def _create_token_for_order(
+        cls,
+        order: Order,
+        purpose: str | None = None,
+        *,
+        revoke_existing: bool,
+    ) -> IssuedGuestOrderAccessToken:
+        if not order.pk:
+            raise ValueError("Guest order access token can only be created for a saved order.")
+
+        token_purpose = purpose or cls.default_purpose
+        for _ in range(10):
+            raw_token = secrets.token_urlsafe(32)
+            token_hash = cls.hash_token(raw_token)
+            expires_at = timezone.now() + cls.get_token_ttl()
+
+            try:
+                with transaction.atomic():
+                    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+                    if locked_order.user_id is not None:
+                        raise ValueError("Guest order access token can only be created for guest orders.")
+
+                    if revoke_existing:
+                        cls.revoke_tokens_for_order(locked_order, token_purpose)
+                    access_token = cls.token_model.objects.create(
+                        order=locked_order,
+                        token_hash=token_hash,
+                        purpose=token_purpose,
+                        expires_at=expires_at,
+                    )
+            except IntegrityError:
+                continue
+
+            return IssuedGuestOrderAccessToken(raw_token=raw_token, access_token=access_token)
+
+        raise RuntimeError("Failed to generate unique guest order access token.")
+
+    @classmethod
+    def get_or_create_active_token_for_order(
+        cls, order: Order, purpose: str | None = None
+    ) -> GuestOrderAccessTokenResult:
+        """
+        Return a valid active token for a guest order, creating one only when none exists.
+
+        Raw token values are not stored for new tokens. Existing raw values are returned only
+        when they are safely recoverable from the legacy guest_manage_token field.
+        """
+        if not order.pk:
+            raise ValueError("Guest order access token can only be created for a saved order.")
+
+        token_purpose = purpose or cls.default_purpose
+        for _ in range(10):
+            try:
+                with transaction.atomic():
+                    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+                    if locked_order.user_id is not None:
+                        raise ValueError("Guest order access token can only be created for guest orders.")
+
+                    now = timezone.now()
+                    active_token = (
+                        cls._valid_active_tokens_for_order(locked_order, token_purpose, now)
+                        .order_by("-created_at", "-id")
+                        .first()
+                    )
+                    if active_token is not None:
+                        return GuestOrderAccessTokenResult(
+                            access_token=active_token,
+                            raw_token=cls._recover_raw_token_for_access_token(locked_order, active_token),
+                            created=False,
+                        )
+
+                    raw_token = secrets.token_urlsafe(32)
+                    access_token = cls.token_model.objects.create(
+                        order=locked_order,
+                        token_hash=cls.hash_token(raw_token),
+                        purpose=token_purpose,
+                        expires_at=now + cls.get_token_ttl(),
+                    )
+            except IntegrityError:
+                continue
+
+            return GuestOrderAccessTokenResult(
+                access_token=access_token,
+                raw_token=raw_token,
+                created=True,
+            )
+
+        raise RuntimeError("Failed to generate unique guest order access token.")
+
+    @classmethod
+    def issue_token_for_email(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
+        """
+        Return a raw token suitable for email without revoking existing valid links.
+
+        When an existing active token has no safely recoverable raw value, create an additional
+        active token so notification retries cannot invalidate a previously delivered link.
+        """
+        if not order.pk:
+            raise ValueError("Guest order access token can only be created for a saved order.")
+
+        token_purpose = purpose or cls.default_purpose
+        for _ in range(10):
+            try:
+                with transaction.atomic():
+                    locked_order = Order.objects.select_for_update().get(pk=order.pk)
+                    if locked_order.user_id is not None:
+                        raise ValueError("Guest order access token can only be created for guest orders.")
+
+                    now = timezone.now()
+                    active_token = (
+                        cls._valid_active_tokens_for_order(locked_order, token_purpose, now)
+                        .order_by("-created_at", "-id")
+                        .first()
+                    )
+                    if active_token is not None:
+                        raw_token = cls._recover_raw_token_for_access_token(locked_order, active_token)
+                        if raw_token is not None:
+                            return IssuedGuestOrderAccessToken(
+                                raw_token=raw_token,
+                                access_token=active_token,
+                            )
+
+                    raw_token = secrets.token_urlsafe(32)
+                    access_token = cls.token_model.objects.create(
+                        order=locked_order,
+                        token_hash=cls.hash_token(raw_token),
+                        purpose=token_purpose,
+                        expires_at=now + cls.get_token_ttl(),
+                    )
+            except IntegrityError:
+                continue
+
+            return IssuedGuestOrderAccessToken(raw_token=raw_token, access_token=access_token)
+
+        raise RuntimeError("Failed to generate unique guest order access token.")
+
+    @classmethod
+    def rotate_token_for_order(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
+        """
+        Выпустить новый raw-токен и оставить для заказа только один активный токен.
+
+        Используется только для явной ротации/отзыва доступа,
+        а не для обычных email-уведомлений.
+        """
+        return cls._create_token_for_order(order, purpose, revoke_existing=True)
+
+    @classmethod
+    def create_token_for_order(cls, order: Order, purpose: str | None = None) -> IssuedGuestOrderAccessToken:
+        return cls.issue_token_for_email(order, purpose)
+
+    @classmethod
+    def get_order_by_raw_token(
+        cls, raw_token: str, *, order_queryset=None, purpose: str | None = None
+    ) -> Order | None:
+        token = (raw_token or "").strip()
+        if not token:
+            return None
+
+        token_hash = cls.hash_token(token)
+        token_purpose = purpose or cls.default_purpose
+        access_token = (
+            cls.token_model.objects.select_related("order")
+            .filter(token_hash=token_hash, purpose=token_purpose)
+            .first()
+        )
+        if access_token is None or not constant_time_compare(access_token.token_hash, token_hash):
+            return None
+
+        now = timezone.now()
+        if access_token.revoked_at is not None or access_token.expires_at <= now:
+            return None
+        if access_token.order.user_id is not None:
+            return None
+
+        queryset = order_queryset if order_queryset is not None else Order.objects.all()
+        try:
+            order = queryset.get(pk=access_token.order_id, user__isnull=True)
+        except Order.DoesNotExist:
+            return None
+
+        updated = cls.token_model.objects.filter(
+            pk=access_token.pk,
+            revoked_at__isnull=True,
+            expires_at__gt=now,
+        ).update(last_used_at=now)
+        if updated != 1:
+            return None
+        return order
 
 
 @dataclass(slots=True)
@@ -115,6 +362,157 @@ class OrderStockReservationService:
         variant.reserved_quantity -= quantity
 
 
+class GuestCheckoutAbuseLimitService:
+    """Limits active guest reservations by stable guest checkout identifiers."""
+
+    limit_error_message = (
+        "У вас уже есть несколько активных заказов. "
+        "Завершите или отмените предыдущие заказы либо свяжитесь с магазином."
+    )
+
+    @staticmethod
+    def normalize_email(email: str | None) -> str:
+        return (email or "").strip().lower()
+
+    @staticmethod
+    def normalize_phone(phone: str | None) -> str:
+        return re.sub(r"\D", "", phone or "")
+
+    @staticmethod
+    def _setting_limit(setting_name: str) -> int:
+        return int(getattr(settings, setting_name, 0) or 0)
+
+    @staticmethod
+    def _hash_identifier(value: str) -> str:
+        return sha256(value.encode("utf-8")).hexdigest()[:16]
+
+    @classmethod
+    def _active_guest_orders_queryset(cls):
+        queryset = Order.objects.filter(user__isnull=True, items__isnull=False).distinct()
+        return OrderStatusPolicy.reserve_relevant_queryset(queryset)
+
+    @classmethod
+    def _count_by_email(cls, queryset, normalized_email: str) -> int:
+        if not normalized_email:
+            return 0
+        return queryset.filter(email__iexact=normalized_email).count()
+
+    @classmethod
+    def _count_by_phone(cls, queryset, normalized_phone: str) -> int:
+        if not normalized_phone:
+            return 0
+        count = 0
+        for _, stored_phone in queryset.values_list("pk", "phone").iterator():
+            if cls.normalize_phone(stored_phone) == normalized_phone:
+                count += 1
+        return count
+
+    @classmethod
+    def _count_by_session(cls, queryset, session_key: str) -> int:
+        if not session_key:
+            return 0
+
+        session_cart_ids = Cart.objects.filter(user__isnull=True, session_key=session_key).values("pk")
+        return (
+            queryset.filter(
+                Q(checkout_session_key=session_key) | Q(checkout_session_key="", source_cart_id__in=session_cart_ids)
+            )
+            .distinct()
+            .count()
+        )
+
+    @classmethod
+    def _count_by_ip(cls, queryset, ip_address: str) -> int:
+        if not ip_address:
+            return 0
+        return queryset.filter(checkout_ip_address=ip_address).count()
+
+    @classmethod
+    def _dimension_values(cls, checkout_context: CheckoutContext, cleaned_data) -> dict[str, str]:
+        return {
+            "email": cls.normalize_email(cleaned_data.get("email")),
+            "phone": cls.normalize_phone(cleaned_data.get("phone")),
+            "session": (checkout_context.session_key or "").strip(),
+            "ip": (checkout_context.ip_address or "").strip(),
+        }
+
+    @classmethod
+    def _dimension_limits(cls) -> dict[str, int]:
+        return {
+            "email": cls._setting_limit("CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_EMAIL"),
+            "phone": cls._setting_limit("CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_PHONE"),
+            "session": cls._setting_limit("CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_SESSION"),
+            "ip": cls._setting_limit("CHECKOUT_MAX_ACTIVE_GUEST_ORDERS_BY_IP"),
+        }
+
+    @classmethod
+    def _lock_dimension_values(cls, dimension_values: dict[str, str], dimension_limits: dict[str, int]) -> None:
+        if connection.vendor != "postgresql" or not connection.in_atomic_block:
+            return
+
+        lock_keys = []
+        for dimension, value in dimension_values.items():
+            if not value or dimension_limits.get(dimension, 0) <= 0:
+                continue
+            digest = sha256(f"guest-checkout-limit:{dimension}:{value}".encode("utf-8")).digest()
+            lock_keys.append(int.from_bytes(digest[:8], byteorder="big", signed=True))
+
+        if not lock_keys:
+            return
+
+        with connection.cursor() as cursor:
+            for lock_key in sorted(set(lock_keys)):
+                cursor.execute("SELECT pg_advisory_xact_lock(%s)", [lock_key])
+
+    @classmethod
+    def _count_dimension(cls, queryset, dimension: str, value: str) -> int:
+        if dimension == "email":
+            return cls._count_by_email(queryset, value)
+        if dimension == "phone":
+            return cls._count_by_phone(queryset, value)
+        if dimension == "session":
+            return cls._count_by_session(queryset, value)
+        if dimension == "ip":
+            return cls._count_by_ip(queryset, value)
+        raise ValueError(f"Unsupported guest checkout limit dimension: {dimension}")
+
+    @classmethod
+    def ensure_guest_checkout_allowed(
+        cls,
+        checkout_context: CheckoutContext,
+        cleaned_data,
+        *,
+        lock_dimensions: bool = False,
+    ) -> None:
+        if checkout_context.user_id is not None:
+            return
+
+        dimension_values = cls._dimension_values(checkout_context, cleaned_data)
+        dimension_limits = cls._dimension_limits()
+        if lock_dimensions:
+            cls._lock_dimension_values(dimension_values, dimension_limits)
+
+        queryset = cls._active_guest_orders_queryset()
+        for dimension, value in dimension_values.items():
+            limit = dimension_limits.get(dimension, 0)
+            if limit <= 0 or not value:
+                continue
+
+            active_orders_count = cls._count_dimension(queryset, dimension, value)
+            if active_orders_count >= limit:
+                logger.warning(
+                    "checkout.guest_abuse_limit_exceeded",
+                    extra={
+                        "event": "checkout.guest_abuse_limit_exceeded",
+                        "dimension": dimension,
+                        "identifier_hash": cls._hash_identifier(value),
+                        "active_orders_count": active_orders_count,
+                        "limit": limit,
+                    },
+                )
+                raise CheckoutError(cls.limit_error_message)
+
+
 class CheckoutService(ICheckoutService):
     """
     Сервис оформления заказа из корзины.
@@ -122,20 +520,8 @@ class CheckoutService(ICheckoutService):
     Реализует DIP через dependency injection репозиториев.
     """
 
-    ACTIVE_ORDER_FINAL_STATUSES = frozenset(
-        {
-            Order.Status.CANCELLED,
-            Order.Status.DELIVERED,
-            Order.Status.REFUNDED,
-        }
-    )
-    ACTIVE_ORDER_FINAL_FULFILLMENT_STATUSES = frozenset(
-        {
-            Order.FulfillmentStatus.CANCELLED,
-            Order.FulfillmentStatus.DELIVERED,
-            Order.FulfillmentStatus.RETURNED,
-        }
-    )
+    ACTIVE_ORDER_FINAL_STATUSES = OrderStatusPolicy.RESERVE_TERMINAL_ORDER_STATUSES
+    ACTIVE_ORDER_FINAL_FULFILLMENT_STATUSES = OrderStatusPolicy.RESERVE_TERMINAL_FULFILLMENT_STATUSES
 
     def __init__(
         self,
@@ -143,6 +529,7 @@ class CheckoutService(ICheckoutService):
         product_variant_repository: Optional[IProductVariantRepository] = None,
         order_repository: Optional[IOrderRepository] = None,
         payment_repository: Optional[IPaymentRepository] = None,
+        guest_abuse_limit_service: type[GuestCheckoutAbuseLimitService] | None = None,
     ):
         """
         Инициализация сервиса с возможностью DI.
@@ -157,6 +544,7 @@ class CheckoutService(ICheckoutService):
         self.product_variant_repository = product_variant_repository or ProductVariantRepository()
         self.order_repository = order_repository or OrderRepository()
         self.payment_repository = payment_repository or PaymentRepository()
+        self.guest_abuse_limit_service = guest_abuse_limit_service or GuestCheckoutAbuseLimitService
 
     @staticmethod
     def build_order_number() -> str:
@@ -351,9 +739,11 @@ class CheckoutService(ICheckoutService):
         *,
         user=None,
     ) -> Order:
+        user_for_order = user if user is not None else checkout_context.user_for_order
+        is_guest_order = user_for_order is None
         return self.order_repository.create_order(
             number=self.build_order_number(),
-            user=user if user is not None else checkout_context.user_for_order,
+            user=user_for_order,
             recipient_name=cleaned_data["recipient_name"],
             email=cleaned_data["email"],
             phone=cleaned_data["phone"],
@@ -369,6 +759,10 @@ class CheckoutService(ICheckoutService):
             total_amount=subtotal_amount,
             customer_comment=cleaned_data.get("customer_comment", "").strip(),
             source_cart_id=self._get_cart_id(cart),
+            checkout_session_key=(
+                checkout_context.session_key if is_guest_order and checkout_context.session_key else ""
+            ),
+            checkout_ip_address=checkout_context.ip_address if is_guest_order else None,
             confirmed_at=timezone.now(),
         )
 
@@ -454,6 +848,7 @@ class CheckoutService(ICheckoutService):
 
         self._ensure_stock_reserve_mode_enabled()
         self._ensure_active_order_limit(checkout_context.user_id)
+        self.guest_abuse_limit_service.ensure_guest_checkout_allowed(checkout_context, cleaned_data)
 
         order = None
         unavailable_only_error = None
@@ -474,6 +869,11 @@ class CheckoutService(ICheckoutService):
                     return existing_payment.order
                 self._ensure_stock_reserve_mode_enabled()
                 self._ensure_active_order_limit(checkout_context.user_id)
+                self.guest_abuse_limit_service.ensure_guest_checkout_allowed(
+                    checkout_context,
+                    cleaned_data,
+                    lock_dimensions=True,
+                )
 
                 cart = checkout_context.cart_context.cart
                 cart_items = self._lock_cart_items(cart)
