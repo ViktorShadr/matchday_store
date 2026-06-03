@@ -185,6 +185,7 @@ class DashboardOrderContextMixin:
         context["notification_logs"] = list(
             self.object.notification_logs.select_related("triggered_by").order_by("-created_at", "-id")[:8]
         )
+        context["manual_resend"] = OrderNotificationService.build_manual_resend_context(self.object)
         return context
 
 
@@ -253,11 +254,13 @@ class DashboardOrderNotificationResendView(ModeratorRequiredMixin, View):
 
     def post(self, request, *args, **kwargs):
         order = get_object_or_404(Order, pk=self.kwargs["pk"])
-        is_enqueued = self.notification_service.enqueue_manual_resend(order, triggered_by=request.user)
-        if is_enqueued:
-            messages.info(request, "Письмо поставлено в очередь на отправку.")
+        result = self.notification_service.enqueue_manual_resend(order, triggered_by=request.user)
+        if result.level == "warning":
+            messages.warning(request, result.message)
+        elif result.is_enqueued:
+            messages.info(request, result.message)
         else:
-            messages.error(request, "Не удалось поставить письмо в очередь на отправку. Проверьте настройки email.")
+            messages.error(request, result.message)
         return HttpResponseRedirect(reverse("store:dashboard_order_detail", kwargs={"pk": order.pk}))
 
 

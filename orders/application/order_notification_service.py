@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 
 from django.db import transaction
 
@@ -17,6 +18,13 @@ from orders.tasks import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ManualNotificationResendResult:
+    is_enqueued: bool
+    message: str
+    level: str = "info"
+
+
 class OrderNotificationService:
     """Прикладной сервис уведомлений по ключевым событиям заказа."""
 
@@ -26,6 +34,16 @@ class OrderNotificationService:
         OrderNotificationLog.NotificationType.READY,
         OrderNotificationLog.NotificationType.PAID,
     )
+    MANUAL_RESEND_RETRYABLE_STATUSES = (
+        OrderNotificationLog.Status.FAILED,
+        "error",
+    )
+    MANUAL_RESEND_BLOCKED_STATUS_MESSAGES = {
+        OrderNotificationLog.Status.SENT: "Письмо уже отправлено. Повторная отправка не требуется.",
+        OrderNotificationLog.Status.PENDING: "Письмо уже ожидает отправки. Дублирующая задача не создана.",
+        "queued": "Письмо уже находится в очереди. Дублирующая задача не создана.",
+        OrderNotificationLog.Status.SENDING: "Письмо уже отправляется. Дублирующая задача не создана.",
+    }
 
     @staticmethod
     def _get_order_for_log(order_id: int) -> Order | None:
@@ -181,18 +199,88 @@ class OrderNotificationService:
         return OrderNotificationLog.NotificationType.CREATED
 
     @classmethod
-    def enqueue_manual_resend(cls, order: Order, *, triggered_by) -> bool:
-        failed_notification = (
-            order.notification_logs.filter(status=OrderNotificationLog.Status.FAILED)
-            .order_by("-updated_at", "-created_at", "-id")
+    def get_manual_customer_notifications(cls, order: Order):
+        return order.notification_logs.filter(
+            event_key__in=cls.CUSTOMER_EVENT_KEYS,
+            recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
+        )
+
+    @classmethod
+    def get_latest_manual_customer_notification(cls, order: Order) -> OrderNotificationLog | None:
+        return cls.get_manual_customer_notifications(order).order_by("-created_at", "-id").first()
+
+    @classmethod
+    def get_retryable_manual_customer_notification(cls, order: Order) -> OrderNotificationLog | None:
+        return (
+            cls.get_manual_customer_notifications(order)
+            .filter(status__in=cls.MANUAL_RESEND_RETRYABLE_STATUSES)
+            .order_by("-updated_at", "-id")
             .first()
         )
-        if failed_notification is not None:
-            OrderNotificationLogService.update_snapshot(failed_notification, triggered_by=triggered_by)
-            return cls._enqueue_log(failed_notification)
+
+    @classmethod
+    def build_manual_resend_context(cls, order: Order) -> dict[str, bool | str]:
+        retryable_notification = cls.get_retryable_manual_customer_notification(order)
+        if retryable_notification is not None:
+            return {
+                "is_available": True,
+                "label": "Повторно отправить письмо",
+            }
+
+        notification_log = cls.get_latest_manual_customer_notification(order)
+        if notification_log is None:
+            return {
+                "is_available": True,
+                "label": "Повторно отправить письмо",
+            }
+
+        return {
+            "is_available": False,
+            "label": cls._get_manual_resend_blocked_message(notification_log),
+        }
+
+    @classmethod
+    def _get_manual_resend_blocked_message(cls, notification_log: OrderNotificationLog) -> str:
+        return cls.MANUAL_RESEND_BLOCKED_STATUS_MESSAGES.get(
+            notification_log.status,
+            f"Повторная отправка недоступна для статуса «{notification_log.get_status_display()}».",
+        )
+
+    @classmethod
+    def enqueue_manual_resend(cls, order: Order, *, triggered_by) -> ManualNotificationResendResult:
+        retryable_notification = cls.get_retryable_manual_customer_notification(order)
+        if retryable_notification is not None:
+            OrderNotificationLogService.update_snapshot(retryable_notification, triggered_by=triggered_by)
+            if cls._enqueue_log(retryable_notification):
+                return ManualNotificationResendResult(
+                    is_enqueued=True,
+                    message="Письмо поставлено в очередь на отправку.",
+                )
+            return ManualNotificationResendResult(
+                is_enqueued=False,
+                message="Не удалось поставить письмо в очередь на отправку. Проверьте настройки email.",
+                level="error",
+            )
+
+        latest_notification = cls.get_latest_manual_customer_notification(order)
+        if latest_notification is not None:
+            return ManualNotificationResendResult(
+                is_enqueued=False,
+                message=cls._get_manual_resend_blocked_message(latest_notification),
+                level="warning",
+            )
 
         event_key = cls.resolve_manual_resend_event_key(order)
-        return cls.enqueue(order.pk, event_key, triggered_by=triggered_by)
+        if cls.enqueue(order.pk, event_key, triggered_by=triggered_by):
+            return ManualNotificationResendResult(
+                is_enqueued=True,
+                message="Письмо поставлено в очередь на отправку.",
+            )
+        return ManualNotificationResendResult(
+            is_enqueued=False,
+            message="Не удалось поставить письмо в очередь на отправку. Проверьте настройки email.",
+            level="error",
+        )
 
     @staticmethod
     def enqueue_staff_created(order_id: int) -> bool:
