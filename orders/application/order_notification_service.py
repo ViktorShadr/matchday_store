@@ -200,20 +200,14 @@ class OrderNotificationService:
 
     @classmethod
     def get_manual_customer_notifications(cls, order: Order):
-        return (
-            order.notification_logs.filter(
-                event_key__in=cls.CUSTOMER_EVENT_KEYS,
-                recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
-            )
+        return order.notification_logs.filter(
+            event_key__in=cls.CUSTOMER_EVENT_KEYS,
+            recipient_type=OrderNotificationLog.RecipientType.CUSTOMER,
         )
 
     @classmethod
     def get_latest_manual_customer_notification(cls, order: Order) -> OrderNotificationLog | None:
-        return (
-            cls.get_manual_customer_notifications(order)
-            .order_by("-created_at", "-id")
-            .first()
-        )
+        return cls.get_manual_customer_notifications(order).order_by("-created_at", "-id").first()
 
     @classmethod
     def get_retryable_manual_customer_notification(cls, order: Order) -> OrderNotificationLog | None:
