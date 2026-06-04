@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib import messages
@@ -233,7 +234,26 @@ class CustomPasswordResetView(PasswordResetView):
     subject_template_name = "users/password_reset_subject.txt"
     form_class = UserPasswordResetForm
     success_url = reverse_lazy("users:password_reset_done")
-    extra_email_context = {"store_name": "Matchday Store"}
+
+    def form_valid(self, form):
+        site_url = urlparse(settings.SITE_URL)
+
+        opts = {
+            "use_https": site_url.scheme == "https",
+            "from_email": self.from_email,
+            "email_template_name": self.email_template_name,
+            "subject_template_name": self.subject_template_name,
+            "request": self.request,
+            "html_email_template_name": self.html_email_template_name,
+            "extra_email_context": {
+                "store_name": settings.STORE_BRAND_NAME,
+                "protocol": site_url.scheme,
+                "domain": site_url.netloc,
+            },
+        }
+
+        form.save(**opts)
+        return HttpResponseRedirect(self.get_success_url())
 
     def dispatch(self, request, *args, **kwargs):
         if request.method == "POST" and getattr(request, "limited", False):
