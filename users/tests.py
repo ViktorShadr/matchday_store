@@ -2,8 +2,8 @@ import re
 from datetime import timedelta
 from unittest.mock import ANY, patch
 
-from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
