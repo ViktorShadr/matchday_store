@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import ANY, patch
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core import mail
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -413,7 +414,7 @@ class UserViewsTest(TestCase):
         email = mail.outbox[0]
         self.assertEqual(email.to, ["user@example.com"])
         self.assertIn("Восстановление пароля в Matchday Store", email.subject)
-        self.assertIn("Matchday Store", email.body)
+        self.assertIn(settings.STORE_BRAND_NAME, email.body)
         self.assertIn("Если вы не запрашивали восстановление пароля", email.body)
         self.assertIn("/users/password-reset/confirm/", email.body)
 
@@ -435,7 +436,7 @@ class UserViewsTest(TestCase):
         self.client.post(reverse("users:password_reset"), {"email": "user@example.com"})
         self.assertEqual(len(mail.outbox), 1)
 
-        match = re.search(r"http://testserver(?P<path>/users/password-reset/confirm/\S+/)", mail.outbox[0].body)
+        match = re.search(r"https?://[^/]+(?P<path>/users/password-reset/confirm/\S+/)", mail.outbox[0].body)
         self.assertIsNotNone(match)
         reset_path = match.group("path")
 
