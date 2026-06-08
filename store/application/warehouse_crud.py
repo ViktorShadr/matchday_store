@@ -12,7 +12,9 @@ class WarehouseDeleteProtectionError(Exception):
 class WarehouseCrudService:
     """Application-сервис CRUD-операций модераторского склада."""
 
-    CATEGORY_ACTIVE_ORDER_MESSAGE = "Категория не может быть удалена, так как её товары используются в активных заказах"
+    CATEGORY_ACTIVE_ORDER_MESSAGE = (
+        "Категория не может быть удалена, так как её товары используются в активных заказах"
+    )
     PRODUCT_ACTIVE_ORDER_MESSAGE = "Товар не может быть удалён, так как участвует в активных заказах"
     VARIANT_ACTIVE_RESERVE_MESSAGE = "Вариант товара не может быть удалён, так как по нему существуют активные резервы"
 
