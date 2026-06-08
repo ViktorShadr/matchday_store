@@ -10,7 +10,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, RedirectVie
 from orders.application import DashboardOrderFlowError, DashboardOrderFlowService, OrderNotificationService
 from orders.models import Order
 from orders.services import OrderAutoCancellationService
-from store.application import WarehouseCrudService
+from store.application import WarehouseCrudService, WarehouseDeleteProtectionError
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm
 from store.mixins import ModeratorRequiredMixin, StaffOrderViewPermissionMixin
 from store.models import Category, Product, ProductImage, ProductVariant
@@ -283,16 +283,38 @@ class WarehouseProductCreateView(ModeratorRequiredMixin, CreateView):
         return reverse("store:warehouse_product_manage", kwargs={"pk": self.object.pk})
 
 
-class WarehouseProductDeleteView(ModeratorRequiredMixin, DeleteView):
+class WarehouseProtectedDeleteMixin:
+    crud_service = WarehouseCrudService()
+
+    def form_valid(self, form):
+        self.object = self.get_object()
+        try:
+            self.delete_object(self.object)
+        except WarehouseDeleteProtectionError as exc:
+            messages.error(self.request, str(exc))
+            return HttpResponseRedirect(self.get_delete_failure_url())
+        return HttpResponseRedirect(self.get_success_url())
+
+    def get_delete_failure_url(self):
+        return self.get_success_url()
+
+
+class WarehouseProductDeleteView(WarehouseProtectedDeleteMixin, ModeratorRequiredMixin, DeleteView):
     model = Product
     template_name = "dashboard/confirm_delete.html"
     context_object_name = "object"
     success_url = reverse_lazy("store:warehouse_dashboard")
 
+    def delete_object(self, obj):
+        return self.crud_service.delete_product(obj)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(WarehouseUiPresenter.product_delete_context(self.object))
         return context
+
+    def get_delete_failure_url(self):
+        return reverse("store:warehouse_product_manage", kwargs={"pk": self.object.pk})
 
 
 class WarehouseCategoryCreateView(ModeratorRequiredMixin, CreateView):
@@ -324,11 +346,14 @@ class WarehouseCategoryUpdateView(ModeratorRequiredMixin, UpdateView):
         return reverse("store:warehouse_dashboard")
 
 
-class WarehouseCategoryDeleteView(ModeratorRequiredMixin, DeleteView):
+class WarehouseCategoryDeleteView(WarehouseProtectedDeleteMixin, ModeratorRequiredMixin, DeleteView):
     model = Category
     template_name = "dashboard/confirm_delete.html"
     context_object_name = "object"
     success_url = reverse_lazy("store:warehouse_dashboard")
+
+    def delete_object(self, obj):
+        return self.crud_service.delete_category(obj)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -438,10 +463,13 @@ class WarehouseVariantUpdateView(ModeratorRequiredMixin, UpdateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class WarehouseVariantDeleteView(ModeratorRequiredMixin, DeleteView):
+class WarehouseVariantDeleteView(WarehouseProtectedDeleteMixin, ModeratorRequiredMixin, DeleteView):
     model = ProductVariant
     template_name = "dashboard/confirm_delete.html"
     context_object_name = "object"
+
+    def delete_object(self, obj):
+        return self.crud_service.delete_variant(obj)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

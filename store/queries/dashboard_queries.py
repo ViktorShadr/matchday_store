@@ -182,23 +182,10 @@ class DashboardOrderQueryService:
 class WarehouseReservationQueryService:
     """Query-сервис активных заказов, удерживающих складской резерв."""
 
-    FINAL_ORDER_STATUSES = frozenset(
-        {
-            Order.Status.CANCELLED,
-            Order.Status.DELIVERED,
-            Order.Status.REFUNDED,
-        }
-    )
-    FINAL_FULFILLMENT_STATUSES = frozenset(
-        {
-            Order.FulfillmentStatus.CANCELLED,
-            Order.FulfillmentStatus.DELIVERED,
-            Order.FulfillmentStatus.RETURNED,
-        }
-    )
-
     @classmethod
     def get_active_reservation_items_by_variant(cls, variants) -> dict[int, list[OrderItem]]:
+        from orders.application.order_status_policy import OrderStatusPolicy
+
         variant_ids = [variant.pk for variant in variants]
         if not variant_ids:
             return {}
@@ -206,8 +193,8 @@ class WarehouseReservationQueryService:
         reservation_items = (
             OrderItem.objects.select_related("order")
             .filter(product_variant_id__in=variant_ids)
-            .exclude(order__status__in=cls.FINAL_ORDER_STATUSES)
-            .exclude(order__fulfillment_status__in=cls.FINAL_FULFILLMENT_STATUSES)
+            .exclude(order__status__in=OrderStatusPolicy.RESERVE_TERMINAL_ORDER_STATUSES)
+            .exclude(order__fulfillment_status__in=OrderStatusPolicy.RESERVE_TERMINAL_FULFILLMENT_STATUSES)
             .order_by("order__created_at", "pk")
         )
         items_by_variant: dict[int, list[OrderItem]] = {variant_id: [] for variant_id in variant_ids}
