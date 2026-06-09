@@ -3,6 +3,10 @@ from django.urls import path
 from users.views import (
     CustomLoginView,
     CustomLogoutView,
+    CustomPasswordResetCompleteView,
+    CustomPasswordResetConfirmView,
+    CustomPasswordResetDoneView,
+    CustomPasswordResetView,
     CustomRegistrationView,
     EmailConfirmationView,
     ProfileDeleteView,
@@ -20,6 +24,14 @@ app_name = "users"
 urlpatterns = [
     path("login/", CustomLoginView.as_view(), name="login"),
     path("logout/", CustomLogoutView.as_view(), name="logout"),
+    path("password-reset/", CustomPasswordResetView.as_view(), name="password_reset"),
+    path("password-reset/done/", CustomPasswordResetDoneView.as_view(), name="password_reset_done"),
+    path(
+        "password-reset/confirm/<uidb64>/<token>/",
+        CustomPasswordResetConfirmView.as_view(),
+        name="password_reset_confirm",
+    ),
+    path("password-reset/complete/", CustomPasswordResetCompleteView.as_view(), name="password_reset_complete"),
     path("registration/", CustomRegistrationView.as_view(), name="registration"),
     path("confirm-email/<str:token>/", EmailConfirmationView.as_view(), name="confirm_email"),
     path("profile/resend-confirmation/", ResendOwnConfirmationEmailView.as_view(), name="resend_confirmation"),

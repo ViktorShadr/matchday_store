@@ -68,6 +68,7 @@ Thumbs.db
 
 # Operational artifacts
 /backups/
+ops/backup/s3_backup.env
 docker/nginx/.htpasswd
 /WHAT_TO_STUDY_BEFORE_DEFENSE.md
 /TECH_DEFENSE_REPORT.md

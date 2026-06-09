@@ -15,7 +15,7 @@
 
 Matchday Store is a production-oriented Django MVP for a football club merchandise store.
 
-The project models a realistic ecommerce workflow with transactional checkout, stock reservation, persistent notification delivery, staff tooling, operational monitoring, and production-style deployment infrastructure.
+The project models a realistic ecommerce workflow with transactional checkout, stock reservation, account recovery, persistent notification delivery, staff tooling, operational monitoring, S3 backups, and production-style deployment infrastructure.
 
 The main engineering focus is not CRUD functionality, but consistency, reliability, observability, security, and maintainability under real operational conditions.
 
@@ -32,7 +32,10 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - GitHub Actions CI/CD pipeline
 - Background job processing with retries
 - Staff dashboard with notification logs, manual resend, and printable order views
-- 370+ automated tests including concurrency and email-delivery scenarios
+- Safe warehouse deletion guards for products, variants, and categories used by active orders
+- Account password reset flow with rate limiting and production-safe links
+- S3 backup workflow for PostgreSQL and media files with retention policy
+- 390+ automated tests including concurrency and email-delivery scenarios
 
 ---
 
@@ -42,6 +45,7 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 
 - Product catalog with categories, variants, SKU support, pricing, stock visibility, and product images
 - Guest and authenticated carts with session merge on login
+- User registration, email confirmation, profile management, and password reset
 - Pickup checkout workflow
 - Reservation-based stock handling
 - Duplicate-submit protection with idempotent checkout flow
@@ -53,6 +57,8 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 
 - Warehouse/staff dashboard
 - Order filtering and moderation workflows
+- Product, variant, category, and image management for the warehouse catalog
+- Safe delete protection for warehouse entities that participate in active orders or reservations
 - Payment status management
 - Order detail workspace with staff guidance, transition history, and notification timeline
 - Manual notification resend/retry workflow for managers
@@ -69,6 +75,8 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - DB-backed order notification outbox
 - Idempotent email delivery with deduplication and attempts tracking
 - Healthchecks and operational scripts
+- S3-compatible backup workflow for PostgreSQL dumps and media archives
+- Daily, weekly, and monthly backup tiers with automated retention cleanup
 - GitHub Actions CI/CD pipeline
 - Automated Docker image publishing to GHCR
 
@@ -77,6 +85,7 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 - Transactional stock consistency
 - Race-condition protection
 - Rate limiting for critical endpoints
+- Rate-limited password reset requests
 - CSP and secure cookie configuration
 - CSRF protection
 - Expiring hashed guest order access tokens
@@ -106,10 +115,14 @@ flowchart LR
     Browser --> Nginx
     Nginx --> Django[Gunicorn + Django]
     Django --> PostgreSQL[(PostgreSQL)]
+    Django --> Media[(Media Volume)]
     Django --> Redis[(Redis)]
     Redis --> Celery[Celery Workers]
     Beat[Celery Beat] --> Redis
     Celery --> SMTP[SMTP Provider]
+    Backup[Backup Script] --> PostgreSQL
+    Backup --> Media
+    Backup --> S3[(S3 Object Storage)]
     Django -. logs/errors .-> Sentry
     Celery -. logs/errors .-> Sentry
 ```
@@ -265,6 +278,18 @@ This models a realistic pickup-order warehouse flow:
 
 ---
 
+## Safe Warehouse Deletes
+
+Warehouse catalog entities are protected from unsafe deletion:
+
+- categories cannot be deleted while their products are used by active orders,
+- products cannot be deleted while they participate in active orders,
+- variants cannot be deleted while active reservations still exist.
+
+Deletion checks run inside transactions and surface manager-facing errors instead of silently breaking active warehouse workflows.
+
+---
+
 ## Request-Scoped Logging
 
 Every request receives an `X-Request-ID`.
@@ -306,6 +331,31 @@ The notification pipeline stores delivery intent and status in `OrderNotificatio
 - idempotency key per order, event, and recipient type.
 
 This gives staff visibility into email delivery and allows manual retry without duplicating already delivered notifications.
+
+---
+
+## S3 Backup Workflow
+
+Operational backups are handled by `ops/backup/s3_backup.sh`.
+
+The workflow creates and uploads:
+
+- PostgreSQL dumps,
+- media file archives.
+
+It supports `daily`, `weekly`, and `monthly` backup tiers, loads secrets from `ops/backup/s3_backup.env` or `BACKUP_ENV_FILE`, and removes old objects according to the retention policy:
+
+| Tier | Retention |
+| --- | --- |
+| daily | 14 days |
+| weekly | 8 weeks |
+| monthly | 6 months |
+
+The repository includes:
+
+- `docs/backup_s3.md` for setup, verification, and restore instructions,
+- `ops/backup/s3_backup.env.example` for required variables,
+- `ops/backup/cron.example` for scheduled execution.
 
 ---
 
@@ -357,6 +407,8 @@ The project includes multiple production-oriented security controls:
 - Rate limiting for auth and checkout endpoints
 - Safe redirect validation
 - Image upload validation
+- Password reset tokens generated through Django's built-in token flow
+- Public password reset links built from `SITE_URL`
 - Environment-driven production settings
 - Sensitive-data masking in logs
 - Docker non-root runtime
@@ -390,6 +442,21 @@ Planned improvements:
 
 ---
 
+# Account Recovery
+
+Password reset is implemented through custom Django auth views and templates.
+
+The flow includes:
+
+- `/users/password-reset/`
+- `/users/password-reset/done/`
+- `/users/password-reset/confirm/<uidb64>/<token>/`
+- `/users/password-reset/complete/`
+
+Requests are rate-limited by IP and submitted email. Reset emails use `SITE_URL`, so production deployments must set it to the public HTTPS origin.
+
+---
+
 # Background Tasks
 
 Celery uses Redis as both broker and result backend.
@@ -412,7 +479,7 @@ Queues are separated between general tasks and email delivery tasks.
 
 # Testing
 
-The project currently contains 370+ automated Django tests.
+The project currently contains 390+ automated Django tests.
 
 Covered areas include:
 
@@ -423,6 +490,8 @@ Covered areas include:
 - payment synchronization
 - concurrency handling
 - dashboard permissions
+- password reset flow and rate limiting
+- warehouse delete protection for active orders and reservations
 - notification outbox, deduplication, retry, and manual resend
 - printable staff order views
 - email retry logic
@@ -534,13 +603,32 @@ docker compose -f docker-compose.prod.yml up -d
 
 ---
 
+# Backups
+
+Configure S3-compatible backups:
+
+```bash
+cp ops/backup/s3_backup.env.example ops/backup/s3_backup.env
+chmod 600 ops/backup/s3_backup.env
+```
+
+Run a manual backup:
+
+```bash
+BACKUP_ENV_FILE=ops/backup/s3_backup.env ./ops/backup/s3_backup.sh daily
+```
+
+For production scheduling and restore verification, see `docs/backup_s3.md`.
+
+---
+
 # Future Improvements
 
 - Online payment providers
 - DRF-based public API
 - Warehouse/ERP integrations
 - Delivery providers
-- Object storage + CDN
+- Object storage + CDN for serving media
 - Prometheus + Grafana monitoring
 - Coverage reporting
 - Telegram/SMS notifications

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, UserCreationForm
 from phonenumber_field.formfields import PhoneNumberField
 
 from users.models import User
@@ -123,6 +123,52 @@ class UserLoginForm(AuthenticationForm):
                 "class": "form-control",
                 "placeholder": "Введите пароль",
                 "autocomplete": "current-password",
+            }
+        ),
+    )
+
+
+class UserPasswordResetForm(PasswordResetForm):
+    """Форма запроса восстановления пароля."""
+
+    email = forms.EmailField(
+        label="Email",
+        widget=forms.EmailInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Введите email аккаунта",
+                "autocomplete": "email",
+                "inputmode": "email",
+                "autocapitalize": "off",
+                "spellcheck": "false",
+                "autofocus": True,
+            }
+        ),
+    )
+
+
+class UserSetPasswordForm(SetPasswordForm):
+    """Форма установки нового пароля."""
+
+    new_password1 = forms.CharField(
+        label="Новый пароль",
+        strip=False,
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Введите новый пароль",
+                "autocomplete": "new-password",
+            }
+        ),
+    )
+    new_password2 = forms.CharField(
+        label="Подтверждение нового пароля",
+        strip=False,
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Повторите новый пароль",
+                "autocomplete": "new-password",
             }
         ),
     )

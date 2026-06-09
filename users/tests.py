@@ -1,7 +1,10 @@
+import re
 from datetime import timedelta
 from unittest.mock import ANY, patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.deletion import ProtectedError
@@ -387,6 +390,93 @@ class UserViewsTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, reverse("users:resend_confirmation"))
+
+    def test_login_view_shows_password_reset_link(self):
+        response = self.client.get(reverse("users:login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Забыли пароль?")
+        self.assertContains(response, reverse("users:password_reset"))
+
+    def test_password_reset_page_opens(self):
+        response = self.client.get(reverse("users:password_reset"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "users/password_reset_form.html")
+        self.assertContains(response, "Восстановить пароль")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_password_reset_existing_email_sends_email(self):
+        response = self.client.post(reverse("users:password_reset"), {"email": "user@example.com"})
+
+        self.assertRedirects(response, reverse("users:password_reset_done"))
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(email.to, ["user@example.com"])
+        self.assertIn("Восстановление пароля в Matchday Store", email.subject)
+        self.assertIn(settings.STORE_BRAND_NAME, email.body)
+        self.assertIn("Если вы не запрашивали восстановление пароля", email.body)
+        self.assertIn("/users/password-reset/confirm/", email.body)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_password_reset_unknown_email_does_not_disclose_user_absence(self):
+        existing_response = self.client.post(reverse("users:password_reset"), {"email": "user@example.com"})
+        existing_redirect = existing_response["Location"]
+        mail.outbox.clear()
+
+        unknown_response = self.client.post(reverse("users:password_reset"), {"email": "missing@example.com"})
+
+        self.assertEqual(unknown_response.status_code, 302)
+        self.assertEqual(unknown_response["Location"], existing_redirect)
+        self.assertRedirects(unknown_response, reverse("users:password_reset_done"))
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_password_reset_link_allows_setting_new_password_and_login(self):
+        self.client.post(reverse("users:password_reset"), {"email": "user@example.com"})
+        self.assertEqual(len(mail.outbox), 1)
+
+        match = re.search(r"https?://[^/]+(?P<path>/users/password-reset/confirm/\S+/)", mail.outbox[0].body)
+        self.assertIsNotNone(match)
+        reset_path = match.group("path")
+
+        response = self.client.get(reset_path)
+        self.assertEqual(response.status_code, 302)
+        set_password_path = response["Location"]
+
+        response = self.client.post(
+            set_password_path,
+            {
+                "new_password1": "new-userpass-456",
+                "new_password2": "new-userpass-456",
+            },
+        )
+
+        self.assertRedirects(response, reverse("users:password_reset_complete"))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("new-userpass-456"))
+        self.assertTrue(self.client.login(email="user@example.com", password="new-userpass-456"))
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        RATELIMIT_PASSWORD_RESET_IP_RATE="1/m",
+        RATELIMIT_PASSWORD_RESET_EMAIL_RATE="1/m",
+    )
+    def test_password_reset_rate_limited(self):
+        cache.clear()
+        reset_url = reverse("users:password_reset")
+        payload = {"email": "user@example.com"}
+
+        first_response = self.client.post(reset_url, payload)
+        second_response = self.client.post(reset_url, payload)
+
+        self.assertEqual(first_response.status_code, 302)
+        self.assertContains(
+            second_response,
+            "Слишком много запросов на восстановление пароля. Попробуйте позже.",
+            status_code=429,
+        )
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_healthz_endpoint(self):
         response = self.client.get("/healthz/")

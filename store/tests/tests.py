@@ -5,6 +5,7 @@ from io import BytesIO
 from unittest.mock import ANY, patch
 
 from django.contrib.auth.models import Group, Permission
+from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -2390,3 +2391,140 @@ class CartMergeConcurrencyTest(TransactionTestCase):
         self.assertEqual(CartItem.objects.filter(cart=self.user_cart, product_variant=self.variant).count(), 1)
         merged_item = CartItem.objects.get(cart=self.user_cart, product_variant=self.variant)
         self.assertEqual(merged_item.quantity, 5)
+
+
+class WarehouseDeleteProtectionTest(TestCase):
+    """Тесты защиты складских сущностей от небезопасного удаления."""
+
+    def setUp(self):
+        self.client = Client()
+        self.moderator = User.objects.create_user(
+            email="delete-mod@example.com",
+            password="modpass123",
+            is_staff=True,
+            is_active=True,
+        )
+        self.moderator.groups.add(Group.objects.create(name="Модераторы"))
+        self.category = Category.objects.create(name="Удаление: категория")
+        self.product = Product.objects.create(name="Удаление: товар", category=self.category)
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            sku="DELETE-PROTECT-001",
+            size="M",
+            color="Синий",
+            price=Decimal("1000.00"),
+            quantity=5,
+        )
+        self.client.login(email="delete-mod@example.com", password="modpass123")
+
+    def _create_order_for_variant(
+        self,
+        variant,
+        *,
+        number="ORD-DELETE-PROTECT",
+        status=Order.Status.PLACED,
+        payment_status=Order.PaymentStatus.PENDING,
+        fulfillment_status=Order.FulfillmentStatus.NEW,
+        quantity=1,
+    ):
+        order = Order.objects.create(
+            number=number,
+            recipient_name="Покупатель",
+            email="buyer@example.com",
+            phone="+79001112233",
+            status=status,
+            payment_status=payment_status,
+            fulfillment_status=fulfillment_status,
+            delivery_method=Order.DeliveryMethod.PICKUP,
+            subtotal_amount=variant.price * quantity,
+            delivery_amount=Decimal("0.00"),
+            discount_amount=Decimal("0.00"),
+            total_amount=variant.price * quantity,
+            confirmed_at=timezone.now(),
+        )
+        OrderItem.objects.create(
+            order=order,
+            product_variant=variant,
+            product_name_snapshot=variant.product.name,
+            sku_snapshot=variant.sku or str(variant.pk),
+            size_snapshot=variant.size or "",
+            color_snapshot=variant.color or "",
+            unit_price=variant.price,
+            quantity=quantity,
+            line_total=variant.price * quantity,
+        )
+        return order
+
+    @staticmethod
+    def _messages(response):
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
+    def test_delete_category_with_active_order_is_forbidden(self):
+        self._create_order_for_variant(self.variant)
+
+        response = self.client.post(reverse("store:warehouse_category_delete", kwargs={"pk": self.category.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_dashboard"))
+        self.assertTrue(Category.objects.filter(pk=self.category.pk).exists())
+
+    def test_delete_product_with_active_order_is_forbidden(self):
+        self._create_order_for_variant(self.variant)
+
+        response = self.client.post(reverse("store:warehouse_product_delete", kwargs={"pk": self.product.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+
+    def test_delete_variant_with_active_reserve_is_forbidden(self):
+        self._create_order_for_variant(self.variant)
+        self.variant.reserved_quantity = 1
+        self.variant.save(update_fields=["reserved_quantity", "updated_at"])
+
+        response = self.client.post(reverse("store:warehouse_variant_delete", kwargs={"pk": self.variant.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.assertTrue(ProductVariant.objects.filter(pk=self.variant.pk).exists())
+
+    def test_delete_category_without_active_orders_is_allowed(self):
+        self._create_order_for_variant(
+            self.variant,
+            status=Order.Status.DELIVERED,
+            payment_status=Order.PaymentStatus.SUCCEEDED,
+            fulfillment_status=Order.FulfillmentStatus.DELIVERED,
+        )
+
+        response = self.client.post(reverse("store:warehouse_category_delete", kwargs={"pk": self.category.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_dashboard"))
+        self.assertFalse(Category.objects.filter(pk=self.category.pk).exists())
+
+    def test_delete_product_without_active_orders_is_allowed(self):
+        self._create_order_for_variant(
+            self.variant,
+            status=Order.Status.CANCELLED,
+            payment_status=Order.PaymentStatus.CANCELLED,
+            fulfillment_status=Order.FulfillmentStatus.CANCELLED,
+        )
+
+        response = self.client.post(reverse("store:warehouse_product_delete", kwargs={"pk": self.product.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_dashboard"))
+        self.assertFalse(Product.objects.filter(pk=self.product.pk).exists())
+
+    def test_delete_variant_without_reserves_is_allowed(self):
+        self._create_order_for_variant(self.variant)
+
+        response = self.client.post(reverse("store:warehouse_variant_delete", kwargs={"pk": self.variant.pk}))
+
+        self.assertRedirects(response, reverse("store:warehouse_product_manage", kwargs={"pk": self.product.pk}))
+        self.assertFalse(ProductVariant.objects.filter(pk=self.variant.pk).exists())
+
+    def test_forbidden_delete_shows_message_to_manager(self):
+        self._create_order_for_variant(self.variant)
+
+        response = self.client.post(reverse("store:warehouse_product_delete", kwargs={"pk": self.product.pk}))
+
+        self.assertIn(
+            "Товар не может быть удалён, так как участвует в активных заказах",
+            self._messages(response),
+        )

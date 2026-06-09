@@ -1,10 +1,18 @@
 import logging
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import (
+    LoginView,
+    LogoutView,
+    PasswordResetCompleteView,
+    PasswordResetConfirmView,
+    PasswordResetDoneView,
+    PasswordResetView,
+)
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -26,7 +34,14 @@ from orders.models import Order
 from orders.services import OrderCancellationError, OrderCancellationService
 from store.mixins.cart_mixins import CartContextMixin
 from users.application import EmailConfirmationService
-from users.forms import ProfileDeleteConfirmForm, UserLoginForm, UserProfileForm, UserRegistrationForm
+from users.forms import (
+    ProfileDeleteConfirmForm,
+    UserLoginForm,
+    UserPasswordResetForm,
+    UserProfileForm,
+    UserRegistrationForm,
+    UserSetPasswordForm,
+)
 from users.models import User
 from users.tasks import send_welcome_email
 
@@ -191,6 +206,83 @@ class CustomLogoutView(LogoutView):
     """
 
     next_page = reverse_lazy("store:base")
+
+
+@method_decorator(
+    ratelimit(
+        key="ip",
+        rate=setting_rate("RATELIMIT_PASSWORD_RESET_IP_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
+@method_decorator(
+    ratelimit(
+        key="post:email",
+        rate=setting_rate("RATELIMIT_PASSWORD_RESET_EMAIL_RATE"),
+        method="POST",
+        block=False,
+    ),
+    name="dispatch",
+)
+class CustomPasswordResetView(PasswordResetView):
+    """Запрос письма для восстановления пароля."""
+
+    template_name = "users/password_reset_form.html"
+    email_template_name = "users/password_reset_email.html"
+    subject_template_name = "users/password_reset_subject.txt"
+    form_class = UserPasswordResetForm
+    success_url = reverse_lazy("users:password_reset_done")
+
+    def form_valid(self, form):
+        site_url = urlparse(settings.SITE_URL)
+
+        opts = {
+            "use_https": site_url.scheme == "https",
+            "from_email": self.from_email,
+            "email_template_name": self.email_template_name,
+            "subject_template_name": self.subject_template_name,
+            "request": self.request,
+            "html_email_template_name": self.html_email_template_name,
+            "extra_email_context": {
+                "store_name": settings.STORE_BRAND_NAME,
+                "protocol": site_url.scheme,
+                "domain": site_url.netloc,
+            },
+        }
+
+        form.save(**opts)
+        return HttpResponseRedirect(self.get_success_url())
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == "POST" and getattr(request, "limited", False):
+            return build_ratelimit_response(
+                self,
+                request,
+                "Слишком много запросов на восстановление пароля. Попробуйте позже.",
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+
+class CustomPasswordResetDoneView(PasswordResetDoneView):
+    """Страница после отправки запроса восстановления."""
+
+    template_name = "users/password_reset_done.html"
+
+
+class CustomPasswordResetConfirmView(PasswordResetConfirmView):
+    """Установка нового пароля по ссылке из письма."""
+
+    template_name = "users/password_reset_confirm.html"
+    form_class = UserSetPasswordForm
+    success_url = reverse_lazy("users:password_reset_complete")
+
+
+class CustomPasswordResetCompleteView(PasswordResetCompleteView):
+    """Страница успешного завершения восстановления пароля."""
+
+    template_name = "users/password_reset_complete.html"
 
 
 @method_decorator(
