@@ -1,0 +1,19 @@
+# Example crontab for S3 backups.
+# Copy these lines into `crontab -e`.
+# Adjust PROJECT_DIR, BACKUP_ENV_FILE, and LOG_FILE before enabling.
+
+SHELL=/bin/bash
+MAILTO=
+PROJECT_DIR=/opt/matchday_store
+BACKUP_ENV_FILE=/etc/matchday_store/backup_s3.env
+LOG_FILE=/var/log/matchday_backup_s3.log
+LOCK_FILE=/tmp/matchday_backup_s3.lock
+
+# Daily backup: every night at 02:30.
+30 2 * * * cd "$PROJECT_DIR" && /usr/bin/flock -n "$LOCK_FILE" env BACKUP_ENV_FILE="$BACKUP_ENV_FILE" ./ops/backup/s3_backup.sh daily >> "$LOG_FILE" 2>&1
+
+# Weekly backup: Sundays at 04:00.
+0 4 * * 0 cd "$PROJECT_DIR" && /usr/bin/flock -n "$LOCK_FILE" env BACKUP_ENV_FILE="$BACKUP_ENV_FILE" ./ops/backup/s3_backup.sh weekly >> "$LOG_FILE" 2>&1
+
+# Monthly backup: first day of the month at 05:00.
+0 5 1 * * cd "$PROJECT_DIR" && /usr/bin/flock -n "$LOCK_FILE" env BACKUP_ENV_FILE="$BACKUP_ENV_FILE" ./ops/backup/s3_backup.sh monthly >> "$LOG_FILE" 2>&1
