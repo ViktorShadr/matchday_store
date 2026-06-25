@@ -25,7 +25,13 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="user",
             name="email_token",
-            field=models.CharField(blank=True, db_index=True, max_length=64, null=True),
+            field=models.CharField(
+                "Токен подтверждения email",
+                blank=True,
+                db_index=True,
+                max_length=64,
+                null=True,
+            ),
         ),
         migrations.RunPython(backfill_email_token_created_at, migrations.RunPython.noop),
     ]
