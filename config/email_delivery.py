@@ -20,6 +20,8 @@ EMAIL_TASK_AUTORETRY_KWARGS: Final = {
     "retry_backoff_max": EMAIL_TASK_RETRY_BACKOFF_MAX_SECONDS,
     "retry_jitter": True,
     "retry_kwargs": {"max_retries": EMAIL_TASK_MAX_RETRIES},
+    "acks_late": True,
+    "reject_on_worker_lost": True,
 }
 
 

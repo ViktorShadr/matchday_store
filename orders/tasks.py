@@ -709,6 +709,29 @@ def send_staff_new_order_notification(
     )
 
 
+@shared_task(bind=True, ignore_result=True, max_retries=0)
+def recover_stale_outbox_notifications(self) -> dict[str, int]:
+    """Reset SENDING notifications stuck longer than threshold back to PENDING."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    stale_threshold = timezone.now() - timedelta(minutes=15)
+    updated = OrderNotificationLog.objects.filter(
+        status=OrderNotificationLog.Status.SENDING,
+        updated_at__lt=stale_threshold,
+    ).update(
+        status=OrderNotificationLog.Status.PENDING,
+        updated_at=timezone.now(),
+    )
+    if updated:
+        logger.warning(
+            "notification.stale_sending_recovered",
+            extra={"event": "notification.stale_sending_recovered", "count": updated},
+        )
+    return {"recovered": updated}
+
+
 @shared_task
 def auto_cancel_expired_pickup_orders() -> dict[str, int]:
     from orders.services import OrderAutoCancellationService

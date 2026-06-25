@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 
+from celery.schedules import crontab
 from csp.constants import NONCE, NONE, SELF
 from dotenv import load_dotenv
 from kombu import Queue
@@ -170,6 +171,7 @@ CELERY_TASK_ROUTES = {
     "users.tasks.send_welcome_email": {"queue": "email"},
 }
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1"))
 
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
@@ -281,6 +283,10 @@ CELERY_BEAT_SCHEDULE = {
     "auto-cancel-expired-pickup-orders": {
         "task": "orders.tasks.auto_cancel_expired_pickup_orders",
         "schedule": ORDER_AUTO_CANCEL_INTERVAL_SECONDS,
+    },
+    "recover-stale-outbox-notifications": {
+        "task": "orders.tasks.recover_stale_outbox_notifications",
+        "schedule": crontab(minute="*/10"),
     },
 }
 
