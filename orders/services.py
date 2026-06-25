@@ -11,8 +11,8 @@ from uuid import uuid4
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
-from django.db.models import F, Q
-from django.db.models.functions import Coalesce
+from django.db.models import F, IntegerField, Q, Value
+from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 
@@ -328,6 +328,17 @@ class OrderStockReservationService:
 
     @staticmethod
     def release_variant_reservation(variant: ProductVariant, quantity: int) -> None:
+        if variant.reserved_quantity < quantity:
+            logger.warning(
+                "stock.invariant_violation_on_release",
+                extra={
+                    "event": "stock.invariant_violation_on_release",
+                    "product_variant_id": variant.pk,
+                    "reserved_quantity": variant.reserved_quantity,
+                    "release_quantity": quantity,
+                },
+            )
+
         updated = ProductVariant.objects.filter(
             pk=variant.pk,
             reserved_quantity__gte=quantity,
@@ -336,11 +347,24 @@ class OrderStockReservationService:
             updated_at=timezone.now(),
         )
         if updated != 1:
-            raise OrderCancellationError(
-                f'Невозможно снять резерв по товару "{variant.product.name}": '
-                "зарезервировано меньше, чем требуется для отмены."
+            # Инвариант нарушен (ручное изменение склада): принудительно обнуляем резерв
+            ProductVariant.objects.filter(pk=variant.pk).update(
+                reserved_quantity=Greatest(
+                    F("reserved_quantity") - quantity,
+                    Value(0, output_field=IntegerField()),
+                ),
+                updated_at=timezone.now(),
             )
-        variant.reserved_quantity -= quantity
+            logger.error(
+                "stock.forced_reservation_release",
+                extra={
+                    "event": "stock.forced_reservation_release",
+                    "product_variant_id": variant.pk,
+                    "release_quantity": quantity,
+                },
+            )
+
+        variant.reserved_quantity = max(0, variant.reserved_quantity - quantity)
 
     @staticmethod
     def issue_variant(variant: ProductVariant, quantity: int) -> None:
