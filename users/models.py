@@ -85,7 +85,7 @@ class User(AbstractUser):
     is_staff = models.BooleanField("Сотрудник", default=False)
     is_superuser = models.BooleanField("Суперпользователь", default=False)
     is_email_confirmed = models.BooleanField("Подтвержден email", default=False)
-    email_token = models.CharField("Токен подтверждения email", max_length=64, blank=True, null=True)
+    email_token = models.CharField("Токен подтверждения email", max_length=64, blank=True, db_index=True, null=True)
     email_token_created_at = models.DateTimeField(blank=True, null=True)
     confirmation_email_last_sent_at = models.DateTimeField(blank=True, null=True)
 
