@@ -1,8 +1,36 @@
 #!/usr/bin/env sh
 set -eu
 
+# ---------------------------------------------------------------------------
+# CI mode: DATABASE_URL is set and the DB has already been restored by the
+# caller. Run verification checks directly via psql against that URL.
+# ---------------------------------------------------------------------------
+if [ -n "${DATABASE_URL:-}" ]; then
+    echo "Running in CI mode with DATABASE_URL"
+
+    MIGRATIONS=$(psql "$DATABASE_URL" -t -c 'SELECT COUNT(*) FROM django_migrations;' 2>/dev/null | tr -d ' ')
+    echo "Applied migrations: ${MIGRATIONS}"
+    if [ "${MIGRATIONS:-0}" -eq 0 ]; then
+        echo "ERROR: No migrations found — restore may have failed"
+        exit 1
+    fi
+
+    ORDERS=$(psql "$DATABASE_URL" -t -c 'SELECT COUNT(*) FROM orders_order;' 2>/dev/null | tr -d ' ')
+    echo "Orders count: ${ORDERS}"
+
+    PRODUCTS=$(psql "$DATABASE_URL" -t -c 'SELECT COUNT(*) FROM store_product;' 2>/dev/null | tr -d ' ')
+    echo "Products count: ${PRODUCTS}"
+
+    echo "Restore verification completed successfully"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Local mode: docker compose is available, a backup file path is required.
+# ---------------------------------------------------------------------------
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <backup.sql.gz|backup.sql>"
+    echo "  or set DATABASE_URL for CI mode (no args needed)"
     exit 1
 fi
 
@@ -30,5 +58,7 @@ else
 fi
 
 docker compose -f "$COMPOSE_FILE" exec -T db sh -c "psql -U \"\$DB_USER\" \"$VERIFY_DB\" -c 'SELECT COUNT(*) AS applied_migrations FROM django_migrations;'"
+docker compose -f "$COMPOSE_FILE" exec -T db sh -c "psql -U \"\$DB_USER\" \"$VERIFY_DB\" -c 'SELECT COUNT(*) AS orders FROM orders_order;'"
+docker compose -f "$COMPOSE_FILE" exec -T db sh -c "psql -U \"\$DB_USER\" \"$VERIFY_DB\" -c 'SELECT COUNT(*) AS products FROM store_product;'"
 
 echo "Restore verification completed for $BACKUP_FILE"
