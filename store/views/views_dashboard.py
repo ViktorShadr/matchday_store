@@ -1,6 +1,7 @@
 from urllib.parse import urlencode
 
 from django.contrib import messages
+from django.db.models import Prefetch
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -8,7 +9,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, RedirectView, TemplateView, UpdateView
 
 from orders.application import DashboardOrderFlowError, DashboardOrderFlowService, OrderNotificationService
-from orders.models import Order
+from orders.models import Order, OrderItem, OrderNotificationLog, OrderStatusTransition
 from orders.services import OrderAutoCancellationService
 from store.application import WarehouseCrudService, WarehouseDeleteProtectionError
 from store.forms import CategoryForm, ProductForm, ProductImageForm, ProductVariantForm
@@ -160,7 +161,20 @@ class DashboardOrderContextMixin:
     context_object_name = "order"
 
     def get_queryset(self):
-        return Order.objects.select_related("user").prefetch_related("items", "status_transitions__changed_by")
+        return Order.objects.select_related("user").prefetch_related(
+            Prefetch(
+                "items",
+                queryset=OrderItem.objects.order_by("pk"),
+            ),
+            Prefetch(
+                "status_transitions",
+                queryset=OrderStatusTransition.objects.select_related("changed_by").order_by("-created_at", "-id"),
+            ),
+            Prefetch(
+                "notification_logs",
+                queryset=OrderNotificationLog.objects.select_related("triggered_by").order_by("-created_at", "-id"),
+            ),
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -168,7 +182,7 @@ class DashboardOrderContextMixin:
         dashboard_status_meta = DashboardOrderPresenter.STATUS_META[dashboard_status_key]
         payment_status_meta = DashboardOrderPresenter.get_payment_meta(self.object)
 
-        context["items"] = self.object.items.order_by("pk")
+        context["items"] = self.object.items.all()
         context["status_choices"] = DashboardOrderPresenter.get_available_status_choices(self.object)
         context["payment_status_choices"] = DASHBOARD_PAYMENT_STATUS_CHOICES
         context["current_status_key"] = dashboard_status_key
@@ -180,11 +194,9 @@ class DashboardOrderContextMixin:
         context["staff_guidance"] = DashboardOrderPresenter.build_staff_guidance(self.object)
         if self.object.delivery_method == Order.DeliveryMethod.PICKUP:
             context["pickup_deadline"] = OrderAutoCancellationService.get_pickup_deadline(self.object)
-        status_transitions = self.object.status_transitions.select_related("changed_by").order_by("-created_at", "-id")
+        status_transitions = self.object.status_transitions.all()
         context["status_transitions"] = StatusTransitionPresenter.present_many(status_transitions)
-        context["notification_logs"] = list(
-            self.object.notification_logs.select_related("triggered_by").order_by("-created_at", "-id")[:8]
-        )
+        context["notification_logs"] = list(self.object.notification_logs.all())[:8]
         context["manual_resend"] = OrderNotificationService.build_manual_resend_context(self.object)
         return context
 
