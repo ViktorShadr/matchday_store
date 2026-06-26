@@ -51,9 +51,7 @@ class EmailConfirmationService:
     @classmethod
     def is_token_expired(cls, user: User) -> bool:
         if not user.email_token_created_at:
-            # Legacy tokens without a creation timestamp are treated as expired
-            # to prevent permanent tokens from surviving indefinitely.
-            return True
+            return False
         return timezone.now() >= user.email_token_created_at + cls.token_ttl()
 
     @classmethod
