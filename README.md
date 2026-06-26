@@ -97,8 +97,8 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 
 - Structured JSON logging
 - Request tracing with `X-Request-ID`
-- Prometheus metrics with `/metrics` endpoint
-- Grafana dashboards with Loki log aggregation
+- Prometheus metrics with `/metrics` endpoint (added in `feat/django-prometheus`)
+- Grafana dashboards with Loki log aggregation (added in `feat/monitoring-stack`)
 - Audit logging
 - Celery request propagation
 - Order notification delivery logs with task IDs, attempts, recipient snapshots, and sanitized errors
