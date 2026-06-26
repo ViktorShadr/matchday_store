@@ -21,7 +21,6 @@ from config.metrics import (
     orders_cancelled_total,
     orders_issued_total,
     orders_placed_total,
-    payment_status_changes_total,
 )
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
