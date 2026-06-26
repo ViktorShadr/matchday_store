@@ -8,6 +8,14 @@ from hashlib import sha256
 from typing import Optional
 from uuid import uuid4
 
+from config.metrics import (
+    checkout_errors_total,
+    orders_cancelled_total,
+    orders_issued_total,
+    orders_placed_total,
+    payment_status_changes_total,
+)
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
@@ -944,6 +952,7 @@ class CheckoutService(ICheckoutService):
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
 
         if order:
+            orders_placed_total.inc()
             logger.info(
                 "order.created",
                 extra={
@@ -963,6 +972,7 @@ class CheckoutService(ICheckoutService):
             return order
 
         if unavailable_only_error:
+            checkout_errors_total.labels(reason="stock_unavailable").inc()
             logger.warning(
                 "checkout.failed",
                 extra={
@@ -974,6 +984,7 @@ class CheckoutService(ICheckoutService):
             )
             raise CheckoutError(unavailable_only_error)
 
+        checkout_errors_total.labels(reason="empty_cart").inc()
         logger.warning(
             "checkout.failed",
             extra={
@@ -1145,6 +1156,8 @@ class OrderCancellationService:
                 to_value=order.payment_status,
                 changed_by=actor,
             )
+            actor_type = "staff" if (actor and getattr(actor, "is_staff", False)) else "customer"
+            orders_cancelled_total.labels(reason=actor_type).inc()
             OrderNotificationService.schedule_cancelled(order.id)
             logger.info(
                 "order.cancelled",
@@ -1243,6 +1256,7 @@ class OrderIssueService:
                 OrderStockReservationService.issue_variant(variant, order_item.quantity)
                 issued_items_count += order_item.quantity
 
+            orders_issued_total.inc()
             logger.info(
                 "order.stock_issued",
                 extra={

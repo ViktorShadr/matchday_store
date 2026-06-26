@@ -3,6 +3,8 @@ import re
 from email.utils import parseaddr
 
 from celery import shared_task
+
+from config.metrics import notifications_total
 from django.conf import settings
 from django.core.mail import send_mail
 from django.urls import reverse
@@ -471,6 +473,7 @@ def send_order_notification_sync(
                 raise NotificationDeliveryError("Не удалось отправить email-уведомление по заказу")
             return False
         notification_log.mark_sent()
+        notifications_total.labels(event=event_key, status="sent").inc()
         logger.info(
             "order.notification_sent",
             extra=build_email_delivery_log_extra(
@@ -486,6 +489,7 @@ def send_order_notification_sync(
         raise
     except Exception as exc:
         is_permanent_error = is_permanent_email_delivery_error(exc)
+        notifications_total.labels(event=event_key, status="failed").inc()
         OrderNotificationLogService.mark_failed(notification_log, exc)
         _log_notification_error(
             order.pk,
