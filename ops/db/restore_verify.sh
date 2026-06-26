@@ -15,11 +15,19 @@ if [ -n "${DATABASE_URL:-}" ]; then
         exit 1
     fi
 
-    ORDERS=$(psql "$DATABASE_URL" -t -c 'SELECT COUNT(*) FROM orders_order;' 2>/dev/null | tr -d ' ')
+    ORDERS=$(psql "$DATABASE_URL" -t -c 'SELECT COUNT(*) FROM orders_order;' | tr -d ' ')
     echo "Orders count: ${ORDERS}"
+    if [ -z "${ORDERS}" ]; then
+        echo "ERROR: Could not query orders_order — table missing or restore failed"
+        exit 1
+    fi
 
-    PRODUCTS=$(psql "$DATABASE_URL" -t -c 'SELECT COUNT(*) FROM store_product;' 2>/dev/null | tr -d ' ')
+    PRODUCTS=$(psql "$DATABASE_URL" -t -c 'SELECT COUNT(*) FROM store_product;' | tr -d ' ')
     echo "Products count: ${PRODUCTS}"
+    if [ -z "${PRODUCTS}" ]; then
+        echo "ERROR: Could not query store_product — table missing or restore failed"
+        exit 1
+    fi
 
     echo "Restore verification completed successfully"
     exit 0

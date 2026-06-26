@@ -38,7 +38,7 @@ jobs:
 
       - name: Download latest backup from S3
         run: |
-          LATEST=$(aws s3 ls "s3://${{ secrets.BACKUP_S3_BUCKET }}/daily/" \
+          LATEST=$(aws s3 ls "s3://${{ secrets.BACKUP_S3_BUCKET }}/backups/postgres/daily/" \
             --recursive | sort | tail -n 1 | awk '{print $4}')
           echo "Latest backup: $LATEST"
           aws s3 cp "s3://${{ secrets.BACKUP_S3_BUCKET }}/$LATEST" /tmp/backup.sql.gz
