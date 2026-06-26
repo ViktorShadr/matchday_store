@@ -244,10 +244,11 @@ stateDiagram-v2
     }
 
     state "Fulfillment Status" as FS {
-        new --> reserved : stock reserved on checkout
-        reserved --> packing : staff starts packing
-        packing --> shipped2 : dispatched
-        shipped2 --> delivered2 : received
+        new --> packing : staff starts processing
+        packing --> reserved : staff marks ready for pickup
+        reserved --> delivered2 : staff issues order
+        new --> cancelled2 : order cancelled
+        packing --> cancelled2 : order cancelled
         reserved --> cancelled2 : order cancelled
         cancelled2 --> [*]
         delivered2 --> [*]
