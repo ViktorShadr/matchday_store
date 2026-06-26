@@ -1,3 +1,9 @@
+x-prometheus-multiproc: &prometheus-multiproc
+  environment:
+    PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+  volumes:
+    - prometheus_multiproc:/tmp/prometheus_multiproc
+
 services:
   nginx:
     image: nginx:1.27-alpine
@@ -25,6 +31,7 @@ services:
       start_period: 20s
 
   web:
+    <<: *prometheus-multiproc
     build:
       context: .
     restart: unless-stopped
@@ -44,6 +51,7 @@ services:
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
+      - prometheus_multiproc:/tmp/prometheus_multiproc
     healthcheck:
       test:
         [
@@ -111,6 +119,7 @@ services:
       retries: 5
 
   worker:
+    <<: *prometheus-multiproc
     build:
       context: .
     restart: unless-stopped
@@ -124,7 +133,7 @@ services:
     env_file:
       - .env
     user: "10001:10001"
-    command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "default"]
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "default", "-E"]
     depends_on:
       db:
         condition: service_healthy
@@ -132,8 +141,10 @@ services:
         condition: service_healthy
     volumes:
       - media_data:/app/media
+      - prometheus_multiproc:/tmp/prometheus_multiproc
 
   email-worker:
+    <<: *prometheus-multiproc
     build:
       context: .
     restart: unless-stopped
@@ -159,6 +170,7 @@ services:
         "email",
         "--concurrency=2",
         "--prefetch-multiplier=1",
+        "-E",
       ]
     depends_on:
       db:
@@ -169,6 +181,7 @@ services:
         condition: service_healthy
     volumes:
       - media_data:/app/media
+      - prometheus_multiproc:/tmp/prometheus_multiproc
 
   beat:
     build:
@@ -272,6 +285,7 @@ volumes:
   prometheus_data:
   loki_data:
   grafana_data:
+  prometheus_multiproc:
 
 networks:
   default:
