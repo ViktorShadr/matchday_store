@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from kombu import Queue
 
 from config.logging_utils import build_logging_config
-from config.sentry import init_sentry
 
 load_dotenv()
 
@@ -359,5 +358,3 @@ else:
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_JSON = env_bool("LOG_JSON", not DEBUG)
 LOGGING = build_logging_config(debug=DEBUG, log_level=LOG_LEVEL, json_logs=LOG_JSON)
-
-init_sentry(debug=DEBUG)

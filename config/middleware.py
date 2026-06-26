@@ -7,17 +7,6 @@ from config.logging_context import reset_request_id, set_request_id
 
 logger = logging.getLogger(__name__)
 
-try:
-    import sentry_sdk
-except Exception:  # pragma: no cover - sentry optional at runtime
-    logger.debug(
-        "sentry.sdk_unavailable",
-        extra={
-            "event": "sentry.sdk_unavailable",
-        },
-    )
-    sentry_sdk = None
-
 
 class RequestIdMiddleware:
     """Прокидывает request id в контекст логирования и в response header."""
@@ -33,8 +22,6 @@ class RequestIdMiddleware:
         request.request_id = request_id
 
         token = set_request_id(request_id)
-        if sentry_sdk is not None:
-            sentry_sdk.set_tag("request_id", request_id)
         try:
             response = self.get_response(request)
         finally:

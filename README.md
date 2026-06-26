@@ -97,7 +97,8 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 
 - Structured JSON logging
 - Request tracing with `X-Request-ID`
-- Sentry integration
+- Prometheus metrics with `/metrics` endpoint
+- Grafana dashboards with Loki log aggregation
 - Audit logging
 - Celery request propagation
 - Order notification delivery logs with task IDs, attempts, recipient snapshots, and sanitized errors
@@ -123,8 +124,9 @@ flowchart LR
     Backup[Backup Script] --> PostgreSQL
     Backup --> Media
     Backup --> S3[(S3 Object Storage)]
-    Django -. logs/errors .-> Sentry
-    Celery -. logs/errors .-> Sentry
+    Django -. metrics .-> Prometheus
+    Celery -. metrics .-> Prometheus
+    Prometheus --> Grafana
 ```
 
 The project uses a modular Django monolith architecture with explicit separation between:
@@ -202,7 +204,7 @@ Special attention was paid to:
 - transient SMTP handling,
 - queue isolation,
 - idempotent notification delivery,
-- failure visibility through logs, dashboard status, and Sentry.
+- failure visibility through logs, dashboard status, and Prometheus alerting.
 
 ---
 
@@ -215,7 +217,7 @@ Special attention was paid to:
 | Async | Celery 5.x, Redis 7 |
 | Infrastructure | Docker, Docker Compose, Nginx, Gunicorn |
 | CI/CD | GitHub Actions, GHCR |
-| Monitoring | Structured logs, Sentry, healthchecks |
+| Monitoring | Structured logs, Prometheus, Grafana, Loki, healthchecks |
 | Security | django-csp, django-ratelimit, CSRF protection |
 | Frontend | Django Templates, Bootstrap, Vanilla JS |
 | Testing | Django TestCase, TransactionTestCase |
@@ -298,7 +300,7 @@ The same identifier propagates through:
 
 - Django logs,
 - Celery tasks,
-- Sentry events.
+- Grafana (via Loki).
 
 Production logs support JSON formatting with masking of passwords, tokens, cookies, emails, and phone numbers.
 
@@ -427,7 +429,8 @@ Implemented features include:
 - request tracing with `X-Request-ID`
 - structured JSON logging
 - audit logger for business events
-- Sentry integration for Django and Celery
+- Prometheus metrics endpoint (`/metrics`)
+- Grafana dashboards with Loki log aggregation
 - Docker healthchecks
 - Celery task metadata logging
 - dashboard-visible order notification attempts
