@@ -8,14 +8,6 @@ from hashlib import sha256
 from typing import Optional
 from uuid import uuid4
 
-from config.metrics import (
-    checkout_errors_total,
-    orders_cancelled_total,
-    orders_issued_total,
-    orders_placed_total,
-    payment_status_changes_total,
-)
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
@@ -24,6 +16,13 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 
+from config.metrics import (
+    checkout_errors_total,
+    orders_cancelled_total,
+    orders_issued_total,
+    orders_placed_total,
+    payment_status_changes_total,
+)
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
 from orders.application.order_status_policy import OrderStatusPolicy
@@ -898,6 +897,7 @@ class CheckoutService(ICheckoutService):
                         if existing_payment:
                             self._log_checkout_idempotency_conflict(checkout_context, existing_payment.order_id)
                             return existing_payment.order
+                    checkout_errors_total.labels(reason="empty_cart").inc()
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
                 locked_variants = self._lock_variants_for_cart_items(cart_items)
@@ -983,18 +983,6 @@ class CheckoutService(ICheckoutService):
                 },
             )
             raise CheckoutError(unavailable_only_error)
-
-        checkout_errors_total.labels(reason="empty_cart").inc()
-        logger.warning(
-            "checkout.failed",
-            extra={
-                "event": "checkout.failed",
-                "user_id": checkout_context.user_id,
-                "cart_id": self._get_cart_id(checkout_context.cart_context.cart),
-                "reason": "empty_cart",
-            },
-        )
-        raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
 
 class OrderCancellationService:

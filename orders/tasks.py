@@ -3,8 +3,6 @@ import re
 from email.utils import parseaddr
 
 from celery import shared_task
-
-from config.metrics import notifications_total
 from django.conf import settings
 from django.core.mail import send_mail
 from django.urls import reverse
@@ -15,6 +13,7 @@ from config.email_delivery import (
     build_email_delivery_log_extra,
     is_permanent_email_delivery_error,
 )
+from config.metrics import notifications_total
 from orders.models import Order, OrderNotificationLog
 from orders.notification_logs import OrderNotificationLogService
 from store.site_contacts import format_business_days_label
