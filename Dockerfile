@@ -13,7 +13,7 @@ COPY pyproject.toml poetry.lock ./
 
 # Install pinned poetry, export deps, install them to /install prefix
 RUN pip install --no-cache-dir "poetry==2.3.2" "poetry-plugin-export==1.9.0" \
-    && poetry export --without-hashes --without dev -f requirements.txt -o requirements.txt \
+    && poetry export --without-hashes --without lint -f requirements.txt -o requirements.txt \
     && pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: production image
