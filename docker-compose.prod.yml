@@ -32,8 +32,14 @@ services:
 
   web:
     <<: *prometheus-multiproc
-    image: ghcr.io/viktorshadr/matchday_store:latest
+    image: ghcr.io/viktorshadr/matchday_store:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     logging:
       driver: json-file
       options:
@@ -63,6 +69,10 @@ services:
   db:
     image: postgres:16.13
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     logging:
       driver: json-file
       options:
@@ -87,6 +97,10 @@ services:
   redis:
     image: redis:7.4.7
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     logging:
       driver: json-file
       options:
@@ -101,8 +115,12 @@ services:
 
   worker:
     <<: *prometheus-multiproc
-    image: ghcr.io/viktorshadr/matchday_store:latest
+    image: ghcr.io/viktorshadr/matchday_store:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     stop_signal: SIGTERM
     stop_grace_period: 30s
     logging:
@@ -125,8 +143,12 @@ services:
 
   email-worker:
     <<: *prometheus-multiproc
-    image: ghcr.io/viktorshadr/matchday_store:latest
+    image: ghcr.io/viktorshadr/matchday_store:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     stop_signal: SIGTERM
     stop_grace_period: 30s
     logging:
@@ -161,8 +183,12 @@ services:
       - prometheus_multiproc:/tmp/prometheus_multiproc
 
   beat:
-    image: ghcr.io/viktorshadr/matchday_store:latest
+    image: ghcr.io/viktorshadr/matchday_store:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     logging:
       driver: json-file
       options:

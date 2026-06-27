@@ -18,6 +18,7 @@ concurrency:
 env:
   PYTHON_VERSION: "3.12"
   POETRY_VERSION: "2.3.2"
+  PREVIOUS_SHA: ${{ github.event.before }}
 
 jobs:
   ci:
@@ -138,7 +139,10 @@ jobs:
 
       - name: Normalize image name
         id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/matchday_store:latest" >> "$GITHUB_OUTPUT"
+        run: |
+          BASE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/matchday_store"
+          echo "name=${BASE}:latest" >> "$GITHUB_OUTPUT"
+          echo "name_sha=${BASE}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -156,7 +160,9 @@ jobs:
         with:
           context: .
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ${{ steps.image.outputs.name }}
+          tags: |
+            ${{ steps.image.outputs.name }}
+            ${{ steps.image.outputs.name_sha }}
 
   deploy:
     name: Deploy to production server
@@ -177,6 +183,6 @@ jobs:
           script: |
             cd /opt/matchday_store
             docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" -p "${{ secrets.GHCR_TOKEN }}"
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
-            docker image prune -f
+            IMAGE_TAG="${{ github.sha }}" docker compose -f docker-compose.prod.yml pull
+            IMAGE_TAG="${{ github.sha }}" docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f --filter "until=168h"
