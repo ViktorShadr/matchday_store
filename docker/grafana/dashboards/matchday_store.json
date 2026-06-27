@@ -1,0 +1,126 @@
+{
+  "title": "Matchday Store",
+  "uid": "matchday-store",
+  "schemaVersion": 36,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Orders placed (rate/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(orders_placed_total[1m]) * 60",
+          "legendFormat": "orders/min"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Orders cancelled (rate/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(orders_cancelled_total[1m]) * 60",
+          "legendFormat": "{{ reason }}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Checkout errors (rate/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(checkout_errors_total[1m]) * 60",
+          "legendFormat": "{{ reason }}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Email notifications sent vs failed",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(order_notifications_total[5m]) * 60",
+          "legendFormat": "{{ event }} / {{ status }}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "HTTP request duration p95",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le, view))",
+          "legendFormat": "{{ view }}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "HTTP 5xx errors",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 8, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(django_http_responses_total_by_status_total{status=~\"5..\"}[5m])",
+          "legendFormat": "HTTP {{ status }}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "DB connections",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 12, "w": 8, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "pg_stat_activity_count",
+          "legendFormat": "{{ state }}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Redis memory used (MB)",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 12, "w": 8, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_memory_used_bytes / 1024 / 1024",
+          "legendFormat": "memory MB"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Application logs (errors)",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{service=~\"web|worker|email-worker\"} |= \"ERROR\"",
+          "legendFormat": ""
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,9 @@
+x-prometheus-multiproc: &prometheus-multiproc
+  environment:
+    PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+  volumes:
+    - prometheus_multiproc:/tmp/prometheus_multiproc
+
 services:
   nginx:
     image: nginx:1.27-alpine
@@ -25,6 +31,7 @@ services:
       start_period: 20s
 
   web:
+    <<: *prometheus-multiproc
     build:
       context: .
     restart: unless-stopped
@@ -44,6 +51,7 @@ services:
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
+      - prometheus_multiproc:/tmp/prometheus_multiproc
     healthcheck:
       test:
         [
@@ -111,6 +119,7 @@ services:
       retries: 5
 
   worker:
+    <<: *prometheus-multiproc
     build:
       context: .
     restart: unless-stopped
@@ -124,7 +133,7 @@ services:
     env_file:
       - .env
     user: "10001:10001"
-    command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "default"]
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "default", "-E"]
     depends_on:
       db:
         condition: service_healthy
@@ -132,8 +141,10 @@ services:
         condition: service_healthy
     volumes:
       - media_data:/app/media
+      - prometheus_multiproc:/tmp/prometheus_multiproc
 
   email-worker:
+    <<: *prometheus-multiproc
     build:
       context: .
     restart: unless-stopped
@@ -159,6 +170,7 @@ services:
         "email",
         "--concurrency=2",
         "--prefetch-multiplier=1",
+        "-E",
       ]
     depends_on:
       db:
@@ -169,6 +181,7 @@ services:
         condition: service_healthy
     volumes:
       - media_data:/app/media
+      - prometheus_multiproc:/tmp/prometheus_multiproc
 
   beat:
     build:
@@ -187,10 +200,92 @@ services:
       redis:
         condition: service_healthy
 
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?sslmode=disable"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  celery-exporter:
+    image: danihodovic/celery-exporter:latest
+    restart: unless-stopped
+    environment:
+      CE_BROKER_URL: "${CELERY_BROKER_URL}"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+
+  loki:
+    image: grafana/loki:3.1.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./docker/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/loki.yml
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    restart: unless-stopped
+    volumes:
+      - ./docker/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/promtail.yml
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+
 volumes:
   postgres_data:
   static_data:
   media_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
+  prometheus_multiproc:
 
 networks:
   default:
