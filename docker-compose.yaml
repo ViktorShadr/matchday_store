@@ -219,7 +219,7 @@ services:
         condition: service_healthy
 
   celery-exporter:
-    image: danihodovic/celery-exporter:0.10.6
+    image: danihodovic/celery-exporter:latest
     restart: unless-stopped
     environment:
       CE_BROKER_URL: "${CELERY_BROKER_URL}"
