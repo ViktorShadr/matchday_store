@@ -16,6 +16,12 @@ from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 
+from config.metrics import (
+    checkout_errors_total,
+    orders_cancelled_total,
+    orders_issued_total,
+    orders_placed_total,
+)
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
 from orders.application.order_status_policy import OrderStatusPolicy
@@ -914,6 +920,7 @@ class CheckoutService(ICheckoutService):
                         if existing_payment:
                             self._log_checkout_idempotency_conflict(checkout_context, existing_payment.order_id)
                             return existing_payment.order
+                    checkout_errors_total.labels(reason="empty_cart").inc()
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
                 locked_variants = self._lock_variants_for_cart_items(cart_items)
@@ -968,6 +975,7 @@ class CheckoutService(ICheckoutService):
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
 
         if order:
+            orders_placed_total.inc()
             logger.info(
                 "order.created",
                 extra={
@@ -987,6 +995,7 @@ class CheckoutService(ICheckoutService):
             return order
 
         if unavailable_only_error:
+            checkout_errors_total.labels(reason="stock_unavailable").inc()
             logger.warning(
                 "checkout.failed",
                 extra={
@@ -997,17 +1006,6 @@ class CheckoutService(ICheckoutService):
                 },
             )
             raise CheckoutError(unavailable_only_error)
-
-        logger.warning(
-            "checkout.failed",
-            extra={
-                "event": "checkout.failed",
-                "user_id": checkout_context.user_id,
-                "cart_id": self._get_cart_id(checkout_context.cart_context.cart),
-                "reason": "empty_cart",
-            },
-        )
-        raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
 
 class OrderCancellationService:
@@ -1169,6 +1167,8 @@ class OrderCancellationService:
                 to_value=order.payment_status,
                 changed_by=actor,
             )
+            actor_type = "staff" if (actor and getattr(actor, "is_staff", False)) else "customer"
+            orders_cancelled_total.labels(reason=actor_type).inc()
             OrderNotificationService.schedule_cancelled(order.id)
             logger.info(
                 "order.cancelled",
@@ -1267,6 +1267,7 @@ class OrderIssueService:
                 OrderStockReservationService.issue_variant(variant, order_item.quantity)
                 issued_items_count += order_item.quantity
 
+            orders_issued_total.inc()
             logger.info(
                 "order.stock_issued",
                 extra={
