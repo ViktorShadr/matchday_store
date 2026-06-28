@@ -49,8 +49,7 @@ class UserActivityMiddleware:
         user = getattr(request, "user", None)
         user_id = user.id if user and user.is_authenticated else None
 
-        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
-        ip = (forwarded_for.split(",")[0].strip() if forwarded_for else None) or request.META.get("REMOTE_ADDR", "")
+        ip = request.META.get("HTTP_X_REAL_IP") or request.META.get("REMOTE_ADDR", "")
 
         activity_logger.info(
             "http.request",
