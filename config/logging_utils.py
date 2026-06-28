@@ -178,5 +178,10 @@ def build_logging_config(*, debug: bool, log_level: str, json_logs: bool) -> dic
                 "level": "INFO",
                 "propagate": False,
             },
+            "activity": {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            },
         },
     }
