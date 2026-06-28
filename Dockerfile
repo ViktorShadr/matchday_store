@@ -11,24 +11,26 @@ RUN apt-get update \
 # Copy only dependency files first for layer caching
 COPY pyproject.toml poetry.lock ./
 
-# Install pinned poetry, export deps, install them to /install prefix
+# Install pinned poetry, export deps, install them into an isolated venv
 RUN pip install --no-cache-dir "poetry==2.3.2" "poetry-plugin-export==1.9.0" \
     && poetry export --without-hashes --without lint -f requirements.txt -o requirements.txt \
-    && pip install --no-cache-dir --prefix=/install -r requirements.txt
+    && python -m venv /venv \
+    && /venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: production image
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PATH="/venv/bin:$PATH"
 
 # Runtime-only system dependency
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed Python packages from builder
-COPY --from=builder /install /usr/local
+# Copy only the venv from builder — no poetry, no build tools
+COPY --from=builder /venv /venv
 
 WORKDIR /app
 
