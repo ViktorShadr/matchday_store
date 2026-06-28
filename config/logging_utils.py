@@ -32,8 +32,14 @@ def _mask_email_local_part(match: re.Match) -> str:
     return f"{first}***@{domain}"
 
 
+_OCTET = r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
+_IPV4_RE = re.compile(rf"^(?:{_OCTET}\.)" + r"{3}" + rf"{_OCTET}$")
+
+
 def _mask_phone_number(match: re.Match) -> str:
     value = match.group(1)
+    if _IPV4_RE.match(value):
+        return value
     digits = [ch for ch in value if ch.isdigit()]
     if len(digits) < 8:
         return value
