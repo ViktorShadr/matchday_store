@@ -288,6 +288,11 @@ volumes:
   loki_data:
   grafana_data:
   prometheus_multiproc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "mode=01777"
 
 networks:
   default:
