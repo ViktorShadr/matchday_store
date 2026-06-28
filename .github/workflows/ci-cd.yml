@@ -175,14 +175,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Copy docker-compose.prod.yml to server
+      - name: Copy config files to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           port: ${{ secrets.SERVER_PORT }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: docker-compose.prod.yml
+          source: "docker-compose.prod.yml,docker/prometheus,docker/loki,docker/promtail,docker/grafana"
           target: /opt/matchday_store
 
       - name: Deploy over SSH
