@@ -176,6 +176,16 @@ class LoggingPipelineTest(SimpleTestCase):
         self.assertIn("exception", payload)
         self.assertIn("RuntimeError: boom", payload["exception"])
 
+    def test_ipv4_address_is_not_masked(self):
+        token = set_request_id("req-ip")
+        self.addCleanup(reset_request_id, token)
+        logger, stream = self._build_json_logger("config.tests.ip_not_masked")
+
+        logger.info("http.request", extra={"event": "http.request", "ip": "192.168.1.100"})
+        payload = json.loads(stream.getvalue().strip())
+
+        self.assertEqual(payload["extra"]["ip"], "192.168.1.100")
+
 
 class CeleryRequestIdPropagationTest(SimpleTestCase):
     def test_publish_signal_injects_request_id_into_headers(self):
