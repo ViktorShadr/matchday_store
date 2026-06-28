@@ -1079,7 +1079,9 @@ class OrderCancellationService:
             return False
         return True
 
-    def cancel_order(self, order_id: int, user_id: Optional[int] = None, actor=None, reason: Optional[str] = None) -> Order:
+    def cancel_order(
+        self, order_id: int, user_id: Optional[int] = None, actor=None, reason: Optional[str] = None
+    ) -> Order:
         """
         Отменить заказ и снять складской резерв.
 
