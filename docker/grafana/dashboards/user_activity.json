@@ -13,7 +13,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "sum(rate({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" [1m])) by (status_code)",
+          "expr": "sum by (status_code) (rate({service=\"web\"} | json | event=\"http.request\" [1m]))",
           "legendFormat": "HTTP {{ status_code }}"
         }
       ]
@@ -26,7 +26,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "count(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" [15m]) by (ip))",
+          "expr": "count(sum by (ip) (count_over_time({service=\"web\"} | json | event=\"http.request\" [15m])))",
           "legendFormat": "IPs за 15 мин"
         }
       ]
@@ -39,7 +39,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "count(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | user_id != \"null\" [15m]) by (user_id))",
+          "expr": "count(sum by (user_id) (count_over_time({service=\"web\"} | json | event=\"http.request\" | user_id != \"\" [15m])))",
           "legendFormat": "users за 15 мин"
         }
       ]
@@ -64,7 +64,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "sum(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | status_code >= 500 [1h]))",
+          "expr": "sum(count_over_time({service=\"web\"} | json | event=\"http.request\" | status_code >= 500 [1h]))",
           "legendFormat": "5xx за 1h"
         }
       ]
@@ -77,7 +77,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "sum(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | status_code >= 400 | status_code < 500 [1h]))",
+          "expr": "sum(count_over_time({service=\"web\"} | json | event=\"http.request\" | status_code >= 400 | status_code < 500 [1h]))",
           "legendFormat": "4xx за 1h"
         }
       ]
@@ -98,7 +98,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "{container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | method =~ \"GET|POST|PUT|DELETE\"",
+          "expr": "{service=\"web\"} | json | event=\"http.request\"",
           "legendFormat": ""
         }
       ]
@@ -111,7 +111,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "topk(8, sum by (path) (rate({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | method=\"GET\" [5m])))",
+          "expr": "topk(8, sum by (path) (rate({service=\"web\"} | json | event=\"http.request\" | method=\"GET\" [5m])))",
           "legendFormat": "{{ path }}"
         }
       ]
@@ -124,7 +124,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "topk(5, sum by (ip) (rate({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" [5m])))",
+          "expr": "topk(5, sum by (ip) (rate({service=\"web\"} | json | event=\"http.request\" [5m])))",
           "legendFormat": "{{ ip }}"
         }
       ]
@@ -143,7 +143,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "{container=~\"/matchday_store-web-1|/matchday_store-worker-1|/matchday_store-email-worker-1\"} | json | event =~ \"order\\\\..+|cart\\\\..+|payment\\\\..+\"",
+          "expr": "{service=~\"web|worker|email-worker\"} | json | event=~\"order\\..+|cart\\..+|payment\\..+\"",
           "legendFormat": ""
         }
       ]
@@ -162,7 +162,7 @@
       "targets": [
         {
           "datasource": "Loki",
-          "expr": "{container=\"/matchday_store-web-1\"} | json | event =~ \"security\\\\..+\" or status_code >= 400",
+          "expr": "{service=\"web\"} | json | event=~\"security\\..+\"",
           "legendFormat": ""
         }
       ]
