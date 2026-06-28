@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from kombu import Queue
 
 from config.logging_utils import build_logging_config
-from config.sentry import init_sentry
 
 load_dotenv()
 
@@ -49,6 +48,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 INSTALLED_APPS = [
+    "django_prometheus",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -65,6 +65,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "config.middleware.RequestIdMiddleware",
     "csp.middleware.CSPMiddleware",
@@ -73,6 +74,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 if not METRIKA_ACTIVE:
@@ -236,7 +238,7 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = os.getenv("SECURE_REFERRER_POLICY", "same-origin")
 SECURE_CROSS_ORIGIN_OPENER_POLICY = os.getenv("SECURE_CROSS_ORIGIN_OPENER_POLICY", "same-origin")
-SECURE_REDIRECT_EXEMPT = [r"^healthz/$"]
+SECURE_REDIRECT_EXEMPT = [r"^healthz/$", r"^metrics$"]
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", False)
 USE_X_FORWARDED_HOST = env_bool("USE_X_FORWARDED_HOST", False)
 if env_bool("USE_X_FORWARDED_PROTO", False):
@@ -359,5 +361,3 @@ else:
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_JSON = env_bool("LOG_JSON", not DEBUG)
 LOGGING = build_logging_config(debug=DEBUG, log_level=LOG_LEVEL, json_logs=LOG_JSON)
-
-init_sentry(debug=DEBUG)

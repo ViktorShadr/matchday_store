@@ -51,8 +51,6 @@ class EmailConfirmationService:
     @classmethod
     def is_token_expired(cls, user: User) -> bool:
         if not user.email_token_created_at:
-            # Rollout-safe fallback for legacy tokens issued before
-            # `email_token_created_at` was introduced.
             return False
         return timezone.now() >= user.email_token_created_at + cls.token_ttl()
 

@@ -97,7 +97,8 @@ The main engineering focus is not CRUD functionality, but consistency, reliabili
 
 - Structured JSON logging
 - Request tracing with `X-Request-ID`
-- Sentry integration
+- Prometheus metrics with `/metrics` endpoint (added in `feat/django-prometheus`)
+- Grafana dashboards with Loki log aggregation (added in `feat/monitoring-stack`)
 - Audit logging
 - Celery request propagation
 - Order notification delivery logs with task IDs, attempts, recipient snapshots, and sanitized errors
@@ -123,9 +124,175 @@ flowchart LR
     Backup[Backup Script] --> PostgreSQL
     Backup --> Media
     Backup --> S3[(S3 Object Storage)]
-    Django -. logs/errors .-> Sentry
-    Celery -. logs/errors .-> Sentry
+    Django -. metrics .-> Prometheus
+    Celery -. metrics .-> Prometheus
+    Prometheus --> Grafana
 ```
+
+## Data Model
+
+```mermaid
+erDiagram
+    User {
+        int id
+        string email
+        string phone
+        bool is_email_confirmed
+    }
+    Category {
+        int id
+        string name
+        string slug
+    }
+    Product {
+        int id
+        string name
+        string sku
+        decimal price
+        bool is_published
+    }
+    ProductVariant {
+        int id
+        string size
+        string color
+        int quantity
+        int reserved_quantity
+    }
+    ProductImage {
+        int id
+        string image
+        bool is_primary
+    }
+    Cart {
+        int id
+        string session_key
+    }
+    CartItem {
+        int id
+        int quantity
+    }
+    Order {
+        int id
+        string number
+        string status
+        string payment_status
+        string fulfillment_status
+        decimal total_price
+    }
+    OrderItem {
+        int id
+        int quantity
+        decimal price_snapshot
+        string product_name_snapshot
+    }
+    OrderNotificationLog {
+        int id
+        string event_key
+        string recipient_type
+        string status
+        int attempts_count
+    }
+    Payment {
+        int id
+        string status
+        decimal amount
+    }
+
+    User ||--o{ Order : places
+    User ||--o| Cart : owns
+    Category ||--o{ Product : contains
+    Product ||--o{ ProductVariant : has
+    Product ||--o{ ProductImage : has
+    ProductVariant }o--|| ProductImage : uses
+    Cart ||--o{ CartItem : contains
+    CartItem }o--|| ProductVariant : references
+    Order ||--o{ OrderItem : contains
+    OrderItem }o--|| ProductVariant : references
+    Order ||--o{ OrderNotificationLog : triggers
+    Order ||--o| Payment : has
+```
+
+---
+
+## Order Lifecycle
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> draft : checkout submit
+
+    state "Order Status" as OS {
+        draft --> placed : confirm
+        placed --> awaiting_payment : manual
+        awaiting_payment --> paid : payment confirmed
+        paid --> processing : staff picks up
+        processing --> shipped : dispatched
+        shipped --> delivered : received
+        placed --> cancelled : timeout / staff
+        awaiting_payment --> cancelled : timeout / staff
+        paid --> refunded : refund issued
+        cancelled --> [*]
+        delivered --> [*]
+        refunded --> [*]
+    }
+
+    state "Payment Status" as PS {
+        pending --> succeeded : payment confirmed
+        pending --> failed : payment rejected
+        succeeded --> refunded2 : refund
+        failed --> [*]
+        refunded2 --> [*]
+    }
+
+    state "Fulfillment Status" as FS {
+        new --> packing : staff starts processing
+        packing --> reserved : staff marks ready for pickup
+        reserved --> delivered2 : staff issues order
+        new --> cancelled2 : order cancelled
+        packing --> cancelled2 : order cancelled
+        reserved --> cancelled2 : order cancelled
+        cancelled2 --> [*]
+        delivered2 --> [*]
+    }
+```
+
+---
+
+## Notification Outbox Flow
+
+```mermaid
+sequenceDiagram
+    participant User as Customer / Staff
+    participant View as Django View
+    participant DB as PostgreSQL
+    participant Queue as Redis / Celery
+    participant SMTP as SMTP Provider
+
+    User->>View: Place order / change status
+    View->>DB: Create Order
+    View->>DB: Create OrderNotificationLog (status=pending)
+    View->>Queue: Enqueue email task
+
+    Queue->>DB: Claim log record (status=sending)
+    Queue->>SMTP: Send email
+
+    alt Success
+        SMTP-->>Queue: OK
+        Queue->>DB: Update log (status=sent, sent_at=now)
+    else Transient failure
+        SMTP-->>Queue: Error
+        Queue->>DB: Update log (attempts+1, last_error)
+        Queue->>Queue: Retry with exponential backoff
+    else Permanent failure
+        SMTP-->>Queue: Permanent rejection
+        Queue->>DB: Update log (status=failed)
+    end
+
+    Note over DB: Staff can see delivery status<br/>in dashboard and trigger manual resend
+```
+
+---
 
 The project uses a modular Django monolith architecture with explicit separation between:
 
@@ -202,7 +369,7 @@ Special attention was paid to:
 - transient SMTP handling,
 - queue isolation,
 - idempotent notification delivery,
-- failure visibility through logs, dashboard status, and Sentry.
+- failure visibility through logs, dashboard status, and Prometheus alerting.
 
 ---
 
@@ -215,7 +382,7 @@ Special attention was paid to:
 | Async | Celery 5.x, Redis 7 |
 | Infrastructure | Docker, Docker Compose, Nginx, Gunicorn |
 | CI/CD | GitHub Actions, GHCR |
-| Monitoring | Structured logs, Sentry, healthchecks |
+| Monitoring | Structured logs, Prometheus, Grafana, Loki, healthchecks |
 | Security | django-csp, django-ratelimit, CSRF protection |
 | Frontend | Django Templates, Bootstrap, Vanilla JS |
 | Testing | Django TestCase, TransactionTestCase |
@@ -298,7 +465,7 @@ The same identifier propagates through:
 
 - Django logs,
 - Celery tasks,
-- Sentry events.
+- Grafana (via Loki).
 
 Production logs support JSON formatting with masking of passwords, tokens, cookies, emails, and phone numbers.
 
@@ -361,20 +528,25 @@ The repository includes:
 
 # Checkout & Stock Flow
 
-```text
-Cart
-   ↓
-Checkout Submit
-   ↓
-Order + Payment
-   ↓
-Stock Reservation
-   ↓
-Staff Processing
-   ↓
-Order Issued
-   ↓
-Physical Stock Reduced
+```mermaid
+flowchart TD
+    A([Customer adds to cart]) --> B[Cart]
+    B --> C[Checkout submit]
+    C --> D{Idempotency\ncheck}
+    D -- duplicate --> E([Return existing order])
+    D -- new --> F[atomic transaction]
+    F --> G[Reserve stock\nreserved_quantity += N]
+    F --> H[Create Order + OrderItem]
+    F --> I[Create Payment record]
+    G & H & I --> J[Enqueue email notification]
+    J --> K([Order placed])
+
+    K --> L{Staff action}
+    L -- cancel --> M[Release reservation\nreserved_quantity -= N]
+    L -- issue --> N[Consume stock\nquantity -= N\nreserved_quantity -= N]
+
+    M --> O([Order cancelled])
+    N --> P([Order issued])
 ```
 
 Stock lifecycle:
@@ -427,7 +599,8 @@ Implemented features include:
 - request tracing with `X-Request-ID`
 - structured JSON logging
 - audit logger for business events
-- Sentry integration for Django and Celery
+- Prometheus metrics endpoint (`/metrics`)
+- Grafana dashboards with Loki log aggregation
 - Docker healthchecks
 - Celery task metadata logging
 - dashboard-visible order notification attempts

@@ -1,3 +1,4 @@
+from config.metrics import payment_status_changes_total
 from orders.models import Order
 from payments.models import Payment
 
@@ -64,5 +65,6 @@ class PaymentStatusSyncService:
         if order.payment_status != payment_status:
             order.payment_status = payment_status
             order.save(update_fields=["payment_status", "updated_at"])
+            payment_status_changes_total.labels(to_status=payment_status).inc()
 
         return payment_status

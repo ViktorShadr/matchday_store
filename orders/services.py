@@ -11,11 +11,17 @@ from uuid import uuid4
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
-from django.db.models import F, Q
-from django.db.models.functions import Coalesce
+from django.db.models import F, IntegerField, Q, Value
+from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 
+from config.metrics import (
+    checkout_errors_total,
+    orders_cancelled_total,
+    orders_issued_total,
+    orders_placed_total,
+)
 from orders.application.checkout_context import CheckoutContext
 from orders.application.order_notification_service import OrderNotificationService
 from orders.application.order_status_policy import OrderStatusPolicy
@@ -328,6 +334,17 @@ class OrderStockReservationService:
 
     @staticmethod
     def release_variant_reservation(variant: ProductVariant, quantity: int) -> None:
+        if variant.reserved_quantity < quantity:
+            logger.warning(
+                "stock.invariant_violation_on_release",
+                extra={
+                    "event": "stock.invariant_violation_on_release",
+                    "product_variant_id": variant.pk,
+                    "reserved_quantity": variant.reserved_quantity,
+                    "release_quantity": quantity,
+                },
+            )
+
         updated = ProductVariant.objects.filter(
             pk=variant.pk,
             reserved_quantity__gte=quantity,
@@ -336,11 +353,24 @@ class OrderStockReservationService:
             updated_at=timezone.now(),
         )
         if updated != 1:
-            raise OrderCancellationError(
-                f'Невозможно снять резерв по товару "{variant.product.name}": '
-                "зарезервировано меньше, чем требуется для отмены."
+            # Инвариант нарушен (ручное изменение склада): принудительно обнуляем резерв
+            ProductVariant.objects.filter(pk=variant.pk).update(
+                reserved_quantity=Greatest(
+                    F("reserved_quantity") - quantity,
+                    Value(0, output_field=IntegerField()),
+                ),
+                updated_at=timezone.now(),
             )
-        variant.reserved_quantity -= quantity
+            logger.error(
+                "stock.forced_reservation_release",
+                extra={
+                    "event": "stock.forced_reservation_release",
+                    "product_variant_id": variant.pk,
+                    "release_quantity": quantity,
+                },
+            )
+
+        variant.reserved_quantity = max(0, variant.reserved_quantity - quantity)
 
     @staticmethod
     def issue_variant(variant: ProductVariant, quantity: int) -> None:
@@ -890,6 +920,7 @@ class CheckoutService(ICheckoutService):
                         if existing_payment:
                             self._log_checkout_idempotency_conflict(checkout_context, existing_payment.order_id)
                             return existing_payment.order
+                    checkout_errors_total.labels(reason="empty_cart").inc()
                     raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
                 locked_variants = self._lock_variants_for_cart_items(cart_items)
@@ -944,6 +975,7 @@ class CheckoutService(ICheckoutService):
             raise CheckoutError("Заказ уже обрабатывается. Обновите страницу и проверьте статус заказа.") from exc
 
         if order:
+            orders_placed_total.inc()
             logger.info(
                 "order.created",
                 extra={
@@ -963,6 +995,7 @@ class CheckoutService(ICheckoutService):
             return order
 
         if unavailable_only_error:
+            checkout_errors_total.labels(reason="stock_unavailable").inc()
             logger.warning(
                 "checkout.failed",
                 extra={
@@ -973,17 +1006,6 @@ class CheckoutService(ICheckoutService):
                 },
             )
             raise CheckoutError(unavailable_only_error)
-
-        logger.warning(
-            "checkout.failed",
-            extra={
-                "event": "checkout.failed",
-                "user_id": checkout_context.user_id,
-                "cart_id": self._get_cart_id(checkout_context.cart_context.cart),
-                "reason": "empty_cart",
-            },
-        )
-        raise CheckoutError("Корзина пуста. Добавьте товары перед оформлением заказа.")
 
 
 class OrderCancellationService:
@@ -1057,7 +1079,9 @@ class OrderCancellationService:
             return False
         return True
 
-    def cancel_order(self, order_id: int, user_id: Optional[int] = None, actor=None) -> Order:
+    def cancel_order(
+        self, order_id: int, user_id: Optional[int] = None, actor=None, reason: Optional[str] = None
+    ) -> Order:
         """
         Отменить заказ и снять складской резерв.
 
@@ -1145,6 +1169,13 @@ class OrderCancellationService:
                 to_value=order.payment_status,
                 changed_by=actor,
             )
+            if reason:
+                actor_type = reason
+            elif actor and getattr(actor, "is_staff", False):
+                actor_type = "staff"
+            else:
+                actor_type = "customer"
+            orders_cancelled_total.labels(reason=actor_type).inc()
             OrderNotificationService.schedule_cancelled(order.id)
             logger.info(
                 "order.cancelled",
@@ -1243,6 +1274,7 @@ class OrderIssueService:
                 OrderStockReservationService.issue_variant(variant, order_item.quantity)
                 issued_items_count += order_item.quantity
 
+            orders_issued_total.inc()
             logger.info(
                 "order.stock_issued",
                 extra={
@@ -1333,7 +1365,7 @@ class OrderAutoCancellationService:
                 continue
 
             try:
-                self.cancellation_service.cancel_order(order_id=order.pk)
+                self.cancellation_service.cancel_order(order_id=order.pk, reason="expired")
             except OrderCancellationError as exc:
                 result["failed"] += 1
                 logger.warning(
