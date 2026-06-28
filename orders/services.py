@@ -1079,7 +1079,7 @@ class OrderCancellationService:
             return False
         return True
 
-    def cancel_order(self, order_id: int, user_id: Optional[int] = None, actor=None) -> Order:
+    def cancel_order(self, order_id: int, user_id: Optional[int] = None, actor=None, reason: Optional[str] = None) -> Order:
         """
         Отменить заказ и снять складской резерв.
 
@@ -1167,7 +1167,12 @@ class OrderCancellationService:
                 to_value=order.payment_status,
                 changed_by=actor,
             )
-            actor_type = "staff" if (actor and getattr(actor, "is_staff", False)) else "customer"
+            if reason:
+                actor_type = reason
+            elif actor and getattr(actor, "is_staff", False):
+                actor_type = "staff"
+            else:
+                actor_type = "customer"
             orders_cancelled_total.labels(reason=actor_type).inc()
             OrderNotificationService.schedule_cancelled(order.id)
             logger.info(
@@ -1358,7 +1363,7 @@ class OrderAutoCancellationService:
                 continue
 
             try:
-                self.cancellation_service.cancel_order(order_id=order.pk)
+                self.cancellation_service.cancel_order(order_id=order.pk, reason="expired")
             except OrderCancellationError as exc:
                 result["failed"] += 1
                 logger.warning(
