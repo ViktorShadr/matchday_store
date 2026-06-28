@@ -181,7 +181,7 @@ class LoggingPipelineTest(SimpleTestCase):
         logger.info("http.request", extra={"event": "http.request", "ip": "192.168.1.100"})
         payload = json.loads(stream.getvalue().strip())
 
-        self.assertEqual(payload["extra"]["ip"], "192.168.1.100")
+        self.assertEqual(payload["ip"], "192.168.1.100")
 
 
 class CeleryRequestIdPropagationTest(SimpleTestCase):
