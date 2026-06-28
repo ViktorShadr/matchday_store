@@ -183,6 +183,16 @@ class LoggingPipelineTest(SimpleTestCase):
 
         self.assertEqual(payload["ip"], "192.168.1.100")
 
+    def test_invalid_ipv4_octets_are_still_masked(self):
+        token = set_request_id("req-ip-invalid")
+        self.addCleanup(reset_request_id, token)
+        logger, stream = self._build_json_logger("config.tests.ip_invalid_masked")
+
+        logger.info("suspicious", extra={"event": "suspicious", "ip": "123.456.789.012"})
+        payload = json.loads(stream.getvalue().strip())
+
+        self.assertNotEqual(payload["ip"], "123.456.789.012")
+
 
 class CeleryRequestIdPropagationTest(SimpleTestCase):
     def test_publish_signal_injects_request_id_into_headers(self):
