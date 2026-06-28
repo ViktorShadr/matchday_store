@@ -1,0 +1,171 @@
+{
+  "title": "Matchday Store — User Activity",
+  "uid": "matchday-user-activity",
+  "schemaVersion": 36,
+  "refresh": "15s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Запросы в минуту (трафик на сайте)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 16, "h": 6 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(rate({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" [1m])) by (status_code)",
+          "legendFormat": "HTTP {{ status_code }}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Уникальных IP сейчас",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 3 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "count(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" [15m]) by (ip))",
+          "legendFormat": "IPs за 15 мин"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Авторизованных пользователей",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 3 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "count(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | user_id != \"null\" [15m]) by (user_id))",
+          "legendFormat": "users за 15 мин"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Ошибок за час",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 3, "w": 4, "h": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | status_code >= 500 [1h]))",
+          "legendFormat": "5xx за 1h"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "4xx за час",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 3, "w": 4, "h": 3 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(count_over_time({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | status_code >= 400 | status_code < 500 [1h]))",
+          "legendFormat": "4xx за 1h"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Лог активности пользователей",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 6, "w": 24, "h": 10 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": false,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | method =~ \"GET|POST|PUT|DELETE\"",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Топ страниц по посещаемости",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "topk(8, sum by (path) (rate({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" | method=\"GET\" [5m])))",
+          "legendFormat": "{{ path }}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Топ IP-адресов",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "topk(5, sum by (ip) (rate({container=\"/matchday_store-web-1\"} | json | event=\"http.request\" [5m])))",
+          "legendFormat": "{{ ip }}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Бизнес-события (заказы, корзина, платежи)",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 8 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{container=~\"/matchday_store-web-1|/matchday_store-worker-1|/matchday_store-email-worker-1\"} | json | event =~ \"order\\\\..+|cart\\\\..+|payment\\\\..+\"",
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "События безопасности",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 31, "w": 24, "h": 6 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{container=\"/matchday_store-web-1\"} | json | event =~ \"security\\\\..+\" or status_code >= 400",
+          "legendFormat": ""
+        }
+      ]
+    }
+  ]
+}

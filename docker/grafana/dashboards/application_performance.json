@@ -1,0 +1,218 @@
+{
+  "title": "Matchday Store — Application Performance",
+  "uid": "matchday-app-perf",
+  "schemaVersion": 36,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP requests/sec by status class",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"2..\"}[1m]))",
+          "legendFormat": "2xx"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"4..\"}[1m]))",
+          "legendFormat": "4xx"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[1m]))",
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP latency p50 / p95 / p99",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.50, sum(rate(django_http_requests_latency_including_middlewares_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum(rate(django_http_requests_latency_including_middlewares_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.99, sum(rate(django_http_requests_latency_including_middlewares_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Slowest views — latency p95",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 7, "w": 16, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "topk(5, histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le, view)))",
+          "legendFormat": "{{ view }}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "4xx errors/sec",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 7, "w": 8, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "fixedColor": "orange", "mode": "fixed" } }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (status) (rate(django_http_responses_total_by_status_total{status=~\"4..\"}[5m]))",
+          "legendFormat": "HTTP {{ status }}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Checkout duration p50 / p95",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 8, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.50, sum(rate(checkout_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum(rate(checkout_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Checkout errors by reason",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 14, "w": 8, "h": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "fixedColor": "red", "mode": "fixed" } }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (reason) (rate(checkout_errors_total[5m])) * 60",
+          "legendFormat": "{{ reason }}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Payment status changes",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 7 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (to_status) (rate(payment_status_changes_total[5m])) * 60",
+          "legendFormat": "→ {{ to_status }}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Orders placed / issued / cancelled (rate/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 7 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(orders_placed_total[5m]) * 60",
+          "legendFormat": "placed"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(orders_issued_total[5m]) * 60",
+          "legendFormat": "issued"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (reason) (rate(orders_cancelled_total[5m])) * 60",
+          "legendFormat": "cancelled / {{ reason }}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Stock reserved units",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 21, "w": 4, "h": 7 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 200 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "stock_reserved_units_total",
+          "legendFormat": "reserved units"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Order notifications (rate/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 21, "w": 8, "h": 7 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (event, status) (rate(order_notifications_total[5m])) * 60",
+          "legendFormat": "{{ event }} / {{ status }}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Application logs — все уровни",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{service=~\"web|worker|email-worker\"} | json | level =~ \"ERROR|WARNING\"",
+          "legendFormat": ""
+        }
+      ]
+    }
+  ]
+}

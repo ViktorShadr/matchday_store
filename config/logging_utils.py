@@ -109,14 +109,10 @@ class JsonFormatter(logging.Formatter):
             "process": record.processName,
         }
 
-        extra = {}
         for key, value in record.__dict__.items():
             if key in STANDARD_RECORD_FIELDS or key in payload:
                 continue
-            extra[key] = value
-
-        if extra:
-            payload["extra"] = extra
+            payload[key] = value
 
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
@@ -174,6 +170,11 @@ def build_logging_config(*, debug: bool, log_level: str, json_logs: bool) -> dic
                 "propagate": False,
             },
             "audit": {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "activity": {
                 "handlers": ["console"],
                 "level": "INFO",
                 "propagate": False,
