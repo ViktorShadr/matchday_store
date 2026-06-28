@@ -24,7 +24,7 @@ scrape_configs:
             level: level
             logger: logger
             request_id: request_id
-            event: "extra.event"
+            event: event
       - labels:
           level:
           logger:
