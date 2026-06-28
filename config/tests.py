@@ -77,9 +77,9 @@ class LoggingPipelineTest(SimpleTestCase):
 
         self.assertEqual(payload["message"], "order.created")
         self.assertEqual(payload["request_id"], "req-123")
-        self.assertEqual(payload["extra"]["event"], "order.created")
-        self.assertEqual(payload["extra"]["order_id"], 42)
-        self.assertEqual(payload["extra"]["user_id"], 7)
+        self.assertEqual(payload["event"], "order.created")
+        self.assertEqual(payload["order_id"], 42)
+        self.assertEqual(payload["user_id"], 7)
 
     def test_json_log_uses_request_id_fallback(self):
         token = set_request_id(None)
@@ -111,18 +111,17 @@ class LoggingPipelineTest(SimpleTestCase):
         )
         payload = json.loads(stream.getvalue().strip())
         message = payload["message"]
-        extra = payload["extra"]
 
         self.assertNotIn("secret", message)
         self.assertNotIn("token123", message)
         self.assertNotIn("buyer@example.com", message)
         self.assertNotIn("+79990001122", message)
-        self.assertEqual(extra["password"], "***")
-        self.assertEqual(extra["token"], "***")
-        self.assertEqual(extra["authorization"], "***")
-        self.assertEqual(extra["cookie"], "***")
-        self.assertEqual(extra["email"], "***")
-        self.assertEqual(extra["phone"], "***")
+        self.assertEqual(payload["password"], "***")
+        self.assertEqual(payload["token"], "***")
+        self.assertEqual(payload["authorization"], "***")
+        self.assertEqual(payload["cookie"], "***")
+        self.assertEqual(payload["email"], "***")
+        self.assertEqual(payload["phone"], "***")
 
     def test_email_delivery_metadata_keys_are_not_masked(self):
         token = set_request_id("req-email-metadata")
@@ -138,10 +137,9 @@ class LoggingPipelineTest(SimpleTestCase):
             },
         )
         payload = json.loads(stream.getvalue().strip())
-        extra = payload["extra"]
 
-        self.assertEqual(extra["email_type"], "confirmation")
-        self.assertEqual(extra["email_timeout"], 30)
+        self.assertEqual(payload["email_type"], "confirmation")
+        self.assertEqual(payload["email_timeout"], 30)
 
     def test_contact_keys_with_suffix_stay_masked(self):
         token = set_request_id("req-contact-key")
@@ -157,10 +155,9 @@ class LoggingPipelineTest(SimpleTestCase):
             },
         )
         payload = json.loads(stream.getvalue().strip())
-        extra = payload["extra"]
 
-        self.assertEqual(extra["user_email"], "***")
-        self.assertEqual(extra["customer_phone"], "***")
+        self.assertEqual(payload["user_email"], "***")
+        self.assertEqual(payload["customer_phone"], "***")
 
     def test_json_log_contains_exception_trace(self):
         token = set_request_id("req-exception")
