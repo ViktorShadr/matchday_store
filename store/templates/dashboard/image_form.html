@@ -23,7 +23,9 @@
                             <div class="mb-3">
                                 <label class="form-label" for="{{ form.image.id_for_label }}">Файл</label>
                                 {{ form.image }}
-                                {{ form.image.errors }}
+                                {% for error in form.image.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
                             </div>
                             <div class="mb-3 d-none" id="imagePreviewContainer" data-image-preview-container>
                                 <div class="border rounded-3 p-3 bg-light">
